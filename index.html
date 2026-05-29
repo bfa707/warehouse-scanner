@@ -9,6 +9,7 @@
   body { margin: 0; background: #111; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   .bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #000; position: sticky; top: 0; z-index: 5; }
   .bar h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  .bar .back { color: #6cb2ff; text-decoration: none; font-size: 18px; }
   #reader { width: 100%; max-width: 640px; margin: 0 auto; }
   #reader video { width: 100% !important; height: auto !important; display: block; }
   .start { display: block; width: calc(100% - 32px); max-width: 520px; margin: 28px auto 8px;
@@ -30,7 +31,7 @@
 </style>
 </head>
 <body>
-  <div class="bar"><h1>📷 Сканер склада</h1></div>
+  <div class="bar"><a id="back" class="back" href="#" style="display:none">← Назад</a><h1>📷 Сканер склада</h1></div>
 
   <button id="start" class="start" type="button">▶ Включить камеру</button>
   <button id="stop" class="stop" type="button">■ Остановить</button>
@@ -43,6 +44,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script>
+    // Ссылка «← Назад» в склад: URL приходит параметром ?back=… от приложения.
+    (function () {
+      var m = location.search.match(/[?&]back=([^&]+)/);
+      if (m && m[1]) {
+        var b = document.getElementById('back');
+        b.href = decodeURIComponent(m[1]);
+        b.style.display = '';
+      }
+    })();
+
     var qr = null, seen = {}, total = 0;
     var startBtn = document.getElementById('start');
     var stopBtn  = document.getElementById('stop');
