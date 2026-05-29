@@ -25,9 +25,25 @@
   .head h2 { font-size: 16px; color: #aaa; font-weight: 500; margin: 14px 0 8px; }
   .clear { background: none; color: #6cb2ff; border: none; font-size: 15px; cursor: pointer; }
   .list { max-width: 640px; margin: 0 auto; padding: 0 16px 28px; }
-  .row { background: #1d1d1d; border-radius: 10px; padding: 14px 16px; margin-bottom: 8px;
-         font-family: ui-monospace, Menlo, monospace; font-size: 18px; word-break: break-all; }
-  .row .t { color: #777; font-size: 12px; font-family: -apple-system, sans-serif; margin-top: 4px; }
+
+  /* карточка отсканированной единицы */
+  .card { display: flex; align-items: center; gap: 12px; background: #1d1d1d;
+          border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+          border-left: 5px solid #555; }
+  .card.ok   { border-left-color: #0b8043; }
+  .card.bad  { border-left-color: #d93025; }
+  .card.warn { border-left-color: #e8a317; }
+  .card .thumb { width: 60px; height: 60px; flex-shrink: 0; border-radius: 8px;
+                 overflow: hidden; background: #333; display: flex;
+                 align-items: center; justify-content: center; }
+  .card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card .thumb .ph { color: #888; font-size: 24px; }
+  .card .meta { flex: 1; min-width: 0; }
+  .card .name { font-size: 17px; font-weight: 600; line-height: 1.2; }
+  .card .var  { font-size: 14px; color: #bbb; margin-top: 3px; }
+  .card .uid  { font-size: 12px; color: #777; font-family: ui-monospace, Menlo, monospace;
+                margin-top: 5px; word-break: break-all; }
+  .card .time { font-size: 12px; color: #666; align-self: flex-start; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -44,12 +60,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script>
-    // Ссылка «← Назад» в склад: URL приходит параметром ?back=… от приложения.
+    // Адрес склада (/exec) приходит параметром ?back=… от приложения. Он же —
+    // и ссылка «← Назад», и база для запросов данных о товаре (action=lookup).
+    var GAS = '';
     (function () {
       var m = location.search.match(/[?&]back=([^&]+)/);
       if (m && m[1]) {
+        GAS = decodeURIComponent(m[1]);
         var b = document.getElementById('back');
-        b.href = decodeURIComponent(m[1]);
+        b.href = GAS;
         b.style.display = '';
       }
     })();
@@ -76,6 +95,34 @@
     }
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function nowTime() {
+      var d = new Date();
+      return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+
+    // Запрос данных о единице у склада через JSONP (обход CORS для внешней страницы).
+    // onData получает объект {found,name,variant,photoUrl,...} либо null (нет связи).
+    var jsonpId = 0;
+    function lookup(uid, onData) {
+      if (!GAS) { onData(null); return; }
+      var cb = 'cb_' + (++jsonpId);
+      var s = document.createElement('script');
+      var done = false;
+      var timer = setTimeout(function () { finish(null); }, 8000);
+      function finish(data) {
+        if (done) return; done = true;
+        clearTimeout(timer);
+        try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+        if (s.parentNode) s.parentNode.removeChild(s);
+        onData(data);
+      }
+      window[cb] = function (data) { finish(data); };
+      s.onerror = function () { finish(null); };
+      var sep = GAS.indexOf('?') >= 0 ? '&' : '?';
+      s.src = GAS + sep + 'action=lookup&uid=' + encodeURIComponent(uid) + '&callback=' + cb;
+      document.body.appendChild(s);
+    }
+
     function onScan(text) {
       var now = new Date().getTime();
       if (seen[text] && now - seen[text] < 2500) return;   // тот же код < 2.5с — игнор
@@ -84,15 +131,44 @@
       if (navigator.vibrate) navigator.vibrate(80);
       total++;
       cntEl.textContent = 'Отсканировано: ' + total;
-      var d = new Date();
-      var row = document.createElement('div');
-      row.className = 'row';
-      row.textContent = text;
-      var t = document.createElement('div');
-      t.className = 't';
-      t.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-      row.appendChild(t);
-      listEl.insertBefore(row, listEl.firstChild);
+
+      var card = document.createElement('div');
+      card.className = 'card loading';
+      card.innerHTML =
+        '<div class="thumb"><div class="ph">…</div></div>' +
+        '<div class="meta"><div class="name">Загрузка…</div>' +
+        '<div class="var"></div><div class="uid"></div></div>' +
+        '<div class="time">' + nowTime() + '</div>';
+      card.querySelector('.uid').textContent = text;   // textContent — без HTML-инъекции
+      listEl.insertBefore(card, listEl.firstChild);
+
+      lookup(text, function (data) {
+        var thumb = card.querySelector('.thumb');
+        var name  = card.querySelector('.name');
+        var vEl   = card.querySelector('.var');
+        if (data && data.found) {
+          card.className = 'card ok';
+          name.textContent = data.name || ('№ ' + (data.num || ''));
+          vEl.textContent  = data.variant || '';
+          if (data.photoUrl) {
+            var img = document.createElement('img');
+            img.alt = '';
+            img.onerror = function () { thumb.innerHTML = '<div class="ph">📦</div>'; };
+            img.src = data.photoUrl;
+            thumb.innerHTML = ''; thumb.appendChild(img);
+          } else {
+            thumb.innerHTML = '<div class="ph">📦</div>';
+          }
+        } else if (data) {
+          card.className = 'card bad';
+          thumb.innerHTML = '<div class="ph">❓</div>';
+          name.textContent = 'Не найдено на складе';
+        } else {
+          card.className = 'card warn';
+          thumb.innerHTML = '<div class="ph">⚠️</div>';
+          name.textContent = 'Нет связи со складом';
+        }
+      });
     }
 
     function start() {
