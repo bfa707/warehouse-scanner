@@ -44,23 +44,27 @@
   .list { max-width: 640px; margin: 0 auto; padding: 0 16px 28px; }
 
   /* карточка отсканированной единицы */
-  .card { display: flex; align-items: center; gap: 12px; background: #1d1d1d;
-          border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+  .card { position: relative; display: flex; align-items: center; gap: 12px;
+          background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
           border-left: 5px solid #555; }
   .card.ok   { border-left-color: #0b8043; }
   .card.bad  { border-left-color: #d93025; }
   .card.warn { border-left-color: #e8a317; }
-  .card .thumb { width: 60px; height: 60px; flex-shrink: 0; border-radius: 8px;
+  .card .del { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px;
+               border: none; background: transparent; color: #888; font-size: 20px;
+               line-height: 1; padding: 0; cursor: pointer; }
+  .card .del:active { color: #fff; }
+  .card .thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px;
                  overflow: hidden; background: #333; display: flex;
                  align-items: center; justify-content: center; }
   .card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .card .thumb .ph { color: #888; font-size: 24px; }
-  .card .meta { flex: 1; min-width: 0; }
-  .card .name { font-size: 17px; font-weight: 600; line-height: 1.2; }
-  .card .var  { font-size: 14px; color: #bbb; margin-top: 3px; }
-  .card .uid  { font-size: 12px; color: #777; font-family: ui-monospace, Menlo, monospace;
-                margin-top: 5px; word-break: break-all; }
-  .card .time { font-size: 12px; color: #666; align-self: flex-start; flex-shrink: 0; }
+  .card .meta { flex: 1; min-width: 0; padding-right: 22px; }   /* место под крестик */
+  .card .name { font-size: 18px; font-weight: 600; line-height: 1.2; }
+  .card .attr { font-size: 14px; color: #bbb; margin-top: 3px; }
+  .card .attr:empty { display: none; }              /* пустой цвет/размер не занимает место */
+  .card .price { font-size: 24px; font-weight: 700; color: #9a9a9a;
+                 flex-shrink: 0; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -160,21 +164,35 @@
       var card = document.createElement('div');
       card.className = 'card loading';
       card.innerHTML =
+        '<button class="del" type="button" aria-label="Удалить">✕</button>' +
         '<div class="thumb"><div class="ph">…</div></div>' +
         '<div class="meta"><div class="name">Загрузка…</div>' +
-        '<div class="var"></div><div class="uid"></div></div>' +
-        '<div class="time">' + nowTime() + '</div>';
-      card.querySelector('.uid').textContent = text;   // textContent — без HTML-инъекции
+        '<div class="attr color"></div><div class="attr size"></div></div>' +
+        '<div class="price"></div>';
       listEl.insertBefore(card, listEl.firstChild);
 
+      // крестик — удалить именно эту карточку (код снова можно отсканировать)
+      card.querySelector('.del').addEventListener('click', function (e) {
+        e.stopPropagation();                          // не запускать камеру
+        if (card.parentNode) card.parentNode.removeChild(card);
+        delete seen[text];
+        total = Math.max(0, total - 1);
+        cntEl.textContent = 'Отсканировано: ' + total;
+      });
+
       lookup(text, function (data) {
-        var thumb = card.querySelector('.thumb');
-        var name  = card.querySelector('.name');
-        var vEl   = card.querySelector('.var');
+        var thumb   = card.querySelector('.thumb');
+        var nameEl  = card.querySelector('.name');
+        var colorEl = card.querySelector('.color');
+        var sizeEl  = card.querySelector('.size');
+        var priceEl = card.querySelector('.price');
         if (data && data.found) {
           card.className = 'card ok';
-          name.textContent = data.name || ('№ ' + (data.num || ''));
-          vEl.textContent  = data.variant || '';
+          nameEl.textContent = data.nameRu || data.name || ('№ ' + (data.num || ''));
+          var cs = splitVariant(data.variant);
+          colorEl.textContent = cs.color;
+          sizeEl.textContent  = cs.size;
+          priceEl.textContent = (data.price || data.price === 0) ? ('' + data.price) : '';
           if (data.photoUrl) {
             var img = document.createElement('img');
             img.alt = '';
@@ -187,13 +205,28 @@
         } else if (data) {
           card.className = 'card bad';
           thumb.innerHTML = '<div class="ph">❓</div>';
-          name.textContent = 'Не найдено на складе';
+          nameEl.textContent = 'Не найдено на складе';
         } else {
           card.className = 'card warn';
           thumb.innerHTML = '<div class="ph">⚠️</div>';
-          name.textContent = 'Нет связи со складом';
+          nameEl.textContent = 'Нет связи со складом';
         }
       });
+    }
+
+    // Разбить вариант («beige» / «beige XL» / «blue M») на цвет и размер.
+    // Размер — токены S/M/L/XL… или число; всё остальное считаем цветом.
+    function splitVariant(v) {
+      v = (v || '').trim();
+      if (!v) return { color: '', size: '' };
+      var tokens = v.split(/[\s,\/]+/).filter(Boolean);
+      var sizeRe = /^(xxxs|xxs|xs|s|m|l|xl|xxl|xxxl|\d{1,3})$/i;
+      var colors = [], sizes = [];
+      for (var i = 0; i < tokens.length; i++) {
+        if (sizeRe.test(tokens[i])) sizes.push(tokens[i].toUpperCase());
+        else colors.push(tokens[i]);
+      }
+      return { color: colors.join(' '), size: sizes.join(' ') };
     }
 
     // auto=true — тихая попытка включить камеру при открытии страницы. Сработает,
