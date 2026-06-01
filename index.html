@@ -147,9 +147,8 @@
     }
 
     function onScan(text) {
-      var now = new Date().getTime();
-      if (seen[text] && now - seen[text] < 2500) return;   // тот же код < 2.5с — игнор
-      seen[text] = now;
+      if (seen[text]) return;   // этот код уже в списке — не дублируем, сколько бы ни держали камеру
+      seen[text] = true;        // сбрасывается только кнопкой «Очистить»
       beep();
       if (navigator.vibrate) navigator.vibrate(80);
       total++;
