@@ -78,8 +78,14 @@
       if (m && m[1]) {
         GAS = decodeURIComponent(m[1]);
         var b = document.getElementById('back');
-        b.href = GAS;
+        b.href = GAS;                        // запасной вариант (если нет истории)
         b.style.display = '';
+        // Быстрый возврат: шаг назад по истории — айфон достаёт страницу склада
+        // из памяти моментально, без долгой перезагрузки веб-приложения.
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();                      // не запускать камеру при выходе
+          if (history.length > 1) { e.preventDefault(); history.back(); }
+        });
       }
     })();
 
