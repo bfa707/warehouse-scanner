@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- открытие как полноэкранное приложение (без панелей Safari), если добавить на экран «Домой» -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Сканер">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111">
 <title>Сканер склада</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -50,13 +56,12 @@
 </style>
 </head>
 <body>
-  <div class="bar"><a id="back" class="back" href="#" style="display:none">← Назад</a><h1>📷 Сканер склада</h1></div>
+  <div class="bar"><a id="back" class="back" href="#" style="display:none">← Назад в склад</a></div>
 
   <div id="reader"></div>
   <button id="start" class="start" type="button">▶ Включить камеру</button>
   <div class="ctl">
     <button id="stop" class="stop" type="button">■ Стоп</button>
-    <span class="hint">Наведите на QR — распознаётся сам</span>
   </div>
   <div id="err" class="err"></div>
 
