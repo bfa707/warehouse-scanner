@@ -16,10 +16,14 @@
   .bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #000; position: sticky; top: 0; z-index: 5; }
   .bar h1 { font-size: 20px; margin: 0; font-weight: 600; }
   .bar .back { color: #6cb2ff; text-decoration: none; font-size: 18px; }
-  #reader { width: 100%; max-width: 380px; margin: 8px auto 0; }
+  /* Компактность — за счёт обрезки контейнером, видео НЕ трогаем (иначе сканер
+     читает не то, что видно, и не ловит код). overflow прячет верх/низ кадра,
+     центр (куда наводят QR) виден и распознаётся. */
+  #reader { width: 100%; max-width: 440px; height: 250px; margin: 8px auto 0;
+            position: relative; overflow: hidden; border-radius: 12px; background: #000; }
   #reader:empty { display: none; }                 /* камера выключена — не занимает место */
-  #reader video { width: 100% !important; height: 200px !important; object-fit: cover !important;
-                  display: block; border-radius: 12px; background: #000; }
+  #reader video { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                  width: 100% !important; height: auto !important; display: block; }
   .start { display: block; width: calc(100% - 32px); max-width: 380px; margin: 16px auto 6px;
            font-size: 20px; font-weight: 700; background: #0b8043; color: #fff; border: none;
            border-radius: 12px; padding: 16px 20px; cursor: pointer; }
@@ -195,8 +199,7 @@
       qr = new Html5Qrcode('reader');
       qr.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: function (vw, vh) {
-            var s = Math.floor(Math.min(vw, vh) * 0.75); return { width: s, height: s }; } },
+        { fps: 10 },                         // без qrbox — сканируем весь кадр (цепче всего)
         onScan,
         function () {}                       // ошибки отдельных кадров игнорируем
       ).then(function () {
