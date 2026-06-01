@@ -171,12 +171,19 @@
       });
     }
 
-    function start() {
+    // auto=true — тихая попытка включить камеру при открытии страницы. Сработает,
+    // если доступ к камере уже разрешён (iPhone запоминает разрешение для сайта).
+    // Если нет — просто показываем кнопку, без красной ошибки (в первый раз iOS
+    // требует включать камеру по нажатию). auto=false — нажали кнопку вручную.
+    function start(auto) {
       showErr('');
       if (typeof Html5Qrcode === 'undefined') {
-        showErr('Не удалось загрузить библиотеку сканера (нет интернета?).'); return;
+        if (!auto) showErr('Не удалось загрузить библиотеку сканера (нет интернета?).');
+        startBtn.style.display = 'block';
+        return;
       }
       if (qr) return;
+      startBtn.style.display = 'none';        // прячем кнопку на время попытки
       qr = new Html5Qrcode('reader');
       qr.start(
         { facingMode: 'environment' },
@@ -188,7 +195,9 @@
         stopBtn.style.display = 'block';
       }).catch(function (e) {
         qr = null;
-        showErr('Камера недоступна: ' + e + '. Разрешите доступ к камере для этого сайта.');
+        stopBtn.style.display = 'none';
+        startBtn.style.display = 'block';     // не вышло — показываем кнопку
+        if (!auto) showErr('Камера недоступна: ' + e + '. Разрешите доступ к камере для этого сайта.');
       });
     }
 
@@ -199,11 +208,15 @@
       }).catch(function () { qr = null; });
     }
 
-    startBtn.addEventListener('click', start);
+    startBtn.addEventListener('click', function () { start(false); });
     stopBtn.addEventListener('click', stop);
     document.getElementById('clear').addEventListener('click', function () {
       listEl.innerHTML = ''; total = 0; seen = {}; cntEl.textContent = 'Отсканировано: 0';
     });
+
+    // Пробуем включить камеру сразу при открытии. Если доступ ещё не разрешён
+    // (первый заход на iPhone) — покажется кнопка «Включить камеру».
+    start(true);
   </script>
 </body>
 </html>
