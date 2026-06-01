@@ -10,15 +10,18 @@
   .bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #000; position: sticky; top: 0; z-index: 5; }
   .bar h1 { font-size: 20px; margin: 0; font-weight: 600; }
   .bar .back { color: #6cb2ff; text-decoration: none; font-size: 18px; }
-  #reader { width: 100%; max-width: 640px; margin: 0 auto; }
-  #reader video { width: 100% !important; height: auto !important; display: block; }
-  .start { display: block; width: calc(100% - 32px); max-width: 520px; margin: 28px auto 8px;
-           font-size: 26px; font-weight: 700; background: #0b8043; color: #fff; border: none;
-           border-radius: 14px; padding: 22px 24px; cursor: pointer; }
-  .stop  { display: none; width: calc(100% - 32px); max-width: 520px; margin: 12px auto;
-           font-size: 18px; background: #333; color: #fff; border: none; border-radius: 12px;
-           padding: 14px 24px; cursor: pointer; }
-  .hint { text-align: center; color: #aaa; font-size: 16px; padding: 12px 16px; }
+  #reader { width: 100%; max-width: 380px; margin: 8px auto 0; }
+  #reader:empty { display: none; }                 /* камера выключена — не занимает место */
+  #reader video { width: 100% !important; height: 200px !important; object-fit: cover !important;
+                  display: block; border-radius: 12px; background: #000; }
+  .start { display: block; width: calc(100% - 32px); max-width: 380px; margin: 16px auto 6px;
+           font-size: 20px; font-weight: 700; background: #0b8043; color: #fff; border: none;
+           border-radius: 12px; padding: 16px 20px; cursor: pointer; }
+  .ctl  { display: flex; align-items: center; justify-content: center; gap: 12px;
+          flex-wrap: wrap; padding: 6px 16px; }
+  .stop { display: none; font-size: 14px; background: #333; color: #fff; border: none;
+          border-radius: 10px; padding: 7px 16px; cursor: pointer; }
+  .hint { color: #888; font-size: 13px; text-align: center; }
   .err  { color: #ff7676; text-align: center; padding: 14px 16px; font-size: 16px; }
   .head { display: flex; align-items: center; justify-content: space-between;
           max-width: 640px; margin: 8px auto 0; padding: 0 16px; }
@@ -49,10 +52,12 @@
 <body>
   <div class="bar"><a id="back" class="back" href="#" style="display:none">← Назад</a><h1>📷 Сканер склада</h1></div>
 
-  <button id="start" class="start" type="button">▶ Включить камеру</button>
-  <button id="stop" class="stop" type="button">■ Остановить</button>
   <div id="reader"></div>
-  <div class="hint">Наведите камеру на QR-код — он распознаётся сам, фотографировать не нужно.</div>
+  <button id="start" class="start" type="button">▶ Включить камеру</button>
+  <div class="ctl">
+    <button id="stop" class="stop" type="button">■ Стоп</button>
+    <span class="hint">Наведите на QR — распознаётся сам</span>
+  </div>
   <div id="err" class="err"></div>
 
   <div class="head"><h2 id="cnt">Отсканировано: 0</h2><button id="clear" class="clear" type="button">Очистить</button></div>
@@ -187,7 +192,8 @@
       qr = new Html5Qrcode('reader');
       qr.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { fps: 10, qrbox: function (vw, vh) {
+            var s = Math.floor(Math.min(vw, vh) * 0.75); return { width: s, height: s }; } },
         onScan,
         function () {}                       // ошибки отдельных кадров игнорируем
       ).then(function () {
@@ -195,6 +201,7 @@
         stopBtn.style.display = 'block';
       }).catch(function (e) {
         qr = null;
+        document.getElementById('reader').innerHTML = '';   // чтобы блок схлопнулся
         stopBtn.style.display = 'none';
         startBtn.style.display = 'block';     // не вышло — показываем кнопку
         if (!auto) showErr('Камера недоступна: ' + e + '. Разрешите доступ к камере для этого сайта.');
@@ -217,6 +224,11 @@
     // Пробуем включить камеру сразу при открытии. Если доступ ещё не разрешён
     // (первый заход на iPhone) — покажется кнопка «Включить камеру».
     start(true);
+
+    // iPhone не даёт включить камеру без касания страницы (правило Safari).
+    // Поэтому касание В ЛЮБОМ месте экрана тоже включает камеру — не нужно
+    // целиться в кнопку. start() сам ничего не делает, если камера уже идёт.
+    document.addEventListener('click', function () { start(false); });
   </script>
 </body>
 </html>
