@@ -48,6 +48,7 @@
           background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
           border-left: 5px solid #555; }
   .card.ok   { border-left-color: #0b8043; }
+  .card.dup  { border-left-color: #d93025; }   /* уже было пропикано ранее */
   .card.bad  { border-left-color: #d93025; }
   .card.warn { border-left-color: #e8a317; }
   .card .del { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px;
@@ -63,19 +64,22 @@
   .card .name { font-size: 18px; font-weight: 600; line-height: 1.2; }
   .card .attr { font-size: 14px; color: #bbb; margin-top: 3px; }
   .card .attr:empty { display: none; }              /* пустой цвет/размер не занимает место */
-  .card .price { font-size: 24px; font-weight: 700; color: #9a9a9a;
-                 flex-shrink: 0; white-space: nowrap; }
+  .card .right { display: flex; flex-direction: column; align-items: flex-end;
+                 justify-content: center; flex-shrink: 0; }
+  .card .price { font-size: 24px; font-weight: 700; color: #9a9a9a; white-space: nowrap; }
+  .card .dupnote { color: #d93025; font-size: 12px; font-weight: 600;
+                   text-align: right; margin-top: 4px; max-width: 110px; line-height: 1.2; }
+  .card .dupnote:empty { display: none; }
 </style>
 </head>
 <body>
-  <div class="bar"><a id="back" class="back" href="#" style="display:none">← Назад в склад</a></div>
+  <div class="bar"><a id="back" class="back" href="#" style="display:none">← Назад</a></div>
 
   <div class="cam-wrap">
     <div id="reader"></div>
     <div class="aim" id="aim"></div>
   </div>
   <button id="start" class="start" type="button">▶ Включить камеру</button>
-  <div class="hint" id="aimhint" style="display:none">Держите QR внутри рамки (~15–20 см), чтобы вокруг кода было белое поле.</div>
   <div id="err" class="err"></div>
 
   <div class="head"><h2 id="cnt">Отсканировано: 0</h2><button id="clear" class="clear" type="button">Очистить</button></div>
@@ -105,7 +109,6 @@
     var qr = null, seen = {}, total = 0;
     var startBtn = document.getElementById('start');
     var aim      = document.getElementById('aim');
-    var aimHint  = document.getElementById('aimhint');
     var errBox   = document.getElementById('err');
     var listEl   = document.getElementById('list');
     var cntEl    = document.getElementById('cnt');
@@ -174,7 +177,7 @@
         '<div class="thumb"><div class="ph">…</div></div>' +
         '<div class="meta"><div class="name">Загрузка…</div>' +
         '<div class="attr color"></div><div class="attr size"></div></div>' +
-        '<div class="price"></div>';
+        '<div class="right"><div class="price"></div><div class="dupnote"></div></div>';
       listEl.insertBefore(card, listEl.firstChild);
 
       // крестик — удалить карточку И снять отметку «принято» на складе.
@@ -228,10 +231,19 @@
       var colorEl = card.querySelector('.color');
       var sizeEl  = card.querySelector('.size');
       var priceEl = card.querySelector('.price');
+      var dupEl   = card.querySelector('.dupnote');
+      if (dupEl) dupEl.textContent = '';
+      // название с номером впереди: «17 | костюм»
+      function nm() {
+        var base = (data && (data.nameRu || data.name)) || '';
+        if (!base) return '№ ' + ((data && data.num) || '');
+        return (data && data.num ? data.num + ' | ' : '') + base;
+      }
       function fillItem() {
-        nameEl.textContent = data.nameRu || data.name || ('№ ' + (data.num || ''));
+        nameEl.textContent = nm();
         var cs = splitVariant(data.variant);
-        colorEl.textContent = cs.color; sizeEl.textContent = cs.size;
+        colorEl.textContent = cs.color ? ('цвет: ' + cs.color) : '';
+        sizeEl.textContent = cs.size;
         priceEl.textContent = (data.price || data.price === 0) ? ('' + data.price) : '';
         if (data.photoUrl) {
           var img = document.createElement('img');
@@ -242,8 +254,18 @@
         } else { thumb.innerHTML = '<div class="ph">📦</div>'; }
       }
 
-      // учтено → зелёная, готово
-      if (data && data.counted) { card.className = 'card ok'; fillItem(); return; }
+      // учтено → зелёная. Но если эта единица УЖЕ была пропикана ранее (дубль) —
+      // красная полоса + красная подпись «товар уже есть в таблице».
+      if (data && data.counted) {
+        fillItem();
+        if (data.alreadyActive) {
+          card.className = 'card dup';
+          if (dupEl) dupEl.textContent = 'товар уже есть в таблице';
+        } else {
+          card.className = 'card ok';
+        }
+        return;
+      }
 
       // транзиентные сбои → жёлтая + повтор
       var notFlushed = data && data.error === 'not_in_log' && (data.found || data.name);
@@ -254,7 +276,7 @@
         if (data && (data.found || data.name)) fillItem();
         if (isBusy)        { thumb.innerHTML = '<div class="ph">⏳</div>'; nameEl.textContent = 'Склад занят — повтор…'; }
         else if (noConn)   { thumb.innerHTML = '<div class="ph">⚠️</div>'; nameEl.textContent = 'Нет связи — повтор…'; }
-        else               { nameEl.textContent = (data.nameRu || data.name || '') + ' — учитываю, повтор…'; }
+        else               { nameEl.textContent = nm() + ' — учитываю, повтор…'; }
         scheduleRetry(card);
         return;
       }
@@ -263,7 +285,7 @@
       card.className = 'card bad';
       if (data && data.error === 'item_missing') {
         if (data.name) fillItem();
-        nameEl.textContent = (data.name || '') + ' — позиции нет на складе';
+        nameEl.textContent = nm() + ' — позиции нет на складе';
       } else {
         thumb.innerHTML = '<div class="ph">❓</div>';
         nameEl.textContent = 'Не найдено на складе';
@@ -328,11 +350,11 @@
         function () {}                       // ошибки отдельных кадров игнорируем
       ).then(function () {
         startBtn.style.display = 'none';
-        aim.style.display = 'block'; aimHint.style.display = 'block';
+        aim.style.display = 'block';
       }).catch(function (e) {
         qr = null;
         document.getElementById('reader').innerHTML = '';   // чтобы блок схлопнулся
-        aim.style.display = 'none'; aimHint.style.display = 'none';
+        aim.style.display = 'none';
         startBtn.style.display = 'block';     // не вышло — показываем кнопку
         if (!auto) showErr('Камера недоступна: ' + e + '. Разрешите доступ к камере для этого сайта.');
       });
