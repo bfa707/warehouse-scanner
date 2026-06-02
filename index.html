@@ -130,15 +130,21 @@
       return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
     }
 
-    // Запрос данных о единице у склада через JSONP (обход CORS для внешней страницы).
+    // Запрос к складу через JSONP (обход CORS для внешней страницы).
+    //   action=activate   — скан: отметить «принято» + вернуть карточку товара
+    //   action=deactivate — крестик: снять отметку
     // onData получает объект {found,name,variant,photoUrl,...} либо null (нет связи).
     var jsonpId = 0;
-    function lookup(uid, onData) {
+    function callGas(action, uid, onData) {
+      onData = onData || function () {};
       if (!GAS) { onData(null); return; }
       var cb = 'cb_' + (++jsonpId);
       var s = document.createElement('script');
       var done = false;
-      var timer = setTimeout(function () { finish(null); }, 8000);
+      // 25с > серверного ожидания блокировки (20с): медленный, но УСПЕШНЫЙ ответ
+      // (когда параллельно идёт печать и держит локу) должен дойти, а не ложно
+      // показать «нет связи», хотя единица уже активирована.
+      var timer = setTimeout(function () { finish(null); }, 25000);
       function finish(data) {
         if (done) return; done = true;
         clearTimeout(timer);
@@ -149,7 +155,7 @@
       window[cb] = function (data) { finish(data); };
       s.onerror = function () { finish(null); };
       var sep = GAS.indexOf('?') >= 0 ? '&' : '?';
-      s.src = GAS + sep + 'action=lookup&uid=' + encodeURIComponent(uid) + '&callback=' + cb;
+      s.src = GAS + sep + 'action=' + action + '&uid=' + encodeURIComponent(uid) + '&callback=' + cb;
       document.body.appendChild(s);
     }
 
@@ -171,47 +177,119 @@
         '<div class="price"></div>';
       listEl.insertBefore(card, listEl.firstChild);
 
-      // крестик — удалить именно эту карточку (код снова можно отсканировать)
+      // крестик — удалить карточку И снять отметку «принято» на складе.
+      card._uid = text;
+      card._activating = true;     // активация в полёте: deactivate отложим до ответа
+      card._pendingDeact = false;
+      card._counted = false;       // станет true, если сервер реально учёл единицу
       card.querySelector('.del').addEventListener('click', function (e) {
         e.stopPropagation();                          // не запускать камеру
         if (card.parentNode) card.parentNode.removeChild(card);
-        delete seen[text];
+        delete seen[text];                            // код снова можно отсканировать
         total = Math.max(0, total - 1);
         cntEl.textContent = 'Отсканировано: ' + total;
+        // если activate ещё не вернулся — снимем ПОСЛЕ него (иначе deactivate может
+        // обогнать activate, и единица останется активной при удалённой карточке).
+        if (card._activating) card._pendingDeact = true;
+        else if (card._counted) sendDeactivate(text);  // снимать только реально учтённое
       });
 
-      lookup(text, function (data) {
-        var thumb   = card.querySelector('.thumb');
-        var nameEl  = card.querySelector('.name');
-        var colorEl = card.querySelector('.color');
-        var sizeEl  = card.querySelector('.size');
-        var priceEl = card.querySelector('.price');
-        if (data && data.found) {
-          card.className = 'card ok';
-          nameEl.textContent = data.nameRu || data.name || ('№ ' + (data.num || ''));
-          var cs = splitVariant(data.variant);
-          colorEl.textContent = cs.color;
-          sizeEl.textContent  = cs.size;
-          priceEl.textContent = (data.price || data.price === 0) ? ('' + data.price) : '';
-          if (data.photoUrl) {
-            var img = document.createElement('img');
-            img.alt = '';
-            img.onerror = function () { thumb.innerHTML = '<div class="ph">📦</div>'; };
-            img.src = data.photoUrl;
-            thumb.innerHTML = ''; thumb.appendChild(img);
-          } else {
-            thumb.innerHTML = '<div class="ph">📦</div>';
-          }
-        } else if (data) {
-          card.className = 'card bad';
-          thumb.innerHTML = '<div class="ph">❓</div>';
-          nameEl.textContent = 'Не найдено на складе';
-        } else {
-          card.className = 'card warn';
-          thumb.innerHTML = '<div class="ph">⚠️</div>';
-          nameEl.textContent = 'Нет связи со складом';
+      // скан = «принял эту единицу»: активируем на складе и рисуем карточку
+      callGas('activate', text, function (data) {
+        card._activating = false;
+        if (card._pendingDeact) {                     // карточку уже сняли крестиком
+          if (data && data.counted) sendDeactivate(text);  // была учтена — снимаем
+          return;
+        }
+        renderScanCard(card, data);
+      });
+    }
+
+    // Снять активацию с проверкой ответа: при сбое (нет связи / склад занят /
+    // нет в журнале) НЕ молчим — предупреждаем, чтобы отметка не осталась висеть.
+    function sendDeactivate(uid) {
+      callGas('deactivate', uid, function (data) {
+        if (!data || !data.ok) {
+          showErr('Не удалось снять отметку с одной единицы (склад занят/нет связи). ' +
+                  'Отсканируйте её заново и снимите ещё раз.');
         }
       });
+    }
+
+    // Карточка по ответу activate. Зелёная — ТОЛЬКО когда реально учтено (counted).
+    // Транзиентные сбои (склад занят / нет связи / наклейка ещё не дописалась в
+    // журнал после печати) → жёлтая + ТИХИЙ авто-повтор той же карточки (без новой
+    // карточки и без накрутки «Отсканировано» — seen НЕ трогаем). Реально «не найдено»
+    // или «позиции нет на складе» → красная, без повтора.
+    function renderScanCard(card, data) {
+      card._counted = !!(data && data.counted);   // снимать крестиком только учтённое
+      var thumb   = card.querySelector('.thumb');
+      var nameEl  = card.querySelector('.name');
+      var colorEl = card.querySelector('.color');
+      var sizeEl  = card.querySelector('.size');
+      var priceEl = card.querySelector('.price');
+      function fillItem() {
+        nameEl.textContent = data.nameRu || data.name || ('№ ' + (data.num || ''));
+        var cs = splitVariant(data.variant);
+        colorEl.textContent = cs.color; sizeEl.textContent = cs.size;
+        priceEl.textContent = (data.price || data.price === 0) ? ('' + data.price) : '';
+        if (data.photoUrl) {
+          var img = document.createElement('img');
+          img.alt = '';
+          img.onerror = function () { thumb.innerHTML = '<div class="ph">📦</div>'; };
+          img.src = data.photoUrl;
+          thumb.innerHTML = ''; thumb.appendChild(img);
+        } else { thumb.innerHTML = '<div class="ph">📦</div>'; }
+      }
+
+      // учтено → зелёная, готово
+      if (data && data.counted) { card.className = 'card ok'; fillItem(); return; }
+
+      // транзиентные сбои → жёлтая + повтор
+      var notFlushed = data && data.error === 'not_in_log' && (data.found || data.name);
+      var isBusy     = data && data.error === 'busy';
+      var noConn     = !data;
+      if (notFlushed || isBusy || noConn) {
+        card.className = 'card warn';
+        if (data && (data.found || data.name)) fillItem();
+        if (isBusy)        { thumb.innerHTML = '<div class="ph">⏳</div>'; nameEl.textContent = 'Склад занят — повтор…'; }
+        else if (noConn)   { thumb.innerHTML = '<div class="ph">⚠️</div>'; nameEl.textContent = 'Нет связи — повтор…'; }
+        else               { nameEl.textContent = (data.nameRu || data.name || '') + ' — учитываю, повтор…'; }
+        scheduleRetry(card);
+        return;
+      }
+
+      // постоянные ошибки → красная, без повтора
+      card.className = 'card bad';
+      if (data && data.error === 'item_missing') {
+        if (data.name) fillItem();
+        nameEl.textContent = (data.name || '') + ' — позиции нет на складе';
+      } else {
+        thumb.innerHTML = '<div class="ph">❓</div>';
+        nameEl.textContent = 'Не найдено на складе';
+      }
+    }
+
+    // Тихий повтор activate для ТОЙ ЖЕ карточки (без новой карточки и без total++).
+    // Лечит транзиентные сбои (печать держит локу, моргнула связь, лог не дописался)
+    // не плодя дубли. До 4 попыток с паузой 2с, потом оставляем жёлтую с подсказкой.
+    function scheduleRetry(card) {
+      if (!card._uid) return;
+      card._retries = (card._retries || 0) + 1;
+      if (card._retries > 4) {
+        var n = card.querySelector('.name');
+        if (n) n.textContent = 'Не удалось учесть — нажмите ✕ и отсканируйте заново';
+        return;
+      }
+      setTimeout(function () {
+        if (!card.parentNode) return;             // карточку убрали крестиком
+        card._activating = true;
+        callGas('activate', card._uid, function (data) {
+          card._activating = false;
+          if (card._pendingDeact) { if (data && data.counted) sendDeactivate(card._uid); return; }
+          renderScanCard(card, data);
+        });
+      }, 2000);
     }
 
     // Разбить вариант («beige» / «beige XL» / «blue M») на цвет и размер.
