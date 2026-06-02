@@ -184,7 +184,7 @@
       card._uid = text;
       card._activating = true;     // активация в полёте: deactivate отложим до ответа
       card._pendingDeact = false;
-      card._counted = false;       // станет true, если сервер реально учёл единицу
+      card._fresh = false;         // true только если ИМЕННО этот скан учёл единицу (не дубль)
       card.querySelector('.del').addEventListener('click', function (e) {
         e.stopPropagation();                          // не запускать камеру
         if (card.parentNode) card.parentNode.removeChild(card);
@@ -194,14 +194,14 @@
         // если activate ещё не вернулся — снимем ПОСЛЕ него (иначе deactivate может
         // обогнать activate, и единица останется активной при удалённой карточке).
         if (card._activating) card._pendingDeact = true;
-        else if (card._counted) sendDeactivate(text);  // снимать только реально учтённое
+        else if (card._fresh) sendDeactivate(text);  // снимать только то, что учёл ЭТОТ скан (дубль не трогаем)
       });
 
       // скан = «принял эту единицу»: активируем на складе и рисуем карточку
       callGas('activate', text, function (data) {
         card._activating = false;
         if (card._pendingDeact) {                     // карточку уже сняли крестиком
-          if (data && data.counted) sendDeactivate(text);  // была учтена — снимаем
+          if (data && data.counted && !data.alreadyActive) sendDeactivate(text);  // снимаем только свежеучтённое
           return;
         }
         renderScanCard(card, data);
@@ -225,7 +225,7 @@
     // карточки и без накрутки «Отсканировано» — seen НЕ трогаем). Реально «не найдено»
     // или «позиции нет на складе» → красная, без повтора.
     function renderScanCard(card, data) {
-      card._counted = !!(data && data.counted);   // снимать крестиком только учтённое
+      card._fresh = !!(data && data.counted && !data.alreadyActive);   // ИМЕННО этот скан учёл (не дубль)
       var thumb   = card.querySelector('.thumb');
       var nameEl  = card.querySelector('.name');
       var colorEl = card.querySelector('.color');
@@ -243,7 +243,7 @@
         nameEl.textContent = nm();
         var cs = splitVariant(data.variant);
         colorEl.textContent = cs.color ? ('цвет: ' + cs.color) : '';
-        sizeEl.textContent = cs.size;
+        sizeEl.textContent = cs.size ? ('размер: ' + cs.size) : '';
         priceEl.textContent = (data.price || data.price === 0) ? ('' + data.price) : '';
         if (data.photoUrl) {
           var img = document.createElement('img');
@@ -308,7 +308,7 @@
         card._activating = true;
         callGas('activate', card._uid, function (data) {
           card._activating = false;
-          if (card._pendingDeact) { if (data && data.counted) sendDeactivate(card._uid); return; }
+          if (card._pendingDeact) { if (data && data.counted && !data.alreadyActive) sendDeactivate(card._uid); return; }
           renderScanCard(card, data);
         });
       }, 2000);
