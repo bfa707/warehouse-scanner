@@ -47,10 +47,11 @@
   .card { position: relative; display: flex; align-items: center; gap: 12px;
           background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
           border-left: 5px solid #555; }
-  .card.ok   { border-left-color: #0b8043; }
+  .card.ok   { border-left-color: #0b8043; }   /* учтено в таблице (кол-во изменилось) */
   .card.dup  { border-left-color: #d93025; }   /* уже было пропикано ранее */
   .card.bad  { border-left-color: #d93025; }
   .card.warn { border-left-color: #e8a317; }
+  .card.loading { border-left-color: #e8a317; }  /* отсканировано, пишу в таблицу (ещё не учтено) */
   .card .del { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px;
                border: none; background: transparent; color: #888; font-size: 20px;
                line-height: 1; padding: 0; cursor: pointer; }
@@ -64,6 +65,8 @@
   .card .name { font-size: 18px; font-weight: 600; line-height: 1.2; }
   .card .attr { font-size: 14px; color: #bbb; margin-top: 3px; }
   .card .attr:empty { display: none; }              /* пустой цвет/размер не занимает место */
+  .card .unitno { font-size: 13px; color: #8ab4f8; margin-top: 4px;
+                  font-family: ui-monospace, Menlo, monospace; }   /* номер наклейки из UnitID */
   .card .right { display: flex; flex-direction: column; align-items: flex-end;
                  justify-content: center; flex-shrink: 0; }
   .card .price { font-size: 24px; font-weight: 700; color: #9a9a9a; white-space: nowrap; }
@@ -175,9 +178,12 @@
       card.innerHTML =
         '<button class="del" type="button" aria-label="Удалить">✕</button>' +
         '<div class="thumb"><div class="ph">…</div></div>' +
-        '<div class="meta"><div class="name">Загрузка…</div>' +
-        '<div class="attr color"></div><div class="attr size"></div></div>' +
+        '<div class="meta"><div class="name">Записываю в таблицу…</div>' +
+        '<div class="attr color"></div><div class="attr size"></div>' +
+        '<div class="unitno"></div></div>' +
         '<div class="right"><div class="price"></div><div class="dupnote"></div></div>';
+      // номер из UnitID (последний сегмент) — какую именно наклейку отсканил
+      card.querySelector('.unitno').textContent = '№ ' + String(text).split('-').pop();
       listEl.insertBefore(card, listEl.firstChild);
 
       // крестик — удалить карточку И снять отметку «принято» на складе.
