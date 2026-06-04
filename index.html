@@ -50,8 +50,8 @@
      меньше нагрузка на телефон, сканер не захлёбывается при серийном скане */
   .list:not(.show-all) .card:nth-child(n+8) { display: none; }
 
-  /* карточка отсканированной единицы */
-  .card { position: relative; display: flex; align-items: center; gap: 12px;
+  /* карточка отсканированной единицы (вертикально: инфо-строка сверху, счётчики снизу) */
+  .card { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 6px;
           background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
           border-left: 5px solid #555; cursor: pointer; }
   .card.ok   { border-left-color: #0b8043; }   /* учтено в таблице (кол-во изменилось) */
@@ -61,33 +61,33 @@
   .card.loading { border-left-color: #e8a317; }  /* отсканировано, пишу в таблицу (ещё не учтено) */
   .card .del { position: absolute; top: 4px; right: 6px; width: 32px; height: 32px;
                border: none; background: transparent; color: #888; font-size: 20px;
-               line-height: 1; padding: 0; cursor: pointer; }
+               line-height: 1; padding: 0; cursor: pointer; z-index: 1; }
   .card .del:active { color: #fff; }
+  .card .top { display: flex; align-items: center; gap: 12px; }
   .card .thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px;
                  overflow: hidden; background: #333; display: flex;
                  align-items: center; justify-content: center; }
   .card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .card .thumb .ph { color: #888; font-size: 24px; }
   .card .meta { flex: 1; min-width: 0; padding-right: 22px; }   /* место под крестик */
-  .card .name { font-size: 18px; font-weight: 600; line-height: 1.2; }
-  .card .name .pr { color: #9a9a9a; font-weight: 600; margin-left: 0.8em; white-space: nowrap; }   /* цена после названия — светло-серым, отступ ~3 пробела */
+  /* имя + цена в ОДНУ строку: длинное название обрезается, цена не пропадает */
+  .card .name { display: flex; align-items: baseline; font-size: 18px; font-weight: 600; line-height: 1.2; }
+  .card .name .nm-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .name .pr { flex-shrink: 0; color: #9a9a9a; font-weight: 600; font-size: 0.78em;
+                    margin-left: 0.6em; white-space: nowrap; }   /* цена — мельче, светло-серым */
   .card .attr { font-size: 14px; color: #bbb; margin-top: 3px; }
   .card .attr:empty { display: none; }              /* пустой цвет/размер не занимает место */
   .card .unitno { font-size: 13px; color: #8ab4f8; margin-top: 4px;
                   font-family: ui-monospace, Menlo, monospace; }   /* номер наклейки из UnitID */
-  .card .right { display: flex; flex-direction: column; align-items: flex-end;
-                 justify-content: center; flex-shrink: 0; }
-  /* столбик «закуплено / отсканено» (справа, светло-серым; цифра отсканено красится) */
-  .card .cbought, .card .cscanned { font-size: 14px; color: #9a9a9a; white-space: nowrap; line-height: 1.4; }
-  .card .cbought:empty, .card .cscanned:empty { display: none; }
-  .card .dupnote { color: #ff6b6b; font-size: 12px; font-weight: 600;
-                   text-align: right; margin-bottom: 4px; max-width: 130px; line-height: 1.2; }
+  .card .dupnote { color: #ff6b6b; font-size: 12px; font-weight: 600; margin-top: 4px; line-height: 1.2; }
   .card .dupnote:empty { display: none; }
+  /* счётчики «закуплено / отсканено» — ВНИЗУ карточки, под текстом; цифра отсканено красится */
+  .card .counts { display: flex; gap: 22px; font-size: 14px; color: #9a9a9a; padding-left: 76px; }
+  .card .cbought:empty, .card .cscanned:empty { display: none; }
   /* тап по карточке → вместо инфо показать список напечатанных наклеек */
   .card .labels { display: none; }
-  .card.show-labels .meta, .card.show-labels .right { display: none; }
-  .card.show-labels .labels { display: block; flex: 1; min-width: 0;
-                 font-size: 14px; line-height: 1.6; padding-right: 22px; }
+  .card.show-labels .top, .card.show-labels .counts { display: none; }
+  .card.show-labels .labels { display: block; font-size: 14px; line-height: 1.6; }
   .card .labels .lt { color: #9a9a9a; }       /* подпись «Распечатанные наклейки:» */
   .card .labels .done { color: #e8e8e8; }     /* пропикана */
   .card .labels .undone { color: #666; }      /* напечатана, но не пропикана — серым */
@@ -104,8 +104,8 @@
   <div id="err" class="err"></div>
 
   <div class="head"><h2 id="cnt">Отсканировано: 0</h2><button id="clear" class="clear" type="button">Очистить</button></div>
-  <button id="showall" class="showall" type="button" style="display:none"></button>
   <div id="list" class="list"></div>
+  <button id="showall" class="showall" type="button" style="display:none"></button>
 
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script>
@@ -234,12 +234,13 @@
       card.className = 'card loading';
       card.innerHTML =
         '<button class="del" type="button" aria-label="Удалить">✕</button>' +
-        '<div class="thumb"><div class="ph">…</div></div>' +
-        '<div class="meta"><div class="name">Записываю в таблицу…</div>' +
-        '<div class="attr color"></div><div class="attr size"></div>' +
-        '<div class="unitno"></div></div>' +
-        '<div class="right"><div class="dupnote"></div>' +
-        '<div class="cbought"></div><div class="cscanned"></div></div>' +
+        '<div class="top">' +
+          '<div class="thumb"><div class="ph">…</div></div>' +
+          '<div class="meta"><div class="name">Записываю в таблицу…</div>' +
+          '<div class="attr color"></div><div class="attr size"></div>' +
+          '<div class="unitno"></div><div class="dupnote"></div></div>' +
+        '</div>' +
+        '<div class="counts"><span class="cbought"></span><span class="cscanned"></span></div>' +
         '<div class="labels"></div>';
       // номер из UnitID (последний сегмент) → короткий код наклейки «№ A001»
       card.querySelector('.unitno').textContent = '№ ' + seqToCode(String(text).split('-').pop());
@@ -252,7 +253,8 @@
       card._pendingDeact = false;
       card._fresh = false;         // true только если ИМЕННО этот скан учёл единицу (не дубль)
       card.querySelector('.del').addEventListener('click', function (e) {
-        e.stopPropagation();                          // не запускать камеру
+        e.stopPropagation();                          // не запускать камеру / тап-вид
+        if (!confirm('Точно удалить товар?')) return; // пункт 7 — подтверждение
         if (card.parentNode) card.parentNode.removeChild(card);
         delete seen[text];                            // код снова можно отсканировать
         total = Math.max(0, total - 1);
@@ -281,6 +283,42 @@
       });
     }
 
+    // info = {bought, scanned, printed:[{code,scanned}]} — данные по товару+варианту.
+    // Столбик «закуплено / отсканено»; цифра отсканено: меньше→красный, ровно→серый, больше→сиреневый.
+    function renderCounts(card, info) {
+      var bEl = card.querySelector('.cbought'), sEl = card.querySelector('.cscanned');
+      if (!bEl || !sEl) return;
+      if (info && (info.bought || info.bought === 0)) {
+        var b = info.bought || 0, s = info.scanned || 0;
+        bEl.textContent = 'закуплено: ' + b;
+        var col = (s < b) ? '#ff6b6b' : (s > b) ? '#c58af9' : '#9a9a9a';
+        sEl.innerHTML = 'отсканено: <span style="color:' + col + '">' + s + '</span>';
+      } else { bEl.textContent = ''; sEl.textContent = ''; }
+    }
+    // тап-вид: «Распечатанные наклейки: AA001, AA002, …»; непропиканные — серым.
+    function renderLabels(card, info) {
+      var lEl = card.querySelector('.labels');
+      if (!lEl) return;
+      var arr = (info && info.printed) || [];
+      if (!arr.length) { lEl.innerHTML = ''; return; }
+      var parts = arr.map(function (p) {
+        return '<span class="' + (p.scanned ? 'done' : 'undone') + '">' + esc(p.code) + '</span>';
+      }).join(', ');
+      lEl.innerHTML = '<span class="lt">Распечатанные наклейки:</span> ' + parts;
+    }
+    // Синхронно обновить счётчики/список во ВСЕХ видимых карточках этого
+    // товара+варианта (одного типа) — чтобы при каждом скане/снятии инфа совпадала.
+    function applyVariantInfo(num, variant, info) {
+      if (num == null) return;
+      var cards = listEl.children;
+      for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        if (c._num === num && c._variant === variant) {
+          c._info = info; renderCounts(c, info); renderLabels(c, info);
+        }
+      }
+    }
+
     // Снять активацию с проверкой ответа: при сбое (нет связи / склад занят /
     // нет в журнале) НЕ молчим — предупреждаем, чтобы отметка не осталась висеть.
     function sendDeactivate(uid) {
@@ -288,7 +326,11 @@
         if (!data || !data.ok) {
           showErr('Не удалось снять отметку с одной единицы (склад занят/нет связи). ' +
                   'Отсканируйте её заново и снимите ещё раз.');
+          return;
         }
+        // после снятия — обновить счётчики/список во всех карточках этого типа
+        applyVariantInfo(data.num, data.variant,
+          { bought: data.bought, scanned: data.scanned, printed: data.printed });
       });
     }
 
@@ -315,13 +357,11 @@
         // имя + цена в одну строку: «1 | костюм   33€» (цена тем же шрифтом, светло-серым)
         var price = (data && (data.price || data.price === 0))
           ? String(data.price).replace(/\s+/g, '') : '';
-        nameEl.innerHTML = esc(nm())
+        nameEl.innerHTML = '<span class="nm-text">' + esc(nm()) + '</span>'
           + (price ? '<span class="pr">   ' + esc(price) + '</span>' : '');
         var cs = splitVariant(data.variant);
         colorEl.textContent = cs.color ? ('цвет: ' + cs.color) : '';
         sizeEl.textContent  = cs.size  ? ('размер: ' + cs.size) : '';
-        fillCounts();
-        fillLabels();
         if (data.photoUrl) {
           var img = document.createElement('img');
           img.alt = '';
@@ -330,34 +370,14 @@
           thumb.innerHTML = ''; thumb.appendChild(img);
         } else { thumb.innerHTML = '<div class="ph">📦</div>'; }
       }
-      // столбик «закуплено / отсканено». Цифра отсканено: меньше закупл.→красный,
-      // ровно→серый, больше→сиреневый.
-      function fillCounts() {
-        var bEl = card.querySelector('.cbought'), sEl = card.querySelector('.cscanned');
-        if (!bEl || !sEl) return;
-        if (data && data.counted && (data.bought || data.bought === 0)) {
-          var b = data.bought || 0, s = data.scanned || 0;
-          bEl.textContent = 'закуплено: ' + b;
-          var col = (s < b) ? '#ff6b6b' : (s > b) ? '#c58af9' : '#9a9a9a';
-          sEl.innerHTML = 'отсканено: <span style="color:' + col + '">' + s + '</span>';
-        } else { bEl.textContent = ''; sEl.textContent = ''; }
-      }
-      // тап-вид: «Распечатанные наклейки: AA001, AA002, …»; непропиканные — серым
-      function fillLabels() {
-        var lEl = card.querySelector('.labels');
-        if (!lEl) return;
-        var arr = (data && data.printed) || [];
-        if (!arr.length) { lEl.innerHTML = ''; return; }
-        var parts = arr.map(function (p) {
-          return '<span class="' + (p.scanned ? 'done' : 'undone') + '">' + esc(p.code) + '</span>';
-        }).join(', ');
-        lEl.innerHTML = '<span class="lt">Распечатанные наклейки:</span> ' + parts;
-      }
-
       // учтено → зелёная. Но если эта единица УЖЕ была пропикана ранее (дубль) —
       // красная полоса + красная подпись «товар уже есть в таблице».
       if (data && data.counted) {
         fillItem();
+        card._num = data.num; card._variant = data.variant;
+        // обновить счётчики/список и в ЭТОЙ карточке, и во всех карточках того же типа
+        applyVariantInfo(data.num, data.variant,
+          { bought: data.bought, scanned: data.scanned, printed: data.printed });
         if (data.alreadyActive) {
           card.className = 'card dup';
           if (dupEl) dupEl.textContent = 'товар уже есть в таблице';
