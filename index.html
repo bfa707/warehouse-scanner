@@ -32,6 +32,8 @@
   .aim { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
          width: 165px; height: 165px; border: 3px solid rgba(255,255,255,.85);
          border-radius: 12px; pointer-events: none; display: none; }
+  /* при qrbox html5-qrcode рисует свою рамку/затемнение — прячем её, оставляем свой .aim */
+  #qr-shaded-region { display: none !important; }
   .start { display: block; width: calc(100% - 32px); max-width: 380px; margin: 16px auto 6px;
            font-size: 20px; font-weight: 700; background: #0b8043; color: #fff; border: none;
            border-radius: 12px; padding: 16px 20px; cursor: pointer; }
@@ -41,7 +43,12 @@
           max-width: 640px; margin: 8px auto 0; padding: 0 16px; }
   .head h2 { font-size: 16px; color: #aaa; font-weight: 500; margin: 14px 0 8px; }
   .clear { background: none; color: #6cb2ff; border: none; font-size: 15px; cursor: pointer; }
+  .showall { display: block; margin: 0 auto 10px; background: #1d1d1d; color: #6cb2ff;
+             border: none; border-radius: 10px; padding: 10px 18px; font-size: 15px; cursor: pointer; }
   .list { max-width: 640px; margin: 0 auto; padding: 0 16px 28px; }
+  /* свёрнуто: в DOM держим только 7 свежих карточек видимыми, старые скрыты —
+     меньше нагрузка на телефон, сканер не захлёбывается при серийном скане */
+  .list:not(.show-all) .card:nth-child(n+8) { display: none; }
 
   /* карточка отсканированной единицы */
   .card { position: relative; display: flex; align-items: center; gap: 12px;
@@ -86,6 +93,7 @@
   <div id="err" class="err"></div>
 
   <div class="head"><h2 id="cnt">Отсканировано: 0</h2><button id="clear" class="clear" type="button">Очистить</button></div>
+  <button id="showall" class="showall" type="button" style="display:none"></button>
   <div id="list" class="list"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -115,8 +123,28 @@
     var errBox   = document.getElementById('err');
     var listEl   = document.getElementById('list');
     var cntEl    = document.getElementById('cnt');
+    var showAllBtn = document.getElementById('showall');
 
     function showErr(t) { errBox.textContent = t || ''; }
+
+    // Свёрнутый список: видны 7 свежих карточек, старые прячем (легче телефону).
+    // Кнопка разворачивает/сворачивает всю историю текущей сессии.
+    function updateShowAll() {
+      var n = listEl.children.length;
+      if (n > 7) {
+        showAllBtn.style.display = 'block';
+        showAllBtn.textContent = listEl.classList.contains('show-all')
+          ? 'Свернуть до 7 свежих'
+          : ('Показать все (' + n + ')');
+      } else {
+        showAllBtn.style.display = 'none';
+        listEl.classList.remove('show-all');
+      }
+    }
+    showAllBtn.addEventListener('click', function () {
+      listEl.classList.toggle('show-all');
+      updateShowAll();
+    });
 
     function beep() {
       try {
@@ -134,6 +162,16 @@
     function nowTime() {
       var d = new Date();
       return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+
+    // Короткий код единицы из порядкового номера (хвост UnitID): 1→A001 … 999→A999 → B001…
+    // То же, что печатается на наклейке — работник сверяет «№ A001» на ярлыке и в карточке.
+    function seqToCode(seq) {
+      seq = parseInt(seq, 10);
+      if (!seq || seq < 1) return '';
+      var n = seq - 1, num = (n % 999) + 1, g = Math.floor(n / 999), letters = '';
+      do { letters = String.fromCharCode(65 + (g % 26)) + letters; g = Math.floor(g / 26) - 1; } while (g >= 0);
+      return letters + ('00' + num).slice(-3);
     }
 
     // Запрос к складу через JSONP (обход CORS для внешней страницы).
@@ -182,9 +220,10 @@
         '<div class="attr color"></div><div class="attr size"></div>' +
         '<div class="unitno"></div></div>' +
         '<div class="right"><div class="price"></div><div class="dupnote"></div></div>';
-      // номер из UnitID (последний сегмент) — какую именно наклейку отсканил
-      card.querySelector('.unitno').textContent = '№ ' + String(text).split('-').pop();
+      // номер из UnitID (последний сегмент) → короткий код наклейки «№ A001»
+      card.querySelector('.unitno').textContent = '№ ' + seqToCode(String(text).split('-').pop());
       listEl.insertBefore(card, listEl.firstChild);
+      updateShowAll();
 
       // крестик — удалить карточку И снять отметку «принято» на складе.
       card._uid = text;
@@ -197,6 +236,7 @@
         delete seen[text];                            // код снова можно отсканировать
         total = Math.max(0, total - 1);
         cntEl.textContent = 'Отсканировано: ' + total;
+        updateShowAll();
         // если activate ещё не вернулся — снимем ПОСЛЕ него (иначе deactivate может
         // обогнать activate, и единица останется активной при удалённой карточке).
         if (card._activating) card._pendingDeact = true;
@@ -351,7 +391,10 @@
       qr = new Html5Qrcode('reader');
       qr.start(
         { facingMode: 'environment' },
-        { fps: 10 },                         // без qrbox — сканируем весь кадр (цепче всего)
+        // qrbox = центральная область кадра (~70%): декодер обрабатывает не весь
+        // кадр, а только центр (куда наводят QR) → заметно меньше нагрузка на телефон,
+        // меньше пропусков при серийном скане. Наводить QR по-прежнему в рамку .aim.
+        { fps: 10, qrbox: function (vw, vh) { var s = Math.floor(Math.min(vw, vh) * 0.7); return { width: s, height: s }; } },
         onScan,
         function () {}                       // ошибки отдельных кадров игнорируем
       ).then(function () {
@@ -369,6 +412,7 @@
     startBtn.addEventListener('click', function () { start(false); });
     document.getElementById('clear').addEventListener('click', function () {
       listEl.innerHTML = ''; total = 0; seen = {}; cntEl.textContent = 'Отсканировано: 0';
+      listEl.classList.remove('show-all'); updateShowAll();
     });
 
     // Пробуем включить камеру сразу при открытии. Если доступ ещё не разрешён
