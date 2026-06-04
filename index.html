@@ -53,7 +53,7 @@
   /* карточка отсканированной единицы */
   .card { position: relative; display: flex; align-items: center; gap: 12px;
           background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
-          border-left: 5px solid #555; }
+          border-left: 5px solid #555; cursor: pointer; }
   .card.ok   { border-left-color: #0b8043; }   /* учтено в таблице (кол-во изменилось) */
   .card.dup  { border-left-color: #d93025; }   /* уже было пропикано ранее */
   .card.bad  { border-left-color: #d93025; }
@@ -70,16 +70,27 @@
   .card .thumb .ph { color: #888; font-size: 24px; }
   .card .meta { flex: 1; min-width: 0; padding-right: 22px; }   /* место под крестик */
   .card .name { font-size: 18px; font-weight: 600; line-height: 1.2; }
+  .card .name .pr { color: #9a9a9a; font-weight: 600; margin-left: 0.8em; white-space: nowrap; }   /* цена после названия — светло-серым, отступ ~3 пробела */
   .card .attr { font-size: 14px; color: #bbb; margin-top: 3px; }
   .card .attr:empty { display: none; }              /* пустой цвет/размер не занимает место */
   .card .unitno { font-size: 13px; color: #8ab4f8; margin-top: 4px;
                   font-family: ui-monospace, Menlo, monospace; }   /* номер наклейки из UnitID */
   .card .right { display: flex; flex-direction: column; align-items: flex-end;
                  justify-content: center; flex-shrink: 0; }
-  .card .price { font-size: 24px; font-weight: 700; color: #9a9a9a; white-space: nowrap; }
-  .card .dupnote { color: #d93025; font-size: 12px; font-weight: 600;
-                   text-align: right; margin-top: 4px; max-width: 110px; line-height: 1.2; }
+  /* столбик «закуплено / отсканено» (справа, светло-серым; цифра отсканено красится) */
+  .card .cbought, .card .cscanned { font-size: 14px; color: #9a9a9a; white-space: nowrap; line-height: 1.4; }
+  .card .cbought:empty, .card .cscanned:empty { display: none; }
+  .card .dupnote { color: #ff6b6b; font-size: 12px; font-weight: 600;
+                   text-align: right; margin-bottom: 4px; max-width: 130px; line-height: 1.2; }
   .card .dupnote:empty { display: none; }
+  /* тап по карточке → вместо инфо показать список напечатанных наклеек */
+  .card .labels { display: none; }
+  .card.show-labels .meta, .card.show-labels .right { display: none; }
+  .card.show-labels .labels { display: block; flex: 1; min-width: 0;
+                 font-size: 14px; line-height: 1.6; padding-right: 22px; }
+  .card .labels .lt { color: #9a9a9a; }       /* подпись «Распечатанные наклейки:» */
+  .card .labels .done { color: #e8e8e8; }     /* пропикана */
+  .card .labels .undone { color: #666; }      /* напечатана, но не пропикана — серым */
 </style>
 </head>
 <body>
@@ -164,14 +175,22 @@
       return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
     }
 
-    // Короткий код единицы из порядкового номера (хвост UnitID): 1→A001 … 999→A999 → B001…
-    // То же, что печатается на наклейке — работник сверяет «№ A001» на ярлыке и в карточке.
+    // Короткий код единицы из порядкового номера (хвост UnitID): 1→AA001 … 999→AA999 → AB001…
+    // То же, что печатается на наклейке — работник сверяет «№ AA001» на ярлыке и в карточке.
     function seqToCode(seq) {
       seq = parseInt(seq, 10);
       if (!seq || seq < 1) return '';
       var n = seq - 1, num = (n % 999) + 1, g = Math.floor(n / 999), letters = '';
-      do { letters = String.fromCharCode(65 + (g % 26)) + letters; g = Math.floor(g / 26) - 1; } while (g >= 0);
+      do { letters = String.fromCharCode(65 + (g % 26)) + letters; g = Math.floor(g / 26); } while (g > 0);
+      while (letters.length < 2) letters = 'A' + letters;   // минимум две буквы: AA…
       return letters + ('00' + num).slice(-3);
+    }
+
+    // экранирование для вставки через innerHTML (имя товара может содержать <, & и т.п.)
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+      });
     }
 
     // Запрос к складу через JSONP (обход CORS для внешней страницы).
@@ -219,7 +238,9 @@
         '<div class="meta"><div class="name">Записываю в таблицу…</div>' +
         '<div class="attr color"></div><div class="attr size"></div>' +
         '<div class="unitno"></div></div>' +
-        '<div class="right"><div class="price"></div><div class="dupnote"></div></div>';
+        '<div class="right"><div class="dupnote"></div>' +
+        '<div class="cbought"></div><div class="cscanned"></div></div>' +
+        '<div class="labels"></div>';
       // номер из UnitID (последний сегмент) → короткий код наклейки «№ A001»
       card.querySelector('.unitno').textContent = '№ ' + seqToCode(String(text).split('-').pop());
       listEl.insertBefore(card, listEl.firstChild);
@@ -241,6 +262,12 @@
         // обогнать activate, и единица останется активной при удалённой карточке).
         if (card._activating) card._pendingDeact = true;
         else if (card._fresh) sendDeactivate(text);  // снимать только то, что учёл ЭТОТ скан (дубль не трогаем)
+      });
+
+      // тап по карточке → переключить вид: инфо (закуплено/отсканено) ↔ список наклеек
+      card.addEventListener('click', function (e) {
+        card.classList.toggle('show-labels');
+        e.stopPropagation();   // не дёргать запуск камеры по тапу
       });
 
       // скан = «принял эту единицу»: активируем на складе и рисуем карточку
@@ -276,7 +303,6 @@
       var nameEl  = card.querySelector('.name');
       var colorEl = card.querySelector('.color');
       var sizeEl  = card.querySelector('.size');
-      var priceEl = card.querySelector('.price');
       var dupEl   = card.querySelector('.dupnote');
       if (dupEl) dupEl.textContent = '';
       // название с номером впереди: «17 | костюм»
@@ -286,11 +312,16 @@
         return (data && data.num ? data.num + ' | ' : '') + base;
       }
       function fillItem() {
-        nameEl.textContent = nm();
+        // имя + цена в одну строку: «1 | костюм   33€» (цена тем же шрифтом, светло-серым)
+        var price = (data && (data.price || data.price === 0))
+          ? String(data.price).replace(/\s+/g, '') : '';
+        nameEl.innerHTML = esc(nm())
+          + (price ? '<span class="pr">   ' + esc(price) + '</span>' : '');
         var cs = splitVariant(data.variant);
         colorEl.textContent = cs.color ? ('цвет: ' + cs.color) : '';
-        sizeEl.textContent = cs.size ? ('размер: ' + cs.size) : '';
-        priceEl.textContent = (data.price || data.price === 0) ? ('' + data.price) : '';
+        sizeEl.textContent  = cs.size  ? ('размер: ' + cs.size) : '';
+        fillCounts();
+        fillLabels();
         if (data.photoUrl) {
           var img = document.createElement('img');
           img.alt = '';
@@ -298,6 +329,29 @@
           img.src = data.photoUrl;
           thumb.innerHTML = ''; thumb.appendChild(img);
         } else { thumb.innerHTML = '<div class="ph">📦</div>'; }
+      }
+      // столбик «закуплено / отсканено». Цифра отсканено: меньше закупл.→красный,
+      // ровно→серый, больше→сиреневый.
+      function fillCounts() {
+        var bEl = card.querySelector('.cbought'), sEl = card.querySelector('.cscanned');
+        if (!bEl || !sEl) return;
+        if (data && data.counted && (data.bought || data.bought === 0)) {
+          var b = data.bought || 0, s = data.scanned || 0;
+          bEl.textContent = 'закуплено: ' + b;
+          var col = (s < b) ? '#ff6b6b' : (s > b) ? '#c58af9' : '#9a9a9a';
+          sEl.innerHTML = 'отсканено: <span style="color:' + col + '">' + s + '</span>';
+        } else { bEl.textContent = ''; sEl.textContent = ''; }
+      }
+      // тап-вид: «Распечатанные наклейки: AA001, AA002, …»; непропиканные — серым
+      function fillLabels() {
+        var lEl = card.querySelector('.labels');
+        if (!lEl) return;
+        var arr = (data && data.printed) || [];
+        if (!arr.length) { lEl.innerHTML = ''; return; }
+        var parts = arr.map(function (p) {
+          return '<span class="' + (p.scanned ? 'done' : 'undone') + '">' + esc(p.code) + '</span>';
+        }).join(', ');
+        lEl.innerHTML = '<span class="lt">Распечатанные наклейки:</span> ' + parts;
       }
 
       // учтено → зелёная. Но если эта единица УЖЕ была пропикана ранее (дубль) —
