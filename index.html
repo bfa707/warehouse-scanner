@@ -63,26 +63,28 @@
                border: none; background: transparent; color: #888; font-size: 20px;
                line-height: 1; padding: 0; cursor: pointer; z-index: 1; }
   .card .del:active { color: #fff; }
-  .card .top { display: flex; align-items: center; gap: 12px; }
+  .card .top { display: flex; align-items: flex-start; gap: 12px; }
+  /* колонка с фото: ПОД фоткой — код единицы (как на распечатке под QR) */
+  .card .thumbcol { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .card .thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px;
                  overflow: hidden; background: #333; display: flex;
                  align-items: center; justify-content: center; }
   .card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .card .thumb .ph { color: #888; font-size: 24px; }
+  .card .unitno { font-size: 13px; color: #8ab4f8; text-align: center; max-width: 76px;
+                  font-family: ui-monospace, Menlo, monospace; }   /* код единицы — под фото */
   .card .meta { flex: 1; min-width: 0; padding-right: 22px; }   /* место под крестик */
   /* имя + цена в ОДНУ строку: длинное название обрезается, цена не пропадает */
   .card .name { display: flex; align-items: baseline; font-size: 18px; font-weight: 600; line-height: 1.2; }
   .card .name .nm-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .name .pr { flex-shrink: 0; color: #9a9a9a; font-weight: 600; font-size: 0.78em;
                     margin-left: 0.6em; white-space: nowrap; }   /* цена — мельче, светло-серым */
-  .card .attr { font-size: 14px; color: #bbb; margin-top: 3px; }
+  .card .attr { font-size: 14px; color: #fff; margin-top: 3px; }   /* цвет/размер — белым (п.5) */
   .card .attr:empty { display: none; }              /* пустой цвет/размер не занимает место */
-  .card .unitno { font-size: 13px; color: #8ab4f8; margin-top: 4px;
-                  font-family: ui-monospace, Menlo, monospace; }   /* номер наклейки из UnitID */
   .card .dupnote { color: #ff6b6b; font-size: 12px; font-weight: 600; margin-top: 4px; line-height: 1.2; }
   .card .dupnote:empty { display: none; }
-  /* счётчики «закуплено / отсканено» — ВНИЗУ карточки, под текстом; цифра отсканено красится */
-  .card .counts { display: flex; gap: 22px; font-size: 14px; color: #9a9a9a; padding-left: 76px; }
+  /* счётчики «закуплено / отсканено» — ВНИЗУ карточки, СТОПКОЙ (друг под другом); цифра отсканено красится */
+  .card .counts { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: #9a9a9a; padding-left: 76px; }
   .card .cbought:empty, .card .cscanned:empty { display: none; }
   /* тап по карточке → вместо инфо показать список напечатанных наклеек */
   .card .labels { display: none; }
@@ -235,16 +237,20 @@
       card.innerHTML =
         '<button class="del" type="button" aria-label="Удалить">✕</button>' +
         '<div class="top">' +
-          '<div class="thumb"><div class="ph">…</div></div>' +
+          '<div class="thumbcol"><div class="thumb"><div class="ph">…</div></div>' +
+          '<div class="unitno"></div></div>' +
           '<div class="meta"><div class="name">Записываю в таблицу…</div>' +
           '<div class="attr color"></div><div class="attr size"></div>' +
-          '<div class="unitno"></div><div class="dupnote"></div></div>' +
+          '<div class="dupnote"></div></div>' +
         '</div>' +
         '<div class="counts"><span class="cbought"></span><span class="cscanned"></span></div>' +
         '<div class="labels"></div>';
       // номер из UnitID (последний сегмент) → короткий код наклейки «№ A001»
       card.querySelector('.unitno').textContent = '№ ' + seqToCode(String(text).split('-').pop());
       listEl.insertBefore(card, listEl.firstChild);
+      // авто-очистка: в DOM держим максимум 50 карточек (самые старые удаляем) —
+      // чтобы длинная сессия не грузила телефон. Полная история — в листе «Лог_сканов».
+      while (listEl.children.length > 50) listEl.removeChild(listEl.lastChild);
       updateShowAll();
 
       // крестик — удалить карточку И снять отметку «принято» на складе.
