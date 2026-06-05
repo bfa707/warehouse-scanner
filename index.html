@@ -54,18 +54,19 @@
   .card { position: relative; display: flex; align-items: flex-start; gap: 12px;
           background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
           border-left: 5px solid #555; cursor: pointer; }
-  /* фон по ЦВЕТУ-РАЗМЕРУ: 10 неброских тёмных оттенков, чередуются по порядку появления —
-     разные цвета-размеры визуально различимы (одинаковые единицы группируются одним фоном) */
-  .card.bg0 { background: #232323; }
-  .card.bg1 { background: #2b2b2b; }
-  .card.bg2 { background: #1e2a38; }
-  .card.bg3 { background: #2a2f3a; }
-  .card.bg4 { background: #322a2a; }
-  .card.bg5 { background: #2a2433; }
-  .card.bg6 { background: #1f3340; }
-  .card.bg7 { background: #303838; }
-  .card.bg8 { background: #383030; }
-  .card.bg9 { background: #25303a; }
+  /* фон по ЦВЕТУ-РАЗМЕРУ: 10 неброских тёмных оттенков ИЗ РАЗНЫХ семейств, чередуются по
+     порядку появления — соседние цвета-размеры заметно различаются (серый→синий→коричневый
+     →фиолетовый→стальной→тёплый→тёмно-синий→сливовый→хаки→слейт), одинаковые — один фон */
+  .card.bg0 { background: #2a2a2a; }   /* серый */
+  .card.bg1 { background: #1e3142; }   /* синий */
+  .card.bg2 { background: #342a20; }   /* коричневый */
+  .card.bg3 { background: #2c2542; }   /* фиолетовый */
+  .card.bg4 { background: #24343f; }   /* стальной */
+  .card.bg5 { background: #3a2e2c; }   /* тёплый серо-коричневый */
+  .card.bg6 { background: #1e2840; }   /* тёмно-синий */
+  .card.bg7 { background: #342940; }   /* сливовый */
+  .card.bg8 { background: #38322a; }   /* хаки-коричневый */
+  .card.bg9 { background: #2a3640; }   /* слейт-синий */
   /* всё принято (скан == закуплено) → тёмно-зелёный фон (перекрывает оттенок) */
   .card.full { background: #15351f; }
   .card.ok   { border-left-color: #0b8043; }   /* учтено в таблице (кол-во изменилось) */
