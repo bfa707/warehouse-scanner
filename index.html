@@ -54,9 +54,19 @@
   .card { position: relative; display: flex; align-items: flex-start; gap: 12px;
           background: #1d1d1d; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
           border-left: 5px solid #555; cursor: pointer; }
-  /* фон чередуется по номеру товара — разные товары визуально различимы (п.3) */
-  .card.alt  { background: #2b2b2b; }
-  /* всё принято (скан == закуплено) → тёмно-зелёный фон (перекрывает серый) */
+  /* фон по ЦВЕТУ-РАЗМЕРУ: 10 неброских тёмных оттенков, чередуются по порядку появления —
+     разные цвета-размеры визуально различимы (одинаковые единицы группируются одним фоном) */
+  .card.bg0 { background: #232323; }
+  .card.bg1 { background: #2b2b2b; }
+  .card.bg2 { background: #1e2a38; }
+  .card.bg3 { background: #2a2f3a; }
+  .card.bg4 { background: #322a2a; }
+  .card.bg5 { background: #2a2433; }
+  .card.bg6 { background: #1f3340; }
+  .card.bg7 { background: #303838; }
+  .card.bg8 { background: #383030; }
+  .card.bg9 { background: #25303a; }
+  /* всё принято (скан == закуплено) → тёмно-зелёный фон (перекрывает оттенок) */
   .card.full { background: #15351f; }
   .card.ok   { border-left-color: #0b8043; }   /* учтено в таблице (кол-во изменилось) */
   .card.dup  { border-left-color: #d93025; }   /* уже было пропикано ранее */
@@ -319,25 +329,26 @@
         + '(<span class="done">отсканенные</span>/<span class="undone">неотсканенные</span>):</span>'
         + '<br>' + parts;
     }
-    // Фон карточки по номеру товара: 0/1 → две разные тёмные заливки (различать товары визуально).
-    function shadeFor(num) {
-      var s = String(num), h = 0;
-      for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-      return h % 2;
+    // Фон по цвету-размеру: каждому новому ключу (товар+вариант) — следующий из 10
+    // оттенков по кругу (чередование по порядку появления → соседние гарантированно разные).
+    var _bgShades = {}, _bgNext = 0;
+    function shadeFor(key) {
+      if (!(key in _bgShades)) { _bgShades[key] = _bgNext % 10; _bgNext++; }
+      return _bgShades[key];
     }
     // Синхронно обновить счётчики/список + фон во ВСЕХ видимых карточках этого
     // товара+варианта (одного типа) — чтобы при каждом скане/снятии инфа совпадала.
     function applyVariantInfo(num, variant, info) {
       if (num == null) return;
-      var alt  = shadeFor(num) === 1;
+      var bg   = 'bg' + shadeFor(num + '|' + variant);
       var full = !!(info && info.bought > 0 && info.scanned === info.bought);  // всё принято → зелёный фон
       var cards = listEl.children;
       for (var i = 0; i < cards.length; i++) {
         var c = cards[i];
         if (c._num === num && c._variant === variant) {
           c._info = info; renderCounts(c, info); renderLabels(c, info);
-          c.classList.toggle('alt', alt);
-          c.classList.toggle('full', full);
+          c.classList.add(bg);                 // оттенок по цвету-размеру (идемпотентно)
+          c.classList.toggle('full', full);    // зелёный, когда скан == закуп
         }
       }
     }
