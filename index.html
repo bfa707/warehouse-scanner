@@ -578,6 +578,7 @@
         updateOrderProgress();
         return;
       }
+      // ПО ОДНОМУ бейджику на КАЖДУЮ позицию заказа: две одинаковых вещи → два бейджика
       grid.innerHTML = items.map(function (it, i) {
         var cs = splitVariant(it.variant);
         var color = cs.color || it.color || '';
@@ -585,45 +586,68 @@
         var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
                  + (color && size ? '  ' : '')
                  + (size  ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
-        var qtyTxt = it.qty > 1 ? ' ×' + it.qty : '';
         return '<div class="obadge" data-idx="' + i + '" data-num="' + esc(it.num) + '" data-net="' + (it.hasNet ? 1 : 0) + '">'
           + '<div class="othumb"><div class="ph">📦</div></div>'
-          + '<div class="ometa"><div class="oname">' + esc(it.num) + ' | ' + esc(it.name || '') + esc(qtyTxt) + '</div>'
+          + '<div class="ometa"><div class="oname">' + esc(it.num) + ' | ' + esc(it.name || '') + '</div>'
           +   '<div class="oattr">' + attr + '</div></div>'
           + '<div class="ochip"></div></div>';
       }).join('');
+      // карта слот → СПИСОК бейджиков (только НЕ-net — это цели скана)
       items.forEach(function (it, i) {
         var el = grid.querySelector('.obadge[data-idx="' + i + '"]');
         if (!el) return;
-        if (it.hasNet) setBadgeState(el, 0, 0, true);
-        else { BADGE_BY_SLOT[it.num + '|' + it.slug] = el; setBadgeState(el, it.given || 0, it.qty, false); }
+        if (it.hasNet) { setBadgeNet(el); return; }
+        var slot = it.num + '|' + it.slug;
+        (BADGE_BY_SLOT[slot] || (BADGE_BY_SLOT[slot] = [])).push(el);
+        setBadgePending(el);
       });
+      // стартовое «уже выдано» по слотам (с сервера): гасим N бейджиков каждого слота
+      var gbs = ORDER.givenBySlot || {};
+      Object.keys(gbs).forEach(function (slot) { markSlotGiven(slot, gbs[slot]); });
       updateOrderProgress();
       fetchOrderPhotos(items);
     }
 
-    function setBadgeState(el, given, need, hasNet) {
+    // Один бейджик = одна позиция: «ждёт» / «✓ выдано» / «не хватило».
+    function setBadgePending(el) {
       if (!el) return;
-      el.classList.remove('part', 'done', 'net');
-      var chip = el.querySelector('.ochip');
-      if (hasNet) { el.classList.add('net'); chip.textContent = 'не хватило';
-                    el.setAttribute('data-given', 0); el.setAttribute('data-need', 0); return; }
-      el.setAttribute('data-given', given); el.setAttribute('data-need', need);
-      chip.textContent = given + '/' + need;
-      if (need > 0 && given >= need) el.classList.add('done');
-      else if (given > 0) el.classList.add('part');
+      el.classList.remove('done', 'part', 'net');
+      el.setAttribute('data-net', '0'); el.setAttribute('data-done', '0');
+      el.querySelector('.ochip').textContent = 'ждёт';
+    }
+    function setBadgeDone(el) {
+      if (!el) return;
+      el.classList.remove('part', 'net'); el.classList.add('done');
+      el.setAttribute('data-done', '1');
+      el.querySelector('.ochip').textContent = '✓ выдано';
+    }
+    function setBadgeNet(el) {
+      if (!el) return;
+      el.classList.remove('done', 'part'); el.classList.add('net');
+      el.setAttribute('data-net', '1'); el.setAttribute('data-done', '0');
+      el.querySelector('.ochip').textContent = 'не хватило';
+    }
+    // погасить первые k бейджиков слота как «выдано», остальные — «ждёт»
+    function markSlotGiven(slot, k) {
+      var arr = BADGE_BY_SLOT[slot] || [];
+      for (var i = 0; i < arr.length; i++) {
+        if (i < k) setBadgeDone(arr[i]); else setBadgePending(arr[i]);
+      }
     }
 
-    // Обновить бейдж по ответу сервера (given — авторитетно с сервера).
+    // Обновить бейджи слота по ответу сервера (given — авторитетное число с сервера).
     function updateOrderBadge(data, flash) {
       if (!data || !data.num) return;
-      var el = BADGE_BY_SLOT[data.num + '|' + slugify(data.variant)];
-      if (!el) return;
-      var need  = (data.need != null && data.need > 0) ? data.need : (parseInt(el.getAttribute('data-need'), 10) || 0);
-      var given = (data.given != null) ? data.given : (parseInt(el.getAttribute('data-given'), 10) || 0);
-      setBadgeState(el, given, need, false);
-      if (flash) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
-                   try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+      var slot = data.num + '|' + slugify(data.variant);
+      var arr = BADGE_BY_SLOT[slot];
+      if (!arr || !arr.length) return;
+      var given = Math.max(0, Math.min(data.given != null ? data.given : 0, arr.length));
+      markSlotGiven(slot, given);
+      if (flash && given > 0) {
+        var el = arr[given - 1];          // бейджик, который только что закрыли
+        el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+        try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      }
       updateOrderProgress();
     }
 
@@ -633,9 +657,8 @@
       var need = 0, given = 0;
       Array.prototype.forEach.call(document.querySelectorAll('#order-grid .obadge'), function (el) {
         if (el.getAttribute('data-net') === '1') return;
-        var nd = parseInt(el.getAttribute('data-need'), 10) || 0;
-        var gv = parseInt(el.getAttribute('data-given'), 10) || 0;
-        need += nd; given += Math.min(gv, nd);
+        need++;
+        if (el.getAttribute('data-done') === '1') given++;
       });
       var sum = (ORDER.totalSum != null) ? ORDER.totalSum : 0;
       var cnt = (ORDER.totalCount != null) ? ORDER.totalCount : need;
