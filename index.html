@@ -794,8 +794,10 @@
         case 'ok':
           card.className = 'card ok';
           sEl.innerHTML = 'выдано: <span style="color:#7ee2a0">' + given + '/' + need + '</span>';
+          if (dupEl && data.autoReceived) dupEl.textContent = '✔ наклейка принята на склад при выдаче';
           updateOrderBadge(data, true);
-          setStatus('ok', '✓ Выдано: ' + shortName(data) + (need && given >= need ? ' — позиция собрана' : ' (' + given + '/' + need + ')'));
+          setStatus('ok', '✓ Выдано: ' + shortName(data) + (data.autoReceived ? ' (принят при выдаче)' : '')
+            + (need && given >= need ? ' — позиция собрана' : ' (' + given + '/' + need + ')'));
           break;
         case 'already':
           card.className = 'card dup';
