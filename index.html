@@ -608,7 +608,7 @@
       fetchOrderPhotos(items);
     }
 
-    // Один бейджик = одна позиция: «ждёт» / «✓ выдано» / «не хватило».
+    // Один бейджик = одна позиция: «ждёт» / «✓» / «не хватило».
     function setBadgePending(el) {
       if (!el) return;
       el.classList.remove('done', 'part', 'net');
@@ -619,7 +619,7 @@
       if (!el) return;
       el.classList.remove('part', 'net'); el.classList.add('done');
       el.setAttribute('data-done', '1');
-      el.querySelector('.ochip').textContent = '✓ выдано';
+      el.querySelector('.ochip').textContent = '✓';
     }
     function setBadgeNet(el) {
       if (!el) return;
@@ -727,7 +727,7 @@
     }
 
     function onScanOrder(text) {
-      if (seen[text]) { setStatus('warn', 'Этот код уже сканировали в этой сессии.'); return; }
+      if (seen[text]) return;   // тот же код в этой сессии — тихо игнорируем (камера часто читает дважды)
       seen[text] = true;
       beep();
       if (navigator.vibrate) navigator.vibrate(60);
@@ -793,11 +793,11 @@
       switch (data.match) {
         case 'ok':
           card.className = 'card ok';
-          sEl.innerHTML = 'выдано: <span style="color:#7ee2a0">' + given + '/' + need + '</span>';
-          if (dupEl && data.autoReceived) dupEl.textContent = '✔ наклейка принята на склад при выдаче';
+          // при совпадении — просто зелёная галочка + зелёный фон (без слова «выдано»)
+          sEl.innerHTML = '<span style="color:#7ee2a0;font-weight:700;font-size:22px">✓</span>';
+          if (dupEl && data.autoReceived) dupEl.textContent = '✔ принят на склад при выдаче';
           updateOrderBadge(data, true);
-          setStatus('ok', '✓ Выдано: ' + shortName(data) + (data.autoReceived ? ' (принят при выдаче)' : '')
-            + (need && given >= need ? ' — позиция собрана' : ' (' + given + '/' + need + ')'));
+          setStatus('ok', '✓');
           break;
         case 'already':
           card.className = 'card dup';
