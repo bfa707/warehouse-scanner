@@ -897,10 +897,35 @@
           + '<div class="mob-check">' + (pickable ? '○' : '') + '</div></div>';
       }).join('');
 
+      // ПРАВКА 3: показать В ЧЁМ отличие — № не из заказа vs другой цвет/размер
+      var scanV = ((cs.color || '') + (cs.color && cs.size ? ' ' : '') + (cs.size || '')).trim() || (data.variant || '');
+      var expSet = {};
+      items.forEach(function (it, i) {
+        if (String(it.num) !== scanNum) return;
+        var el2 = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
+        var d2 = !!(el2 && el2.getAttribute('data-done') === '1');
+        var n2 = it.hasNet || !!(el2 && el2.getAttribute('data-net') === '1');
+        if (d2 || n2) return;
+        var ocs2 = splitVariant(it.variant);
+        var v2 = ((ocs2.color || it.color || '') + ' ' + (ocs2.size || it.size || '')).trim();
+        if (v2) expSet[v2] = 1;
+      });
+      var expList = Object.keys(expSet);
+      var mTitle, mSub;
+      if (scanNumInOrder) {
+        mTitle = 'Не совпадает цвет/размер';
+        mSub = 'Отсканировано: «' + esc(scanV || '—') + '».'
+             + (expList.length ? ' В заказе по №' + esc(scanNum) + ' ожидается: «' + expList.map(esc).join('», «') + '».' : '')
+             + ' Отметьте нужную позицию ниже.';
+      } else {
+        mTitle = 'Товара №' + esc(scanNum) + ' нет в этом заказе';
+        mSub = 'Если это замена — отметьте позицию, которую он закрывает. Иначе проверьте, тот ли это заказ, или отсканируйте другой товар.';
+      }
+
       pop.innerHTML =
         '<div class="mpop-panel">'
-        + '<div class="mpop-title">Товар отличается от заказа</div>'
-        + '<div class="mpop-sub">Выберите соответствующий заказ или просканируйте другой товар.</div>'
+        + '<div class="mpop-title">' + mTitle + '</div>'
+        + '<div class="mpop-sub">' + mSub + '</div>'
         + '<div class="mpop-scan"><div class="mphoto"><div class="ph">📦</div></div>'
         +   '<div class="minfo"><div class="mname">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>'
         +     (cs.color ? '<div class="mrow">цвет: <span class="val">' + esc(cs.color) + '</span></div>' : '')
