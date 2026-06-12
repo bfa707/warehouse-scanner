@@ -154,6 +154,53 @@
   .obadge.part .ochip { color: #ffce73; }
   .obadge.done .ochip { color: #7ee2a0; }
   .obadge.net  .ochip { color: #d99b4a; font-size: 13px; }
+  /* чип = колонка: галка/статус сверху, под ней код наклейки */
+  .obadge .ochip { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
+  .obadge .ocode { font-size: 12px; font-weight: 700; color: #7ee2a0; font-family: ui-monospace, Menlo, monospace; }
+  .obadge .ocode:empty { display: none; }
+  .obadge.done { cursor: pointer; }                  /* тап по зелёному бейджику = снять выдачу */
+  /* в режиме заказа нижняя лента приёмки не нужна — всё через бейджики и попап */
+  body.order-mode #list, body.order-mode #showall { display: none; }
+
+  /* ─── Попап «Товар отличается от заказа» ─── */
+  .mpop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center;
+          background: rgba(0,0,0,.72); padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .mpop-panel { background: #1b1b1b; border: 1px solid #4a3c14; border-radius: 16px; width: 100%;
+                max-width: 560px; margin: auto 0; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+  .mpop-title { font-size: 18px; font-weight: 800; color: #ffd98a; line-height: 1.3; margin-bottom: 4px; }
+  .mpop-sub { font-size: 13px; color: #aaa; margin-bottom: 12px; }
+  .mpop-scan { display: flex; gap: 14px; background: #241d0f; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+  .mpop-scan .mphoto { width: 104px; height: 104px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
+                       background: #333; display: flex; align-items: center; justify-content: center; }
+  .mpop-scan .mphoto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mpop-scan .mphoto .ph { color: #888; font-size: 32px; }
+  .mpop-scan .minfo { flex: 1; min-width: 0; }
+  .mpop-scan .mname { font-size: 17px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
+  .mpop-scan .mrow { font-size: 14px; color: #bbb; margin-top: 2px; }
+  .mpop-scan .mrow .val { color: #fff; }
+  .mpop-pick { font-size: 14px; color: #ddd; font-weight: 600; margin: 4px 2px 8px; }
+  .mpop-list { display: flex; flex-direction: column; gap: 8px; }
+  .mob { display: flex; align-items: center; gap: 12px; background: #232323; border-radius: 12px;
+         padding: 10px 12px; border-left: 5px solid #555; }
+  .mob.pick { cursor: pointer; } .mob.pick:active { background: #2c2c2c; }
+  .mob.disabled { opacity: .45; }
+  .mob.done { border-left-color: #0b8043; } .mob.net { border-left-color: #9a6b00; }
+  .mob .mob-thumb { width: 46px; height: 46px; flex-shrink: 0; border-radius: 8px; overflow: hidden;
+                    background: #333; display: flex; align-items: center; justify-content: center; }
+  .mob .mob-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mob .mob-thumb .ph { color: #888; font-size: 18px; }
+  .mob .mob-meta { flex: 1; min-width: 0; }
+  .mob .mob-name { font-size: 15px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mob .mob-attr { font-size: 13px; color: #bbb; margin-top: 2px; }
+  .mob .mob-attr .val { color: #fff; }
+  .mob .mob-state { font-size: 12px; margin-top: 2px; color: #9a9a9a; }
+  .mob.done .mob-state { color: #7ee2a0; } .mob.net .mob-state { color: #d99b4a; }
+  .mob .mob-check { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; border: 2px solid #6cb2ff;
+                   display: flex; align-items: center; justify-content: center; color: #6cb2ff; font-size: 18px; font-weight: 800; }
+  .mob.disabled .mob-check { border-color: #555; color: transparent; }
+  .mpop-foot { margin-top: 14px; }
+  .mpop-close { width: 100%; background: #2a2a2a; color: #ddd; border: none; border-radius: 12px;
+                padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -170,6 +217,8 @@
   <div id="order-head"><div id="order-title">Загрузка заказа…</div><div id="order-progress"></div></div>
   <div id="scan-status"><div class="msg"></div></div>
   <div id="order-grid"></div>
+  <!-- попап «Товар отличается от заказа» (наполняется из openMismatchPopup) -->
+  <div id="mismatch-popup" class="mpop" style="display:none"></div>
 
   <div class="head"><h2 id="cnt">Отсканировано: 0</h2><button id="clear" class="clear" type="button">Очистить</button></div>
   <div id="list" class="list"></div>
@@ -551,12 +600,19 @@
 
     // ════════════════════ Режим «Собрать заказ» ════════════════════
     var ORDER = null;             // выгрузка заказа с сервера
-    var BADGE_BY_SLOT = {};       // "num|slug" → бейдж (только НЕ-net позиции — цель скана)
+    var BADGE_BY_SLOT = {};       // "num|slug" → [бейджи] (только НЕ-net позиции — цель скана)
     var statusTimer = null;
+    var RETRY = {};               // uid → счётчик тихих повторов выдачи (без нижней ленты)
+    var RETRY_T = {};             // uid → handle отложенного повтора (для отмены устаревших)
 
     function initOrderMode() {
       document.body.classList.add('order-mode');
-      // подгрузка заказа (uid не нужен — order_lookup читает src/no/nick)
+      reloadOrder();
+    }
+    // подгрузка/перечитка заказа (uid не нужен — order_lookup читает src/no/nick).
+    // Зовём при старте и после ручной привязки/снятия выдачи — бейджики и коды
+    // наклеек берутся из АВТОРИТЕТНОГО состояния сервера (givenBySlot/uidsBySlot).
+    function reloadOrder() {
       callGas('order_lookup', '', function (o) {
         renderOrderBadges(o || { found: false, items: [] });
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
@@ -596,53 +652,76 @@
       items.forEach(function (it, i) {
         var el = grid.querySelector('.obadge[data-idx="' + i + '"]');
         if (!el) return;
+        el._item = it;
+        el.addEventListener('click', function (e) { e.stopPropagation(); onBadgeTap(el); });
         if (it.hasNet) { setBadgeNet(el); return; }
         var slot = it.num + '|' + it.slug;
         (BADGE_BY_SLOT[slot] || (BADGE_BY_SLOT[slot] = [])).push(el);
         setBadgePending(el);
       });
-      // стартовое «уже выдано» по слотам (с сервера): гасим N бейджиков каждого слота
+      // стартовое «уже выдано» по слотам (с сервера): гасим N бейджиков каждого слота,
+      // под галкой — код наклейки из uidsBySlot (тап по бейджику снимет именно её выдачу).
       var gbs = ORDER.givenBySlot || {};
-      Object.keys(gbs).forEach(function (slot) { markSlotGiven(slot, gbs[slot]); });
+      var ubs = ORDER.uidsBySlot || {};
+      Object.keys(gbs).forEach(function (slot) { markSlotGiven(slot, gbs[slot], ubs[slot]); });
       updateOrderProgress();
       fetchOrderPhotos(items);
     }
 
-    // Один бейджик = одна позиция: «ждёт» / «✓» / «не хватило».
+    // Один бейджик = одна позиция: «ждёт» / «✓ + код наклейки» / «не хватило».
+    function codeFromUid(uid) { return seqToCode(String(uid || '').split('-').pop()); }
     function setBadgePending(el) {
       if (!el) return;
       el.classList.remove('done', 'part', 'net');
       el.setAttribute('data-net', '0'); el.setAttribute('data-done', '0');
-      el.querySelector('.ochip').textContent = 'ждёт';
+      el._uid = '';
+      el.querySelector('.ochip').innerHTML = '<span class="ostate">ждёт</span>';
     }
-    function setBadgeDone(el) {
+    // uid — наклейка, закрывшая бейджик: под галкой пишем её код (AA001), запоминаем для отмены.
+    function setBadgeDone(el, uid) {
       if (!el) return;
       el.classList.remove('part', 'net'); el.classList.add('done');
       el.setAttribute('data-done', '1');
-      el.querySelector('.ochip').textContent = '✓';
+      if (uid) el._uid = uid;
+      var code = el._uid ? codeFromUid(el._uid) : '';
+      el.querySelector('.ochip').innerHTML =
+        '<span class="ostate" style="color:#7ee2a0;font-size:20px">✓</span>'
+        + (code ? '<span class="ocode">' + esc(code) + '</span>' : '');
     }
     function setBadgeNet(el) {
       if (!el) return;
       el.classList.remove('done', 'part'); el.classList.add('net');
       el.setAttribute('data-net', '1'); el.setAttribute('data-done', '0');
-      el.querySelector('.ochip').textContent = 'не хватило';
+      el.querySelector('.ochip').innerHTML = '<span class="ostate">не хватило</span>';
     }
-    // погасить первые k бейджиков слота как «выдано», остальные — «ждёт»
-    function markSlotGiven(slot, k) {
+    // погасить первые k бейджиков слота как «выдано» (с кодами из uids), остальные — «ждёт»
+    function markSlotGiven(slot, k, uids) {
       var arr = BADGE_BY_SLOT[slot] || [];
+      uids = uids || [];
       for (var i = 0; i < arr.length; i++) {
-        if (i < k) setBadgeDone(arr[i]); else setBadgePending(arr[i]);
+        if (i < k) setBadgeDone(arr[i], uids[i]); else setBadgePending(arr[i]);
       }
+    }
+    // тап по закрытому (зелёному) бейджику = снять его выдачу — нижней ленты с крестиком больше нет
+    function onBadgeTap(el) {
+      if (!el || el.getAttribute('data-done') !== '1') return;
+      if (!el._uid) { setStatus('warn', 'Не знаю код этой выдачи — обновите заказ.'); return; }
+      if (!confirm('Снять выдачу этой вещи?')) return;
+      sendUnsell(el._uid);
     }
 
     // Обновить бейджи слота по ответу сервера (given — авторитетное число с сервера).
+    // Только что закрытому бейджику отдаём uid этого скана (для кода/отмены); прежние — свой.
     function updateOrderBadge(data, flash) {
       if (!data || !data.num) return;
       var slot = data.num + '|' + slugify(data.variant);
       var arr = BADGE_BY_SLOT[slot];
       if (!arr || !arr.length) return;
       var given = Math.max(0, Math.min(data.given != null ? data.given : 0, arr.length));
-      markSlotGiven(slot, given);
+      for (var i = 0; i < arr.length; i++) {
+        if (i < given) setBadgeDone(arr[i], (flash && i === given - 1) ? data.uid : undefined);
+        else setBadgePending(arr[i]);
+      }
       if (flash && given > 0) {
         var el = arr[given - 1];          // бейджик, который только что закрыли
         el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
@@ -706,155 +785,193 @@
       return (data.num || '') + ' ' + (data.name || '') + (v ? ' (' + v + ')' : '');
     }
 
-    // Карточка-лента (как на приёмке): одна на скан, с крестиком для отката выдачи.
-    function makeFeedCard(text) {
-      var card = document.createElement('div');
-      card.className = 'card loading';
-      card.innerHTML =
-        '<button class="del" type="button" aria-label="Удалить">✕</button>' +
-        '<div class="thumbcol"><div class="thumb"><div class="ph">…</div></div>' +
-        '<div class="unitno"></div></div>' +
-        '<div class="meta"><div class="name">Проверяю заказ…</div>' +
-        '<div class="attr color"></div><div class="attr size"></div>' +
-        '<div class="dupnote"></div></div>' +
-        '<div class="counts"><span class="cbought"></span><span class="cscanned"></span></div>' +
-        '<div class="labels"></div>';
-      card.querySelector('.unitno').textContent = '№ ' + seqToCode(String(text).split('-').pop());
-      listEl.insertBefore(card, listEl.firstChild);
-      while (listEl.children.length > 50) listEl.removeChild(listEl.lastChild);
-      updateShowAll();
-      return card;
-    }
-
+    // === Скан в режиме заказа: без нижней ленты — результат на бейджиках + баннере + попапе ===
     function onScanOrder(text) {
-      if (seen[text]) return;   // тот же код в этой сессии — тихо игнорируем (камера часто читает дважды)
+      if (seen[text]) return;   // тот же код в этой сессии — тихо игнор (камера часто читает дважды)
       seen[text] = true;
       beep();
       if (navigator.vibrate) navigator.vibrate(60);
-      var card = makeFeedCard(text);
-      card._uid = text; card._activating = true; card._pendingUndo = false; card._sold = false;
-      card.querySelector('.del').addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (!confirm('Снять выдачу этой вещи?')) return;
-        if (card.parentNode) card.parentNode.removeChild(card);
-        delete seen[text]; updateShowAll();
-        if (card._activating) card._pendingUndo = true;     // ответ ещё не пришёл — снимем после
-        else if (card._sold) sendUnsell(text);
-      });
-      card.addEventListener('click', function (e) { e.stopPropagation(); });
-      callGas('sell', text, function (data) {
-        card._activating = false;
-        if (card._pendingUndo) { if (data && data.match === 'ok') sendUnsell(text); return; }
-        renderSellCard(card, data);
-      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+      RETRY[text] = 0;
+      callGas('sell', text, function (data) { handleSellResult(text, data); },
+              { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
     }
 
-    function renderSellCard(card, data) {
-      card._sold = !!(data && data.match === 'ok');
-      var thumb = card.querySelector('.thumb');
-      var nameEl = card.querySelector('.name');
-      var colorEl = card.querySelector('.color');
-      var sizeEl = card.querySelector('.size');
-      var dupEl = card.querySelector('.dupnote');
-      var bEl = card.querySelector('.cbought'), sEl = card.querySelector('.cscanned');
-      if (dupEl) dupEl.textContent = '';
-      function nm() {
-        var base = (data && (data.nameRu || data.name)) || '';
-        if (!base) return '№ ' + ((data && data.num) || '');
-        return (data && data.num ? data.num + ' | ' : '') + base;
-      }
-      function fillItem() {
-        var price = (data && (data.price || data.price === 0)) ? String(data.price).replace(/\s+/g, '') : '';
-        nameEl.innerHTML = '<span class="nm-text">' + esc(nm()) + '</span>'
-          + (price ? '<span class="pr">   ' + esc(price) + '</span>' : '');
-        var cs = splitVariant(data.variant);
-        colorEl.innerHTML = cs.color ? ('цвет: <span class="val">' + esc(cs.color) + '</span>') : '';
-        sizeEl.innerHTML  = cs.size  ? ('размер: <span class="val">' + esc(cs.size) + '</span>') : '';
-        if (data.photoUrl) {
-          var img = document.createElement('img'); img.alt = '';
-          img.onerror = function () { thumb.innerHTML = '<div class="ph">📦</div>'; };
-          img.src = data.photoUrl; thumb.innerHTML = ''; thumb.appendChild(img);
-        } else { thumb.innerHTML = '<div class="ph">📦</div>'; }
-      }
-      // транзиентное (нет связи / склад занят / наклейка ещё дописывается) → жёлтая + повтор
+    // Разбор ответа выдачи: совпало → зелёный бейджик + код; расхождение → попап выбора
+    // позиции; лишнее/уже выдано → баннер; транзиентный сбой → тихий повтор (без карточки).
+    function handleSellResult(uid, data) {
       if (!data || data.error === 'busy' || data.error === 'not_in_log') {
-        card.className = 'card warn';
-        if (data && (data.num || data.name)) fillItem();
-        if (!data)                      { thumb.innerHTML = '<div class="ph">⚠️</div>'; nameEl.textContent = 'Нет связи — повтор…'; }
-        else if (data.error === 'busy') { thumb.innerHTML = '<div class="ph">⏳</div>'; nameEl.textContent = 'Склад занят — повтор…'; }
-        else                            { nameEl.textContent = nm() + ' — наклейка ещё пишется, повтор…'; }
-        scheduleRetrySell(card);
+        if (!data)                      setStatus('warn', 'Нет связи — повтор…');
+        else if (data.error === 'busy') setStatus('warn', 'Склад занят — повтор…');
+        else                            setStatus('warn', 'Наклейка ещё пишется — повтор…');
+        scheduleRetrySell(uid);
         return;
       }
-      fillItem();
-      card._num = data.num; card._variant = data.variant;
-      var need = data.need || 0, given = data.given || 0;
-      bEl.textContent = need ? ('нужно: ' + need) : '';
       switch (data.match) {
         case 'ok':
-          card.className = 'card ok';
-          // при совпадении — просто зелёная галочка + зелёный фон (без слова «выдано»)
-          sEl.innerHTML = '<span style="color:#7ee2a0;font-weight:700;font-size:22px">✓</span>';
-          if (dupEl && data.autoReceived) dupEl.textContent = '✔ принят на склад при выдаче';
+          clearPendingRetries();               // определённый исход — гасим устаревшие повторы
+          closeMismatchPopup(true);            // успешный скан закрывает попап прежнего расхождения
           updateOrderBadge(data, true);
-          setStatus('ok', '✓');
+          setStatus('ok', '✓ ' + shortName(data));
           break;
         case 'already':
-          card.className = 'card dup';
-          if (dupEl) dupEl.textContent = 'эта наклейка уже выдана';
-          sEl.innerHTML = 'выдано: <span style="color:#7ee2a0">' + given + '/' + need + '</span>';
-          updateOrderBadge(data, false);
+          // бейджик уже зелёный из загрузки заказа; у привязанной вручную наклейки свой слот
+          // пуст (кредит ушёл назначенной позиции) — поэтому бейджики НЕ трогаем, только баннер.
           setStatus('warn', '⚠ Уже выдано раньше: ' + shortName(data));
           break;
-        case 'wrong_order':
-          card.className = 'card bad';
-          if (dupEl) dupEl.textContent = 'этой вещи НЕТ в заказе ' + (data.orderNo || ORDER_NO || '');
-          setStatus('bad', '✗ НЕ из этого заказа: ' + shortName(data));
-          break;
         case 'overscan':
-          card.className = 'card bad';
-          if (dupEl) dupEl.textContent = 'лишняя штука — уже выдано ' + given + ' из ' + need;
-          setStatus('bad', '✗ Лишняя штука: ' + shortName(data) + ' (нужно ' + need + ')');
+          setStatus('bad', '✗ Лишняя штука: ' + shortName(data) + ' (нужно ' + (data.need || 0) + ')');
           break;
+        case 'wrong_order':
         case 'net_item':
-          card.className = 'card bad';
-          if (dupEl) dupEl.textContent = 'в заказе помечено «не хватило» — не выдаётся';
-          setStatus('bad', '✗ Не хватило (net): ' + shortName(data));
+          openMismatchPopup(data);             // «Товар отличается от заказа» — выбрать позицию
           break;
         default:
-          card.className = 'card bad';
-          if (data.error === 'item_missing') { nameEl.textContent = nm() + ' — позиции нет на складе'; }
-          else { thumb.innerHTML = '<div class="ph">❓</div>'; nameEl.textContent = 'Не найдено'; }
-          setStatus('bad', '✗ ' + (data.error === 'item_missing' ? 'Нет на складе' : 'Не найдено: ' + shortName(data)));
+          if (data.error === 'item_missing') setStatus('bad', '✗ Нет на складе: ' + shortName(data));
+          else setStatus('bad', '✗ Не найдено: ' + shortName(data));
       }
     }
 
-    // Тихий повтор выдачи для ТОЙ ЖЕ карточки (как scheduleRetry на приёмке).
-    function scheduleRetrySell(card) {
-      if (!card._uid) return;
-      card._retries = (card._retries || 0) + 1;
-      if (card._retries > 4) {
-        var n = card.querySelector('.name');
-        if (n) n.textContent = 'Не удалось — нажмите ✕ и отсканируйте заново';
+    // Тихий повтор выдачи (транзиентные сбои) — без карточки, по uid. До 4 попыток.
+    function scheduleRetrySell(uid) {
+      RETRY[uid] = (RETRY[uid] || 0) + 1;
+      if (RETRY[uid] > 4) {
+        setStatus('bad', 'Не удалось учесть — отсканируйте наклейку заново.');
+        delete seen[uid]; delete RETRY_T[uid];      // дать пересканировать
         return;
       }
-      setTimeout(function () {
-        if (!card.parentNode) return;
-        card._activating = true;
-        callGas('sell', card._uid, function (data) {
-          card._activating = false;
-          if (card._pendingUndo) { if (data && data.match === 'ok') sendUnsell(card._uid); return; }
-          renderSellCard(card, data);
-        }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+      RETRY_T[uid] = setTimeout(function () {
+        delete RETRY_T[uid];
+        callGas('sell', uid, function (data) { handleSellResult(uid, data); },
+                { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
       }, 2000);
+    }
+    // Отменить ВСЕ отложенные повторы (когда случилось определённое событие — успешный скан,
+    // привязка, открытие попапа), чтобы устаревший повтор не всплыл поверх текущей работы.
+    // Их наклейки освобождаем из seen — при необходимости их пересканируют.
+    function clearPendingRetries() {
+      for (var u in RETRY_T) { try { clearTimeout(RETRY_T[u]); } catch (e) {} delete seen[u]; }
+      RETRY_T = {};
     }
 
     function sendUnsell(uid) {
       callGas('unsell', uid, function (data) {
         if (!data || !data.ok) { setStatus('warn', 'Не удалось снять выдачу (склад занят/нет связи). Повторите.'); return; }
-        updateOrderBadge(data, false);
+        delete seen[uid];                      // снятую наклейку можно сканировать заново
         setStatus('ok', 'Выдача снята: ' + shortName(data));
+        reloadOrder();                         // авторитетно перерисует бейджики/коды/прогресс
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+    }
+
+    // ─── Попап «Товар отличается от заказа» ───
+    // Тикабельность: тот же № есть в заказе → частичное расхождение, тикать можно ТОЛЬКО
+    // незакрытые позиции этого же № (подбор цвета/размера). Нет такого № → замена: тикать
+    // можно любую незакрытую позицию. Уже выданные и «не хватило» — серые, недоступны.
+    function openMismatchPopup(data) {
+      var pop = document.getElementById('mismatch-popup');
+      clearPendingRetries();                    // открыли попап — устаревшие повторы по др. наклейкам гасим
+      if (pop.style.display !== 'none' && pop._uid && pop._uid !== data.uid) delete seen[pop._uid];  // прежнее расхождение бросаем
+      var cs = splitVariant(data.variant);
+      var scanNum = String(data.num || '');
+      var name = (data.nameRu || data.name || '');
+      var items = (ORDER && ORDER.items) || [];
+      var scanNumInOrder = items.some(function (it) { return !it.hasNet && String(it.num) === scanNum; });
+
+      var rows = items.map(function (it, i) {
+        var el = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
+        var done = !!(el && el.getAttribute('data-done') === '1');
+        var net  = it.hasNet || !!(el && el.getAttribute('data-net') === '1');
+        var ocs = splitVariant(it.variant);
+        var color = ocs.color || it.color || '', size = ocs.size || it.size || '';
+        var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
+                 + (color && size ? '  ' : '')
+                 + (size ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
+        var pickable = !done && !net && (scanNumInOrder ? (String(it.num) === scanNum) : true);
+        var stateTxt = done ? '<div class="mob-state">уже выдано ✓</div>'
+                     : net  ? '<div class="mob-state">не хватило</div>' : '';
+        var cls = 'mob' + (pickable ? ' pick' : ' disabled') + (done ? ' done' : '') + (net ? ' net' : '');
+        return '<div class="' + cls + '" data-idx="' + i + '"'
+          + (pickable ? ' data-num="' + esc(it.num) + '" data-slug="' + esc(it.slug) + '"' : '')
+          + '><div class="mob-thumb"><div class="ph">📦</div></div>'
+          + '<div class="mob-meta"><div class="mob-name">' + esc(it.num) + ' | ' + esc(it.name || '') + '</div>'
+          +   '<div class="mob-attr">' + attr + '</div>' + stateTxt + '</div>'
+          + '<div class="mob-check">' + (pickable ? '○' : '') + '</div></div>';
+      }).join('');
+
+      pop.innerHTML =
+        '<div class="mpop-panel">'
+        + '<div class="mpop-title">Товар отличается от заказа</div>'
+        + '<div class="mpop-sub">Выберите соответствующий заказ или просканируйте другой товар.</div>'
+        + '<div class="mpop-scan"><div class="mphoto"><div class="ph">📦</div></div>'
+        +   '<div class="minfo"><div class="mname">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>'
+        +     (cs.color ? '<div class="mrow">цвет: <span class="val">' + esc(cs.color) + '</span></div>' : '')
+        +     (cs.size  ? '<div class="mrow">размер: <span class="val">' + esc(cs.size) + '</span></div>' : '')
+        +     (data.artikul ? '<div class="mrow">артикул: <span class="val">' + esc(data.artikul) + '</span></div>' : '')
+        +   '</div></div>'
+        + '<div class="mpop-pick">выберите соответствующий этому товару заказ клиента:</div>'
+        + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">Нет подходящих позиций. Отсканируйте другой товар.</div>') + '</div>'
+        + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button></div>'
+        + '</div>';
+
+      pop._uid = data.uid;
+      pop.style.display = 'flex';
+      // фото отсканированного товара (средний размер)
+      if (data.photoUrl) {
+        var mph = pop.querySelector('.mphoto');
+        var mimg = document.createElement('img'); mimg.alt = '';
+        mimg.onerror = function () { mph.innerHTML = '<div class="ph">📦</div>'; };
+        mimg.src = data.photoUrl; mph.innerHTML = ''; mph.appendChild(mimg);
+      }
+      copyGridPhotosToPopup();                  // фото позиций берём из уже загруженной сетки
+      pop.onclick = function (e) {
+        e.stopPropagation();                                          // не запускать камеру под попапом
+        if (e.target === pop) { closeMismatchPopup(true); return; }   // клик по фону — закрыть
+        var row = e.target.closest ? e.target.closest('.mob.pick') : null;
+        if (row) { assignScanToOrder(pop._uid, row.getAttribute('data-num'), row.getAttribute('data-slug')); return; }
+        if (e.target.closest && e.target.closest('.mpop-close')) closeMismatchPopup(true);
+      };
+    }
+
+    // перенести уже загруженные фото позиций из сетки в попап (без повторной загрузки)
+    function copyGridPhotosToPopup() {
+      var pop = document.getElementById('mismatch-popup');
+      Array.prototype.forEach.call(pop.querySelectorAll('.mob'), function (mob) {
+        var i = mob.getAttribute('data-idx');
+        var gimg = document.querySelector('#order-grid .obadge[data-idx="' + i + '"] .othumb img');
+        if (gimg && gimg.getAttribute('src')) {
+          var th = mob.querySelector('.mob-thumb');
+          var img = document.createElement('img'); img.alt = '';
+          img.onerror = function () { th.innerHTML = '<div class="ph">📦</div>'; };
+          img.src = gimg.src; th.innerHTML = ''; th.appendChild(img);
+        }
+      });
+    }
+
+    function closeMismatchPopup(clearSeen) {
+      var pop = document.getElementById('mismatch-popup');
+      if (!pop || pop.style.display === 'none') return;
+      if (clearSeen && pop._uid) delete seen[pop._uid];   // закрыли без привязки → можно пересканировать
+      pop.style.display = 'none';
+      pop.innerHTML = '';
+      pop._uid = '';
+    }
+
+    // Тик по позиции в попапе → привязать наклейку к ней на сервере (action=assign).
+    function assignScanToOrder(uid, anum, aslug) {
+      if (!uid) return;
+      setStatus('ok', 'Привязываю…');
+      callGas('assign', uid, function (data) {
+        // 'already' = наклейка уже выдана (ответ прошлой привязки потерялся при таймауте) —
+        // на сервере данные уже верны, просто перечитываем авторитетное состояние, а не ругаемся.
+        var done = data && (data.match === 'ok' || data.match === 'already');
+        if (!done) {
+          setStatus('bad', 'Не удалось привязать (' + ((data && (data.error || data.match)) || 'нет связи') + '). Повторите.');
+          return;
+        }
+        clearPendingRetries();
+        closeMismatchPopup(false);                          // привязано → seen НЕ чистим (наклейка выдана)
+        setStatus('ok', (data.match === 'already' ? '✓ Уже привязано: ' : '✓ Привязано: ') + shortName(data));
+        reloadOrder();                                      // авторитетно зажжёт выбранный бейджик + код
+      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug });
     }
 
     // auto=true — тихая попытка включить камеру при открытии страницы. Сработает,
