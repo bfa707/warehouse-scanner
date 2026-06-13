@@ -167,7 +167,8 @@
           background: rgba(0,0,0,.72); padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .mpop-panel { background: #1b1b1b; border: 1px solid #4a3c14; border-radius: 16px; width: 100%;
                 max-width: 560px; margin: auto 0; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
-  .mpop-title { font-size: 18px; font-weight: 800; color: #ffd98a; line-height: 1.3; margin-bottom: 4px; }
+  .mpop-title { font-size: 18px; font-weight: 800; color: #ff6b6b; line-height: 1.3; margin-bottom: 4px; }
+  .mpop-title .x { font-weight: 900; margin-right: 4px; }
   .mpop-sub { font-size: 13px; color: #aaa; margin-bottom: 12px; }
   .mpop-scan { display: flex; gap: 14px; background: #241d0f; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
   .mpop-scan .mphoto { width: 104px; height: 104px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
@@ -195,8 +196,9 @@
   .mob .mob-attr .val { color: #fff; }
   .mob .mob-state { font-size: 12px; margin-top: 2px; color: #9a9a9a; }
   .mob.done .mob-state { color: #7ee2a0; } .mob.net .mob-state { color: #d99b4a; }
-  .mob .mob-check { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; border: 2px solid #6cb2ff;
-                   display: flex; align-items: center; justify-content: center; color: #6cb2ff; font-size: 18px; font-weight: 800; }
+  .mob .mob-check { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; border: 2px solid #0b8043;
+                   display: flex; align-items: center; justify-content: center; color: #9a9a9a; font-size: 18px; font-weight: 800; }
+  .mob.sel .mob-check { color: #7ee2a0; }            /* при нажатии — галочка зелёная */
   .mob.disabled .mob-check { border-color: #555; color: transparent; }
   .mpop-foot { margin-top: 14px; }
   .mpop-close { width: 100%; background: #2a2a2a; color: #ddd; border: none; border-radius: 12px;
@@ -576,9 +578,18 @@
 
     // Разбить вариант («beige» / «beige XL» / «blue M») на цвет и размер.
     // Размер — токены S/M/L/XL… или число; всё остальное считаем цветом.
+    // размер целиком в скобках («(koza)») — снимаем скобки, берём содержимое
+    function cleanSize(s) {
+      s = String(s || '').trim();
+      var m = s.match(/^\((.+)\)$/);
+      return m ? m[1].trim() : s;
+    }
     function splitVariant(v) {
       v = (v || '').trim();
       if (!v) return { color: '', size: '' };
+      // «milk (koza)» → цвет «milk», размер «koza» (размер в скобках в конце)
+      var par = v.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+      if (par) return { color: par[1].trim(), size: par[2].trim() };
       var tokens = v.split(/[\s,\/]+/).filter(Boolean);
       var sizeRe = /^(xxxs|xxs|xs|s|m|l|xl|xxl|xxxl|\d{1,3})$/i;
       var colors = [], sizes = [];
@@ -636,15 +647,15 @@
       }
       // ПО ОДНОМУ бейджику на КАЖДУЮ позицию заказа: две одинаковых вещи → два бейджика
       grid.innerHTML = items.map(function (it, i) {
-        var cs = splitVariant(it.variant);
-        var color = cs.color || it.color || '';
-        var size  = cs.size  || it.size  || '';
+        var color = it.color || splitVariant(it.variant).color || '';
+        var size  = cleanSize(it.size) || splitVariant(it.variant).size || '';
+        var nm = it.nameRu || it.name || '';
         var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
                  + (color && size ? '  ' : '')
                  + (size  ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
         return '<div class="obadge" data-idx="' + i + '" data-num="' + esc(it.num) + '" data-net="' + (it.hasNet ? 1 : 0) + '">'
           + '<div class="othumb"><div class="ph">📦</div></div>'
-          + '<div class="ometa"><div class="oname">' + esc(it.num) + ' | ' + esc(it.name || '') + '</div>'
+          + '<div class="ometa"><div class="oname">' + esc(it.num) + ' | ' + esc(nm) + '</div>'
           +   '<div class="oattr">' + attr + '</div></div>'
           + '<div class="ochip"></div></div>';
       }).join('');
@@ -876,63 +887,71 @@
       var items = (ORDER && ORDER.items) || [];
       var scanNumInOrder = items.some(function (it) { return !it.hasNet && String(it.num) === scanNum; });
 
+      // размер/цвет скана (best-effort) — для определения, ЧТО именно не совпало
+      var scanColor = cs.color, scanSize = cs.size;
+      // незакрытые позиции этого же № — для сравнения цвет/размер
+      var sameNum = [];
+      items.forEach(function (it, i) {
+        if (String(it.num) !== scanNum) return;
+        var el = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
+        if (el && el.getAttribute('data-done') === '1') return;
+        if (it.hasNet || (el && el.getAttribute('data-net') === '1')) return;
+        sameNum.push(it);
+      });
+      // ПРАВКА 4: ЧТО не совпало — номер / цвет / размер
+      var diffKind;
+      if (!scanNumInOrder) diffKind = 'num';
+      else {
+        var colorMatch = false, sizeMatch = false;
+        sameNum.forEach(function (it) {
+          var oc = slugify(it.color || ''), os = slugify(cleanSize(it.size) || '');
+          if (oc && oc === slugify(scanColor)) colorMatch = true;
+          if (os && os === slugify(scanSize)) sizeMatch = true;
+        });
+        diffKind = (colorMatch && !sizeMatch) ? 'size'
+                 : (sizeMatch && !colorMatch) ? 'color' : 'both';
+      }
+      var mTitle = diffKind === 'num'   ? 'Не совпал номер'
+                 : diffKind === 'size'  ? 'Не совпадает размер'
+                 : diffKind === 'color' ? 'Не совпадает цвет'
+                 :                        'Не совпадает цвет/размер';
+
+      // список позиций заказа БЕЗ уже выданных (зелёных)
       var rows = items.map(function (it, i) {
         var el = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
-        var done = !!(el && el.getAttribute('data-done') === '1');
+        if (el && el.getAttribute('data-done') === '1') return '';     // уже выдано — не показываем
         var net  = it.hasNet || !!(el && el.getAttribute('data-net') === '1');
-        var ocs = splitVariant(it.variant);
-        var color = ocs.color || it.color || '', size = ocs.size || it.size || '';
+        var color = it.color || splitVariant(it.variant).color || '';
+        var size  = cleanSize(it.size) || splitVariant(it.variant).size || '';
+        var nm = it.nameRu || it.name || '';
         var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
                  + (color && size ? '  ' : '')
                  + (size ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
-        var pickable = !done && !net && (scanNumInOrder ? (String(it.num) === scanNum) : true);
-        var stateTxt = done ? '<div class="mob-state">уже выдано ✓</div>'
-                     : net  ? '<div class="mob-state">не хватило</div>' : '';
-        var cls = 'mob' + (pickable ? ' pick' : ' disabled') + (done ? ' done' : '') + (net ? ' net' : '');
+        var pickable = !net && (scanNumInOrder ? (String(it.num) === scanNum) : true);
+        var stateTxt = net ? '<div class="mob-state">не хватило</div>' : '';
+        var cls = 'mob' + (pickable ? ' pick' : ' disabled') + (net ? ' net' : '');
         return '<div class="' + cls + '" data-idx="' + i + '"'
           + (pickable ? ' data-num="' + esc(it.num) + '" data-slug="' + esc(it.slug) + '"' : '')
           + '><div class="mob-thumb"><div class="ph">📦</div></div>'
-          + '<div class="mob-meta"><div class="mob-name">' + esc(it.num) + ' | ' + esc(it.name || '') + '</div>'
+          + '<div class="mob-meta"><div class="mob-name">' + esc(it.num) + ' | ' + esc(nm) + '</div>'
           +   '<div class="mob-attr">' + attr + '</div>' + stateTxt + '</div>'
-          + '<div class="mob-check">' + (pickable ? '○' : '') + '</div></div>';
+          + '<div class="mob-check">' + (pickable ? '✓' : '') + '</div></div>';
       }).join('');
 
-      // ПРАВКА 3: показать В ЧЁМ отличие — № не из заказа vs другой цвет/размер
-      var scanV = ((cs.color || '') + (cs.color && cs.size ? ' ' : '') + (cs.size || '')).trim() || (data.variant || '');
-      var expSet = {};
-      items.forEach(function (it, i) {
-        if (String(it.num) !== scanNum) return;
-        var el2 = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
-        var d2 = !!(el2 && el2.getAttribute('data-done') === '1');
-        var n2 = it.hasNet || !!(el2 && el2.getAttribute('data-net') === '1');
-        if (d2 || n2) return;
-        var ocs2 = splitVariant(it.variant);
-        var v2 = ((ocs2.color || it.color || '') + ' ' + (ocs2.size || it.size || '')).trim();
-        if (v2) expSet[v2] = 1;
-      });
-      var expList = Object.keys(expSet);
-      var mTitle, mSub;
-      if (scanNumInOrder) {
-        mTitle = 'Не совпадает цвет/размер';
-        mSub = 'Отсканировано: «' + esc(scanV || '—') + '».'
-             + (expList.length ? ' В заказе по №' + esc(scanNum) + ' ожидается: «' + expList.map(esc).join('», «') + '».' : '')
-             + ' Отметьте нужную позицию ниже.';
-      } else {
-        mTitle = 'Товара №' + esc(scanNum) + ' нет в этом заказе';
-        mSub = 'Если это замена — отметьте позицию, которую он закрывает. Иначе проверьте, тот ли это заказ, или отсканируйте другой товар.';
-      }
+      // строка варианта скана (с размером); артикул НЕ показываем
+      var scanVarLine = scanSize
+        ? ('цвет: <span class="val">' + esc(scanColor) + '</span>&nbsp;&nbsp;размер: <span class="val">' + esc(scanSize) + '</span>')
+        : (data.variant ? ('вариант: <span class="val">' + esc(data.variant) + '</span>') : '');
 
       pop.innerHTML =
         '<div class="mpop-panel">'
-        + '<div class="mpop-title">' + mTitle + '</div>'
-        + '<div class="mpop-sub">' + mSub + '</div>'
+        + '<div class="mpop-title"><span class="x">✗</span>' + mTitle + '</div>'
+        + '<div class="mpop-pick">Вы отсканировали:</div>'
         + '<div class="mpop-scan"><div class="mphoto"><div class="ph">📦</div></div>'
         +   '<div class="minfo"><div class="mname">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>'
-        +     (cs.color ? '<div class="mrow">цвет: <span class="val">' + esc(cs.color) + '</span></div>' : '')
-        +     (cs.size  ? '<div class="mrow">размер: <span class="val">' + esc(cs.size) + '</span></div>' : '')
-        +     (data.artikul ? '<div class="mrow">артикул: <span class="val">' + esc(data.artikul) + '</span></div>' : '')
+        +     (scanVarLine ? '<div class="mrow">' + scanVarLine + '</div>' : '')
         +   '</div></div>'
-        + '<div class="mpop-pick">выберите соответствующий этому товару заказ клиента:</div>'
+        + '<div class="mpop-pick">Выберите соответствующий вашему скану заказ клиента или сканируйте другой товар.</div>'
         + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">Нет подходящих позиций. Отсканируйте другой товар.</div>') + '</div>'
         + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button></div>'
         + '</div>';
@@ -951,7 +970,7 @@
         e.stopPropagation();                                          // не запускать камеру под попапом
         if (e.target === pop) { closeMismatchPopup(true); return; }   // клик по фону — закрыть
         var row = e.target.closest ? e.target.closest('.mob.pick') : null;
-        if (row) { assignScanToOrder(pop._uid, row.getAttribute('data-num'), row.getAttribute('data-slug')); return; }
+        if (row) { row.classList.add('sel'); assignScanToOrder(pop._uid, row.getAttribute('data-num'), row.getAttribute('data-slug')); return; }
         if (e.target.closest && e.target.closest('.mpop-close')) closeMismatchPopup(true);
       };
     }
