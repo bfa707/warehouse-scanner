@@ -78,6 +78,17 @@
                border: none; background: transparent; color: #888; font-size: 20px;
                line-height: 1; padding: 0; cursor: pointer; z-index: 1; }
   .card .del:active { color: #fff; }
+  /* лёгкое НЕблокирующее подтверждение (нативный confirm() морозит камеру на iOS) */
+  .askc { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center;
+          background: rgba(0,0,0,.6); padding: 24px; }
+  .askc.show { display: flex; }
+  .askc-box { background: #1f1f1f; border: 1px solid #444; border-radius: 16px; max-width: 360px; width: 100%;
+              padding: 18px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+  .askc-msg { font-size: 17px; color: #eee; font-weight: 600; text-align: center; margin-bottom: 16px; line-height: 1.3; }
+  .askc-btns { display: flex; gap: 10px; }
+  .askc-btns button { flex: 1; border: none; border-radius: 12px; padding: 13px; font-size: 16px; font-weight: 700; cursor: pointer; }
+  .askc-yes { background: #d93025; color: #fff; }
+  .askc-no  { background: #444; color: #ddd; }
   /* колонка с фото: ПОД фоткой — код единицы (как на распечатке под QR) */
   .card .thumbcol { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .card .thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px;
@@ -169,6 +180,7 @@
                 max-width: 560px; margin: auto 0; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
   .mpop-title { font-size: 18px; font-weight: 800; color: #ff6b6b; line-height: 1.3; margin-bottom: 4px; }
   .mpop-title .x { font-weight: 900; margin-right: 4px; }
+  .mpop-title.warn { color: #e8a317; }            /* лишняя вещь (overscan) — это не ошибка, а предупреждение */
   .mpop-sub { font-size: 13px; color: #aaa; margin-bottom: 12px; }
   .mpop-scan { display: flex; gap: 14px; background: #241d0f; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
   .mpop-scan .mphoto { width: 104px; height: 104px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
@@ -221,6 +233,9 @@
   <div id="order-grid"></div>
   <!-- попап «Товар отличается от заказа» (наполняется из openMismatchPopup) -->
   <div id="mismatch-popup" class="mpop" style="display:none"></div>
+  <!-- НЕблокирующее подтверждение (askConfirm) — заменяет нативный confirm(), который морозит камеру на iOS -->
+  <div id="askc" class="askc"><div class="askc-box"><div class="askc-msg"></div>
+    <div class="askc-btns"><button type="button" class="askc-no">Нет</button><button type="button" class="askc-yes">Да</button></div></div></div>
 
   <div class="head"><h2 id="cnt">Отсканировано: 0</h2><button id="clear" class="clear" type="button">Очистить</button></div>
   <div id="list" class="list"></div>
@@ -248,8 +263,13 @@
         // Быстрый возврат: шаг назад по истории — айфон достаёт страницу склада
         // из памяти моментально, без долгой перезагрузки веб-приложения.
         b.addEventListener('click', function (e) {
+          e.preventDefault();
           e.stopPropagation();                      // не запускать камеру при выходе
-          if (history.length > 1) { e.preventDefault(); history.back(); }
+          // СНАЧАЛА отпускаем камеру: iOS иначе тратит первый тап на её тендаун — отсюда
+          // «выход в два нажатия». Промис не ждём — навигируем сразу (qr=null до stop, чтобы
+          // повторный тап/document-click не дёргали уже останавливаемую камеру).
+          try { if (qr) { var q = qr; qr = null; q.stop().then(function () { q.clear(); }).catch(function () {}); } } catch (_) {}
+          if (history.length > 1) history.back(); else location.href = GAS;
         });
       }
     })();
@@ -261,6 +281,34 @@
     var listEl   = document.getElementById('list');
     var cntEl    = document.getElementById('cnt');
     var showAllBtn = document.getElementById('showall');
+
+    // Отпустить камеру при уходе со страницы (надёжный «один тап» на iOS даже через
+    // системный жест «назад»): живой видеотрек иначе задерживает выгрузку страницы.
+    window.addEventListener('pagehide', function () {
+      try { if (qr) { var q = qr; qr = null; q.stop().catch(function () {}); } } catch (_) {}
+    });
+
+    // Неблокирующее подтверждение: нативный confirm()/alert() во время активной камеры
+    // на iOS подвешивает декодер, и превью не оживает. askConfirm(текст, onYes) показывает
+    // лёгкий оверлей с «Да»/«Нет», не блокируя event-loop и видеопоток.
+    var _askcWired = false;
+    function askConfirm(msg, onYes) {
+      var box = document.getElementById('askc');
+      box.querySelector('.askc-msg').textContent = msg || 'Подтвердить?';
+      box._onYes = onYes || function () {};
+      if (!_askcWired) {
+        _askcWired = true;
+        box.addEventListener('click', function (e) {
+          e.stopPropagation();                                  // тап в оверлее не запускает камеру
+          if (e.target === box || (e.target.closest && e.target.closest('.askc-no'))) { box.classList.remove('show'); box._onYes = null; return; }
+          if (e.target.closest && e.target.closest('.askc-yes')) {
+            box.classList.remove('show');
+            var f = box._onYes; box._onYes = null; if (f) f();
+          }
+        });
+      }
+      box.classList.add('show');
+    }
 
     function showErr(t) { errBox.textContent = t || ''; }
 
@@ -385,16 +433,18 @@
       card._fresh = false;         // true только если ИМЕННО этот скан учёл единицу (не дубль)
       card.querySelector('.del').addEventListener('click', function (e) {
         e.stopPropagation();                          // не запускать камеру / тап-вид
-        if (!confirm('Точно удалить товар?')) return; // пункт 7 — подтверждение
-        if (card.parentNode) card.parentNode.removeChild(card);
-        delete seen[text];                            // код снова можно отсканировать
-        total = Math.max(0, total - 1);
-        cntEl.textContent = 'Отсканировано: ' + total;
-        updateShowAll();
-        // если activate ещё не вернулся — снимем ПОСЛЕ него (иначе deactivate может
-        // обогнать activate, и единица останется активной при удалённой карточке).
-        if (card._activating) card._pendingDeact = true;
-        else if (card._fresh) sendDeactivate(text);  // снимать только то, что учёл ЭТОТ скан (дубль не трогаем)
+        // НЕблокирующее подтверждение — нативный confirm() морозит камеру на iOS.
+        askConfirm('Удалить этот товар?', function () {   // пункт 7 — подтверждение
+          if (card.parentNode) card.parentNode.removeChild(card);
+          delete seen[text];                            // код снова можно отсканировать
+          total = Math.max(0, total - 1);
+          cntEl.textContent = 'Отсканировано: ' + total;
+          updateShowAll();
+          // если activate ещё не вернулся — снимем ПОСЛЕ него (иначе deactivate может
+          // обогнать activate, и единица останется активной при удалённой карточке).
+          if (card._activating) card._pendingDeact = true;
+          else if (card._fresh) sendDeactivate(text);  // снимать только то, что учёл ЭТОТ скан (дубль не трогаем)
+        });
       });
 
       // тап по карточке → переключить вид: инфо (закуплено/отсканено) ↔ список наклеек
@@ -626,7 +676,7 @@
     function reloadOrder() {
       callGas('order_lookup', '', function (o) {
         renderOrderBadges(o || { found: false, items: [] });
-      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, fresh: 1 });   // fresh=1 — состав читаем СВЕЖИМ из листа (владелец мог поправить размер/цвет)
     }
 
     function renderOrderBadges(order) {
@@ -717,8 +767,8 @@
     function onBadgeTap(el) {
       if (!el || el.getAttribute('data-done') !== '1') return;
       if (!el._uid) { setStatus('warn', 'Не знаю код этой выдачи — обновите заказ.'); return; }
-      if (!confirm('Снять выдачу этой вещи?')) return;
-      sendUnsell(el._uid);
+      var uid = el._uid;
+      askConfirm('Снять выдачу этой вещи?', function () { sendUnsell(uid); });   // НЕблокирующее — confirm() морозит камеру на iOS
     }
 
     // Обновить бейджи слота по ответу сервера (given — авторитетное число с сервера).
@@ -727,7 +777,10 @@
       if (!data || !data.num) return;
       var slot = data.num + '|' + slugify(data.variant);
       var arr = BADGE_BY_SLOT[slot];
-      if (!arr || !arr.length) return;
+      // слота нет в текущей раскладке → бейджики построены по УСТАРЕВШЕМУ составу (заказ
+      // поправили между открытием и сканом). Перечитываем свежим — бейджики перестроятся
+      // и зажгут уже выданное по givenBySlot с сервера.
+      if (!arr || !arr.length) { reloadOrder(); return; }
       var given = Math.max(0, Math.min(data.given != null ? data.given : 0, arr.length));
       for (var i = 0; i < arr.length; i++) {
         if (i < given) setBadgeDone(arr[i], (flash && i === given - 1) ? data.uid : undefined);
@@ -830,7 +883,10 @@
           setStatus('warn', '⚠ Уже выдано раньше: ' + shortName(data));
           break;
         case 'overscan':
-          setStatus('bad', '✗ Лишняя штука: ' + shortName(data) + ' (нужно ' + (data.need || 0) + ')');
+          // лишняя вещь: показываем попап «Вы отсканировали…» (информативно, без привязки —
+          // вариант-то совпал, просто этого товара уже достаточно). Вне заказа — баннер.
+          if (ORDER && ORDER.found) { data._overscan = true; openMismatchPopup(data); }
+          else setStatus('bad', '✗ Лишняя штука: ' + shortName(data) + ' (нужно ' + (data.need || 0) + ')');
           break;
         case 'wrong_order':
         case 'net_item':
@@ -898,9 +954,11 @@
         if (it.hasNet || (el && el.getAttribute('data-net') === '1')) return;
         sameNum.push(it);
       });
-      // ПРАВКА 4: ЧТО не совпало — номер / цвет / размер
+      // ПРАВКА 4: ЧТО не совпало — номер / цвет / размер (overscan — отдельный вид: лишняя вещь)
+      var overscan = !!data._overscan;
       var diffKind;
-      if (!scanNumInOrder) diffKind = 'num';
+      if (overscan) diffKind = 'overscan';
+      else if (!scanNumInOrder) diffKind = 'num';
       else {
         var colorMatch = false, sizeMatch = false;
         sameNum.forEach(function (it) {
@@ -911,7 +969,8 @@
         diffKind = (colorMatch && !sizeMatch) ? 'size'
                  : (sizeMatch && !colorMatch) ? 'color' : 'both';
       }
-      var mTitle = diffKind === 'num'   ? 'Не совпал номер'
+      var mTitle = diffKind === 'overscan' ? 'Этого товара уже достаточно'
+                 : diffKind === 'num'   ? 'Не совпал номер'
                  : diffKind === 'size'  ? 'Не совпадает размер'
                  : diffKind === 'color' ? 'Не совпадает цвет'
                  :                        'Не совпадает цвет/размер';
@@ -927,7 +986,7 @@
         var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
                  + (color && size ? '  ' : '')
                  + (size ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
-        var pickable = !net && (scanNumInOrder ? (String(it.num) === scanNum) : true);
+        var pickable = !overscan && !net && (scanNumInOrder ? (String(it.num) === scanNum) : true);
         var stateTxt = net ? '<div class="mob-state">не хватило</div>' : '';
         var cls = 'mob' + (pickable ? ' pick' : ' disabled') + (net ? ' net' : '');
         return '<div class="' + cls + '" data-idx="' + i + '"'
@@ -943,16 +1002,25 @@
         ? ('цвет: <span class="val">' + esc(scanColor) + '</span>&nbsp;&nbsp;размер: <span class="val">' + esc(scanSize) + '</span>')
         : (data.variant ? ('вариант: <span class="val">' + esc(data.variant) + '</span>') : '');
 
+      // overscan = вариант совпал, но этого товара уже достаточно → информативно, без привязки
+      var titleSym = overscan ? '⚠' : '✗';
+      var titleCls = overscan ? 'mpop-title warn' : 'mpop-title';
+      var pickHint = overscan
+        ? ('Этого товара по заказу уже выдано сколько нужно (' + (data.need || 0) + ' шт). Отложите лишнюю вещь или сканируйте другой товар.')
+        : 'Выберите соответствующий вашему скану заказ клиента или сканируйте другой товар.';
+      var emptyTxt = overscan ? 'Эта вещь в заказе больше не нужна. Отложите её или сканируйте другой товар.'
+                              : 'Нет подходящих позиций. Отсканируйте другой товар.';
+
       pop.innerHTML =
         '<div class="mpop-panel">'
-        + '<div class="mpop-title"><span class="x">✗</span>' + mTitle + '</div>'
+        + '<div class="' + titleCls + '"><span class="x">' + titleSym + '</span>' + mTitle + '</div>'
         + '<div class="mpop-pick">Вы отсканировали:</div>'
         + '<div class="mpop-scan"><div class="mphoto"><div class="ph">📦</div></div>'
         +   '<div class="minfo"><div class="mname">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>'
         +     (scanVarLine ? '<div class="mrow">' + scanVarLine + '</div>' : '')
         +   '</div></div>'
-        + '<div class="mpop-pick">Выберите соответствующий вашему скану заказ клиента или сканируйте другой товар.</div>'
-        + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">Нет подходящих позиций. Отсканируйте другой товар.</div>') + '</div>'
+        + '<div class="mpop-pick">' + esc(pickHint) + '</div>'
+        + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">' + esc(emptyTxt) + '</div>') + '</div>'
         + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button></div>'
         + '</div>';
 
