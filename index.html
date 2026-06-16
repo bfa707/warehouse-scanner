@@ -180,7 +180,11 @@
                 max-width: 560px; margin: auto 0; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
   .mpop-title { font-size: 18px; font-weight: 800; color: #ff6b6b; line-height: 1.3; margin-bottom: 4px; }
   .mpop-title .x { font-weight: 900; margin-right: 4px; }
-  .mpop-title.warn { color: #e8a317; }            /* лишняя вещь (overscan) — это не ошибка, а предупреждение */
+  .mpop-title.warn { color: #e8a317; }            /* несовпадение/лишняя вещь — жёлтым (предупреждение, не «ошибка») */
+  .mpop-pick.warn { color: #e8a317; }             /* жёлтая подсказка-причина */
+  .cs-row { line-height: 1.3; }                   /* цвет и размер — каждый на своей строке (размер ПОД цветом) */
+  .cs-row.hl, .cs-row.hl .val { color: #f5c518 !important; font-weight: 700; }   /* жёлтым — что именно не совпало */
+  .mpop-scan .mname.hl { color: #f5c518; }         /* жёлтым № и название, когда товар не тот */
   .mpop-sub { font-size: 13px; color: #aaa; margin-bottom: 12px; }
   .mpop-scan { display: flex; gap: 14px; background: #241d0f; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
   .mpop-scan .mphoto { width: 104px; height: 104px; flex-shrink: 0; border-radius: 10px; overflow: hidden;
@@ -650,6 +654,17 @@
       return { color: colors.join(' '), size: sizes.join(' ') };
     }
 
+    // Цвет и размер — на ОТДЕЛЬНЫХ строках (размер ПОД цветом). opt.hlColor/hlSize —
+    // жёлтое выделение различия; opt.emptySize — показать «размер: без размера», если размера нет.
+    function csLinesHtml(color, size, opt) {
+      opt = opt || {};
+      var out = '';
+      if (color) out += '<div class="cs-row' + (opt.hlColor ? ' hl' : '') + '">цвет: <span class="val">' + esc(color) + '</span></div>';
+      if (size)  out += '<div class="cs-row' + (opt.hlSize ? ' hl' : '') + '">размер: <span class="val">' + esc(size) + '</span></div>';
+      else if (opt.emptySize) out += '<div class="cs-row' + (opt.hlSize ? ' hl' : '') + '">размер: <span class="val">без размера</span></div>';
+      return out;
+    }
+
     // slugify — как на сервере/в апке (makeUnitId): сопоставление варианта скана с заказом.
     function slugify(s) {
       return String(s || '').toLowerCase()
@@ -700,9 +715,7 @@
         var color = it.color || splitVariant(it.variant).color || '';
         var size  = cleanSize(it.size) || splitVariant(it.variant).size || '';
         var nm = it.nameRu || it.name || '';
-        var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
-                 + (color && size ? '  ' : '')
-                 + (size  ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
+        var attr = csLinesHtml(color, size, {});   // размер ПОД цветом (отдельные строки)
         return '<div class="obadge" data-idx="' + i + '" data-num="' + esc(it.num) + '" data-net="' + (it.hasNet ? 1 : 0) + '">'
           + '<div class="othumb"><div class="ph">📦</div></div>'
           + '<div class="ometa"><div class="oname">' + esc(it.num) + ' | ' + esc(nm) + '</div>'
@@ -954,7 +967,8 @@
         if (it.hasNet || (el && el.getAttribute('data-net') === '1')) return;
         sameNum.push(it);
       });
-      // ПРАВКА 4: ЧТО не совпало — номер / цвет / размер (overscan — отдельный вид: лишняя вещь)
+      // ЧТО не совпало: номер(товар) / размер / цвет / оба (overscan — отдельный вид: лишняя вещь).
+      // При несовпадении НОМЕРА цвет/размер НЕ проверяем (товар другой — сравнивать нечего).
       var overscan = !!data._overscan;
       var diffKind;
       if (overscan) diffKind = 'overscan';
@@ -970,12 +984,17 @@
                  : (sizeMatch && !colorMatch) ? 'color' : 'both';
       }
       var mTitle = diffKind === 'overscan' ? 'Этого товара уже достаточно'
-                 : diffKind === 'num'   ? 'Не совпал номер'
-                 : diffKind === 'size'  ? 'Не совпадает размер'
-                 : diffKind === 'color' ? 'Не совпадает цвет'
-                 :                        'Не совпадает цвет/размер';
+                 : diffKind === 'num'   ? 'Отсканированный товар не соответствует заказанному'
+                 : diffKind === 'size'  ? 'Размер отсканированного товара не соответствует заказанному'
+                 : diffKind === 'color' ? 'Цвет отсканированного товара не соответствует заказанному'
+                 :                        'Цвет и размер отсканированного товара не соответствует заказанному';
+      // что подсвечивать жёлтым
+      var hlName  = (diffKind === 'num');
+      var hlColor = (diffKind === 'color' || diffKind === 'both');
+      var hlSize  = (diffKind === 'size'  || diffKind === 'both');
 
-      // список позиций заказа БЕЗ уже выданных (зелёных)
+      // список позиций заказа БЕЗ уже выданных (зелёных). У строк ТОГО ЖЕ номера подсвечиваем
+      // жёлтым то, что отличается (размер/цвет) — чтобы было видно различие с заказом.
       var rows = items.map(function (it, i) {
         var el = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
         if (el && el.getAttribute('data-done') === '1') return '';     // уже выдано — не показываем
@@ -983,9 +1002,8 @@
         var color = it.color || splitVariant(it.variant).color || '';
         var size  = cleanSize(it.size) || splitVariant(it.variant).size || '';
         var nm = it.nameRu || it.name || '';
-        var attr = (color ? 'цвет: <span class="val">' + esc(color) + '</span>' : '')
-                 + (color && size ? '  ' : '')
-                 + (size ? 'размер: <span class="val">' + esc(size) + '</span>' : '');
+        var sameNumRow = (String(it.num) === scanNum);
+        var attr = csLinesHtml(color, size, { hlColor: hlColor && sameNumRow, hlSize: hlSize && sameNumRow });
         var pickable = !overscan && !net && (scanNumInOrder ? (String(it.num) === scanNum) : true);
         var stateTxt = net ? '<div class="mob-state">не хватило</div>' : '';
         var cls = 'mob' + (pickable ? ' pick' : ' disabled') + (net ? ' net' : '');
@@ -997,29 +1015,36 @@
           + '<div class="mob-check">' + (pickable ? '✓' : '') + '</div></div>';
       }).join('');
 
-      // строка варианта скана (с размером); артикул НЕ показываем
-      var scanVarLine = scanSize
-        ? ('цвет: <span class="val">' + esc(scanColor) + '</span>&nbsp;&nbsp;размер: <span class="val">' + esc(scanSize) + '</span>')
-        : (data.variant ? ('вариант: <span class="val">' + esc(data.variant) + '</span>') : '');
+      // карточка скана: цвет/размер на отдельных строках; при размерном отличии показываем
+      // «размер: без размера» (если у наклейки размера нет) и выделяем жёлтым.
+      var scanAttr = csLinesHtml(scanColor, scanSize, { hlColor: hlColor, hlSize: hlSize, emptySize: hlSize });
+      if (!scanAttr && data.variant) scanAttr = '<div class="cs-row">вариант: <span class="val">' + esc(data.variant) + '</span></div>';
 
-      // overscan = вариант совпал, но этого товара уже достаточно → информативно, без привязки
-      var titleSym = overscan ? '⚠' : '✗';
-      var titleCls = overscan ? 'mpop-title warn' : 'mpop-title';
-      var pickHint = overscan
-        ? ('Этого товара по заказу уже выдано сколько нужно (' + (data.need || 0) + ' шт). Отложите лишнюю вещь или сканируйте другой товар.')
-        : 'Выберите соответствующий вашему скану заказ клиента или сканируйте другой товар.';
+      // несовпадения — жёлтым (это предупреждение, не «ошибка»); overscan — тоже жёлтым
+      var titleCls = 'mpop-title warn';
+      var nameHtml = '<div class="mname' + (hlName ? ' hl' : '') + '">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>';
+      // подсказка (жёлтым) + заголовок списка «Клиент заказал:» (белым)
+      var hintHtml, listHeading;
+      if (overscan) {
+        hintHtml = '<div class="mpop-pick warn">' + esc('Этого товара по заказу уже выдано сколько нужно (' + (data.need || 0) + ' шт). Отложите лишнюю вещь или сканируйте другой товар.') + '</div>';
+        listHeading = '';
+      } else {
+        hintHtml = '<div class="mpop-pick warn">Сканируйте другой товар, либо отметьте галочкой этот товар в заказе клиента.</div>';
+        listHeading = '<div class="mpop-pick">Клиент заказал:</div>';
+      }
       var emptyTxt = overscan ? 'Эта вещь в заказе больше не нужна. Отложите её или сканируйте другой товар.'
                               : 'Нет подходящих позиций. Отсканируйте другой товар.';
 
       pop.innerHTML =
         '<div class="mpop-panel">'
-        + '<div class="' + titleCls + '"><span class="x">' + titleSym + '</span>' + mTitle + '</div>'
+        + '<div class="' + titleCls + '"><span class="x">⚠</span>' + esc(mTitle) + '</div>'
         + '<div class="mpop-pick">Вы отсканировали:</div>'
         + '<div class="mpop-scan"><div class="mphoto"><div class="ph">📦</div></div>'
-        +   '<div class="minfo"><div class="mname">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>'
-        +     (scanVarLine ? '<div class="mrow">' + scanVarLine + '</div>' : '')
+        +   '<div class="minfo">' + nameHtml
+        +     (scanAttr ? '<div class="mrow">' + scanAttr + '</div>' : '')
         +   '</div></div>'
-        + '<div class="mpop-pick">' + esc(pickHint) + '</div>'
+        + hintHtml
+        + listHeading
         + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">' + esc(emptyTxt) + '</div>') + '</div>'
         + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button></div>'
         + '</div>';
