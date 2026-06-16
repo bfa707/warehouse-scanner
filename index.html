@@ -31,7 +31,9 @@
   /* рамка-прицел: держи QR внутри неё — тогда и расстояние, и белое поле верные */
   .aim { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
          width: 165px; height: 165px; border: 3px solid rgba(255,255,255,.85);
-         border-radius: 12px; pointer-events: none; display: none; }
+         border-radius: 12px; pointer-events: none; display: none; transition: border-color .12s, box-shadow .12s; }
+  /* поймали QR — рамка зеленеет (визуальный отклик, что код считан) */
+  .aim.caught { border-color: #34d058; box-shadow: 0 0 0 4px rgba(52,208,88,.35), 0 0 18px rgba(52,208,88,.5); }
   /* при qrbox html5-qrcode рисует свою рамку/затемнение — прячем её, оставляем свой .aim */
   #qr-shaded-region { display: none !important; }
   .start { display: block; width: calc(100% - 32px); max-width: 380px; margin: 16px auto 6px;
@@ -145,7 +147,7 @@
             background: #1d1d1d; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
             border-left: 5px solid #555; }
   .obadge.part { border-left-color: #e8a317; }    /* выдано частично */
-  .obadge.done { border-left-color: #0b8043; background: #15351f; }  /* выдано полностью */
+  .obadge.done { border-left-color: #0b8043; background: #1d6f3b; }  /* выдано — ВЕСЬ бейджик зелёный */
   .obadge.net  { border-left-color: #9a6b00; opacity: 0.75; }        /* не хватило (net) */
   .obadge.flash { animation: oflash 0.6s ease; }
   @keyframes oflash { 0% { background: #1f5a33; } 100% { background: #1d1d1d; } }
@@ -212,10 +214,10 @@
   .mob .mob-attr .val { color: #fff; }
   .mob .mob-state { font-size: 12px; margin-top: 2px; color: #9a9a9a; }
   .mob.done .mob-state { color: #7ee2a0; } .mob.net .mob-state { color: #d99b4a; }
-  .mob .mob-check { width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; border: 2px solid #0b8043;
-                   display: flex; align-items: center; justify-content: center; color: #9a9a9a; font-size: 18px; font-weight: 800; }
+  .mob .mob-check { width: 30px; height: 30px; flex-shrink: 0; border: none;   /* без зелёной рамки вокруг галочки */
+                   display: flex; align-items: center; justify-content: center; color: #7ee2a0; font-size: 22px; font-weight: 800; }
   .mob.sel .mob-check { color: #7ee2a0; }            /* при нажатии — галочка зелёная */
-  .mob.disabled .mob-check { border-color: #555; color: transparent; }
+  .mob.disabled .mob-check { color: transparent; }
   .mpop-foot { margin-top: 14px; }
   .mpop-close { width: 100%; background: #2a2a2a; color: #ddd; border: none; border-radius: 12px;
                 padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer; }
@@ -269,9 +271,17 @@
         b.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();                      // не запускать камеру при выходе
-          // СНАЧАЛА отпускаем камеру: iOS иначе тратит первый тап на её тендаун — отсюда
-          // «выход в два нажатия». Промис не ждём — навигируем сразу (qr=null до stop, чтобы
-          // повторный тап/document-click не дёргали уже останавливаемую камеру).
+          // Моментально накрываем экран — чтобы не было видно, как сканер «съезжает» при
+          // гашении камеры. Возврат на склад всё равно перезагрузит страницу (PWA), но переход
+          // станет ровным: «Загрузка…» тут → «Загрузка…» на складе → меню (без «кривь и вкось»).
+          var lv = document.getElementById('leaving');
+          if (!lv) {
+            lv = document.createElement('div'); lv.id = 'leaving';
+            lv.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#1a1a1a;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:600 17px -apple-system,system-ui,sans-serif';
+            lv.textContent = '📦 Загрузка…'; document.body.appendChild(lv);
+          }
+          lv.style.display = 'flex';
+          // отпускаем камеру (iOS иначе тратит первый тап на её тендаун); промис не ждём.
           try { if (qr) { var q = qr; qr = null; q.stop().then(function () { q.clear(); }).catch(function () {}); } } catch (_) {}
           if (history.length > 1) history.back(); else location.href = GAS;
         });
@@ -402,7 +412,18 @@
       document.body.appendChild(s);
     }
 
+    // Поймали QR — мигаем рамкой-прицелом зелёным (отклик «код считан»). Зовётся на КАЖДЫЙ
+    // удачный кадр декодера; пока QR в кадре — рамка держится зелёной (таймер сбрасывается).
+    var _aimT = null;
+    function flashAim() {
+      if (!aim) return;
+      aim.classList.add('caught');
+      if (_aimT) clearTimeout(_aimT);
+      _aimT = setTimeout(function () { aim.classList.remove('caught'); }, 600);
+    }
+
     function onScan(text) {
+      flashAim();                                       // визуальный отклик: рамка зеленеет
       if (MODE === 'order') return onScanOrder(text);   // режим «Собрать заказ» — своя логика выдачи
       if (seen[text]) return;   // этот код уже в списке — не дублируем, сколько бы ни держали камеру
       seen[text] = true;        // сбрасывается только кнопкой «Очистить»
@@ -1088,19 +1109,26 @@
     // Тик по позиции в попапе → привязать наклейку к ней на сервере (action=assign).
     function assignScanToOrder(uid, anum, aslug) {
       if (!uid) return;
-      setStatus('ok', 'Привязываю…');
+      // МОМЕНТАЛЬНО: закрываем попап и зажигаем выбранный бейджик зелёным СРАЗУ, а привязку
+      // на сервере шлём в ФОНЕ (раньше попап висел ~10с до ответа). Успех — оставляем как есть
+      // (без лишнего round-trip и мигания); неудача — перечитываем заказ (откат) + ошибка.
+      clearPendingRetries();
+      closeMismatchPopup(false);                          // привязано → seen НЕ чистим (наклейка выдана)
+      var arr = BADGE_BY_SLOT[String(anum) + '|' + String(aslug)] || [];
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i].getAttribute('data-done') !== '1') { setBadgeDone(arr[i], uid); break; }
+      }
+      updateOrderProgress();
+      setStatus('ok', 'Привязано ✓');
       callGas('assign', uid, function (data) {
-        // 'already' = наклейка уже выдана (ответ прошлой привязки потерялся при таймауте) —
-        // на сервере данные уже верны, просто перечитываем авторитетное состояние, а не ругаемся.
+        // 'already' = ответ прошлой привязки потерялся при таймауте — на сервере уже верно.
         var done = data && (data.match === 'ok' || data.match === 'already');
         if (!done) {
           setStatus('bad', 'Не удалось привязать (' + ((data && (data.error || data.match)) || 'нет связи') + '). Повторите.');
-          return;
+          delete seen[uid];                               // дать пересканировать эту наклейку
+          reloadOrder();                                  // откат к авторитетному состоянию сервера
         }
-        clearPendingRetries();
-        closeMismatchPopup(false);                          // привязано → seen НЕ чистим (наклейка выдана)
-        setStatus('ok', (data.match === 'already' ? '✓ Уже привязано: ' : '✓ Привязано: ') + shortName(data));
-        reloadOrder();                                      // авторитетно зажжёт выбранный бейджик + код
+        // успех — бейджик уже зелёный; не перерисовываем (моментально и без мигания).
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug });
     }
 
