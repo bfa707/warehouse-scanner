@@ -975,14 +975,20 @@
       var scanNum = String(data.num || '');
       var name = (data.nameRu || data.name || '');
       var items = (ORDER && ORDER.items) || [];
-      var scanNumInOrder = items.some(function (it) { return !it.hasNet && String(it.num) === scanNum; });
+      var scanName = String(name).trim().toLowerCase();
+      // «Тот же товар» = совпал № позиции ЛИБО совпало НАЗВАНИЕ. Название — запасной ключ на
+      // случай, если № наклейки и № в заказе разошлись: товар тот же, отличается лишь размер/цвет,
+      // и тогда показываем «размер/цвет не совпал», а НЕ «товар другой».
+      function itName(it) { return String((it.nameRu || it.name || '')).trim().toLowerCase(); }
+      function sameProduct(it) { return String(it.num) === scanNum || (!!scanName && itName(it) === scanName); }
+      var scanNumInOrder = items.some(function (it) { return !it.hasNet && sameProduct(it); });
 
       // размер/цвет скана (best-effort) — для определения, ЧТО именно не совпало
       var scanColor = cs.color, scanSize = cs.size;
-      // незакрытые позиции этого же № — для сравнения цвет/размер
+      // незакрытые позиции ТОГО ЖЕ товара — для сравнения цвет/размер
       var sameNum = [];
       items.forEach(function (it, i) {
-        if (String(it.num) !== scanNum) return;
+        if (!sameProduct(it)) return;
         var el = document.querySelector('#order-grid .obadge[data-idx="' + i + '"]');
         if (el && el.getAttribute('data-done') === '1') return;
         if (it.hasNet || (el && el.getAttribute('data-net') === '1')) return;
@@ -1023,9 +1029,9 @@
         var color = it.color || splitVariant(it.variant).color || '';
         var size  = cleanSize(it.size) || splitVariant(it.variant).size || '';
         var nm = it.nameRu || it.name || '';
-        var sameNumRow = (String(it.num) === scanNum);
+        var sameNumRow = sameProduct(it);
         var attr = csLinesHtml(color, size, { hlColor: hlColor && sameNumRow, hlSize: hlSize && sameNumRow });
-        var pickable = !net && (treatAsNum ? true : (String(it.num) === scanNum));
+        var pickable = !net && (treatAsNum ? true : sameProduct(it));
         var stateTxt = net ? '<div class="mob-state">не хватило</div>' : '';
         var cls = 'mob' + (pickable ? ' pick' : ' disabled') + (net ? ' net' : '');
         return '<div class="' + cls + '" data-idx="' + i + '"'
