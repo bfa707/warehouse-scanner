@@ -223,6 +223,14 @@
                 padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer; }
   .mpop-queue { text-align: center; color: #9fd3ad; font-size: 13px; margin-top: 8px; }
   .mpop-queue:empty { display: none; }
+  /* ВРЕМЕННЫЙ отладочный блок в попапе — поймать баг «(koza) не виден». Снять после фикса. */
+  .mpop-dbg { margin-top: 12px; background: #0d0d0d; border: 1px solid #555; border-radius: 8px; padding: 8px 10px;
+              font: 11px/1.5 ui-monospace, Menlo, monospace; color: #b9c4cf; max-height: 42vh; overflow: auto; word-break: break-word; }
+  .mpop-dbg div { margin: 2px 0; }
+  .mpop-dbg-h { color: #ffd98a; font-weight: 700; margin-bottom: 6px; font-family: -apple-system, system-ui, sans-serif; font-size: 12px; }
+  .mpop-dbg b { color: #fff; }
+  .mpop-dbg .hit { color: #7ee2a0; }
+  .mpop-dbg .miss { color: #ff9a93; }
 
   /* поймали QR на УЖЕ отсканированной наклейке — рамка краснеет (п.7) */
   .aim.dup { border-color: #ff4d4f; box-shadow: 0 0 0 4px rgba(255,77,79,.35), 0 0 18px rgba(255,77,79,.55); }
@@ -1210,6 +1218,24 @@
       var listHeading = '<div class="mpop-pick">Клиент заказал:</div>';
       var emptyTxt = 'Нет подходящих позиций. Отсканируйте другой товар.';
 
+      // ── ВРЕМЕННЫЙ отладочный блок: точные данные сравнения скан↔заказ (поймать «(koza)») ──
+      // Зелёным — совпавшее с наклейкой (№/slug), красным — нет. Пришли скрин разработчику.
+      var dbg = data.dbg, dbgHtml = '';
+      if (dbg) {
+        var L = ['<div>СКАН: №<b>' + esc(dbg.scanNum) + '</b> «' + esc(dbg.scanName || '') + '» вариант «' + esc(dbg.scanVar || '')
+                 + '» → slug=<b>' + esc(dbg.scanSlug || '') + '</b></div>',
+                 '<div>итог сервера: <b>' + esc(dbg.match || '') + '</b> · need=' + esc(String(dbg.need))
+                 + (server ? ' · причина=<b>' + esc(server.kind) + '</b> · matchNums=[' + esc((server.matchNums || []).join(',')) + ']' : '') + '</div>'];
+        (dbg.items || []).forEach(function (it) {
+          var hitNum = String(it.num) === String(dbg.scanNum), hitSlug = String(it.slug) === String(dbg.scanSlug);
+          L.push('<div>ЗАКАЗ: №<b class="' + (hitNum ? 'hit' : 'miss') + '">' + esc(it.num) + '</b> «' + esc(it.nm || '')
+            + '» цвет «' + esc(it.color || '') + '» размер «' + esc(it.size || '') + '» → slug=<b class="' + (hitSlug ? 'hit' : 'miss') + '">'
+            + esc(it.slug || '') + '</b>' + (it.net ? ' [нет]' : '') + '</div>');
+        });
+        dbgHtml = '<div class="mpop-dbg"><div class="mpop-dbg-h">🔧 Отладка — пришли скрин этого блока разработчику</div>' + L.join('') + '</div>';
+        try { console.log('[MISMATCH DBG]', JSON.stringify(dbg)); } catch (e) {}
+      }
+
       pop.innerHTML =
         '<div class="mpop-panel">'
         + '<div class="' + titleCls + '"><span class="x">⚠</span>' + esc(mTitle) + '</div>'
@@ -1221,6 +1247,7 @@
         + hintHtml
         + listHeading
         + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">' + esc(emptyTxt) + '</div>') + '</div>'
+        + dbgHtml
         + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button>'
         +   '<div class="mpop-queue"></div></div>'
         + '</div>';
