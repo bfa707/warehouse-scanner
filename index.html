@@ -1132,10 +1132,10 @@
       var name = (data.nameRu || data.name || '');
       var items = (ORDER && ORDER.items) || [];
       var scanName = String(name).trim().toLowerCase();
-      // «Тот же товар» определяет СЕРВЕР (data.diffInfo.matchNums) — он сверяет № и название по
-      // тому же составу заказа, что использует для кредита, поэтому причина расхождения у сервера
-      // и сканера всегда одинаковая. Нет diffInfo (старый сервер / overscan) — запасное правило:
-      // совпал № позиции ЛИБО название.
+      // «Тот же товар» определяет СЕРВЕР (data.diffInfo.matchNums) — сверяет № и название по тому же
+      // составу заказа, что использует для кредита (устойчиво к расхождению № наклейки и № в заказе).
+      // САМУ причину (размер/цвет/товар) сканер считает ниже по НЕЗАКРЫТЫМ позициям того же товара
+      // (server.kind не используем). Нет diffInfo (старый сервер) — запасное правило: № ЛИБО название.
       var server = data.diffInfo || null;
       var serverNums = (server && server.matchNums) || null;
       function itName(it) { return String((it.nameRu || it.name || '')).trim().toLowerCase(); }
@@ -1143,7 +1143,6 @@
         if (serverNums) return serverNums.indexOf(String(it.num)) >= 0;
         return String(it.num) === scanNum || (!!scanName && itName(it) === scanName);
       }
-      var scanNumInOrder = items.some(function (it) { return !it.hasNet && sameProduct(it); });
 
       // размер/цвет скана (best-effort) — для определения, ЧТО именно не совпало
       var scanColor = cs.color, scanSize = cs.size;
@@ -1156,33 +1155,36 @@
         if (it.hasNet || (el && el.getAttribute('data-net') === '1')) return;
         sameNum.push(it);
       });
-      // ЧТО не совпало: номер(товар) / размер / цвет / оба. При несовпадении НОМЕРА цвет/размер
-      // НЕ проверяем (товар другой). Лишняя вещь (overscan: всё совпало, но уже выдано сколько
-      // нужно) — по решению владельца показываем как «товар не тот» (категория num).
+      // КЛАССИФИКАЦИЯ по НЕЗАКРЫТЫМ позициям того же товара (sameNum: тот же №/название, ещё не
+      // выданы и не «нет»). Если такие ЕСТЬ — скан это ТОТ ЖЕ товар, но его вариант их не закрывает.
+      // Обычно: у наклейки размер ПУСТОЙ, а в заказе размер есть (напр. «koza») — всё в кол. J
+      // заказа это РАЗМЕР, значит несовпадение РАЗМЕРНОЕ → «Размер не соответствует» + предлагаем
+      // отметить нужную позицию. Если незакрытых позиций того же товара НЕТ → лишняя (overscan)
+      // или другой товар (num).
       var overscan = !!data._overscan;
-      var treatAsNum = overscan || (server ? server.kind === 'num' : !scanNumInOrder);
-      var diffKind;
-      if (treatAsNum) diffKind = 'num';
-      else if (server) diffKind = server.kind;          // 'size' | 'color' | 'both' — авторитет сервера
-      else {
+      var diffKind, treatAsNum;
+      if (sameNum.length > 0) {
         var colorMatch = false, sizeMatch = false;
         sameNum.forEach(function (it) {
           var oc = slugify(it.color || ''), os = slugify(cleanSize(it.size) || '');
           if (oc && oc === slugify(scanColor)) colorMatch = true;
-          if (os && os === slugify(scanSize)) sizeMatch = true;
+          if (os && os === slugify(scanSize)) sizeMatch = true;   // у наклейки размер пустой → sizeMatch=false
         });
         diffKind = (colorMatch && !sizeMatch) ? 'size'
                  : (sizeMatch && !colorMatch) ? 'color' : 'both';
+        treatAsNum = false;                              // тикать можно только позиции ТОГО ЖЕ товара (подбор размера)
+      } else {
+        diffKind = 'num';
+        treatAsNum = true;                               // нет незакрытых позиций того же товара → замена/лишняя
       }
-      // overscan = этот вариант наклейки уже закрыт сколько нужно. Часто это «другой размер
-      // без размера на ярлыке» (напр. koza-жакет с наклейкой без размера): не пугаем «не
-      // соответствует», а предлагаем отметить нужный размер/вариант.
-      var mTitle = overscan        ? 'Этого варианта уже достаточно по заказу'
-                 : diffKind === 'num'   ? 'Отсканированный товар не соответствует заказанному'
-                 : diffKind === 'size'  ? 'Размер отсканированного товара не соответствует заказанному'
+      // Заголовок: размерное/цветовое несовпадение → так и пишем; нет незакрытых позиций того же
+      // товара → либо «уже достаточно» (overscan-лишняя), либо «товар не соответствует».
+      var mTitle = diffKind === 'size'  ? 'Размер отсканированного товара не соответствует заказанному'
                  : diffKind === 'color' ? 'Цвет отсканированного товара не соответствует заказанному'
-                 :                        'Цвет и размер отсканированного товара не соответствует заказанному';
-      // что подсвечивать жёлтым (для overscan ничего — товар-то совпал, просто его уже хватает)
+                 : diffKind === 'both'  ? 'Цвет и размер отсканированного товара не соответствует заказанному'
+                 : overscan             ? 'Этого варианта уже достаточно по заказу'
+                 :                        'Отсканированный товар не соответствует заказанному';
+      // подсветка жёлтым: имя — только когда товар реально другой (не overscan-лишняя)
       var hlName  = (diffKind === 'num' && !overscan);
       var hlColor = (diffKind === 'color' || diffKind === 'both');
       var hlSize  = (diffKind === 'size'  || diffKind === 'both');
@@ -1218,9 +1220,10 @@
       var titleCls = 'mpop-title warn';
       var nameHtml = '<div class="mname' + (hlName ? ' hl' : '') + '">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>';
       // подсказка (жёлтым) + заголовок списка «Клиент заказал:» (белым)
-      var hintHtml = '<div class="mpop-pick warn">' + (overscan
-        ? 'Если это ДРУГОЙ размер/вариант (например koza) — отметьте нужную позицию заказа галочкой. Если просто лишняя вещь — отложите её.'
-        : 'Сканируйте другой товар, либо отметьте галочкой этот товар в заказе клиента.') + '</div>';
+      var hintHtml = '<div class="mpop-pick warn">' + (
+          !treatAsNum    ? 'У наклейки нет нужного размера. Отметьте галочкой нужную позицию заказа (с размером).'
+        : overscan       ? 'Этого товара уже хватает по заказу — лишнюю вещь отложите.'
+        :                  'Сканируйте другой товар, либо отметьте галочкой нужную позицию заказа.') + '</div>';
       var listHeading = '<div class="mpop-pick">Клиент заказал:</div>';
       var emptyTxt = 'Нет подходящих позиций. Отсканируйте другой товар.';
 
