@@ -223,14 +223,6 @@
                 padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer; }
   .mpop-queue { text-align: center; color: #9fd3ad; font-size: 13px; margin-top: 8px; }
   .mpop-queue:empty { display: none; }
-  /* ВРЕМЕННЫЙ отладочный блок в попапе — поймать баг «(koza) не виден». Снять после фикса. */
-  .mpop-dbg { margin-top: 12px; background: #0d0d0d; border: 1px solid #555; border-radius: 8px; padding: 8px 10px;
-              font: 11px/1.5 ui-monospace, Menlo, monospace; color: #b9c4cf; max-height: 42vh; overflow: auto; word-break: break-word; }
-  .mpop-dbg div { margin: 2px 0; }
-  .mpop-dbg-h { color: #ffd98a; font-weight: 700; margin-bottom: 6px; font-family: -apple-system, system-ui, sans-serif; font-size: 12px; }
-  .mpop-dbg b { color: #fff; }
-  .mpop-dbg .hit { color: #7ee2a0; }
-  .mpop-dbg .miss { color: #ff9a93; }
 
   /* поймали QR на УЖЕ отсканированной наклейке — рамка краснеет (п.7) */
   .aim.dup { border-color: #ff4d4f; box-shadow: 0 0 0 4px rgba(255,77,79,.35), 0 0 18px rgba(255,77,79,.55); }
@@ -411,6 +403,10 @@
       } catch (e) {}
     }
 
+    // Вибрация (п.2): зелёный скан — 1 короткая; красная рамка «уже сканировали» — 2 коротких.
+    function vibeOk()  { try { if (navigator.vibrate) navigator.vibrate(55); } catch (e) {} }
+    function vibeDup() { try { if (navigator.vibrate) navigator.vibrate([55, 90, 55]); } catch (e) {} }
+
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
     function nowTime() {
       var d = new Date();
@@ -496,16 +492,16 @@
       // на такие подряд-чтения молчим. Красную «Уже отсканировали ранее» (п.7) показываем
       // только при ОСОЗНАННОМ повторном наведении: между чтениями этого кода был разрыв >1.2с.
       if (seen[text]) {
-        if (now - (lastScanAt[text] || 0) > 1200) { flashAimDup(); showScanToast('Уже отсканировали ранее'); }
+        if (now - (lastScanAt[text] || 0) > 1200) { flashAimDup(); showScanToast('Уже отсканировали ранее'); vibeDup(); }
         lastScanAt[text] = now;
         return;
       }
       lastScanAt[text] = now;
       flashAim();                                       // новый код — рамка зеленеет
+      vibeOk();                                         // зелёный скан — 1 короткая вибрация (п.2)
       if (MODE === 'order') return onScanOrder(text);   // режим «Собрать заказ» — своя логика выдачи
       seen[text] = true;        // сбрасывается только кнопкой «Очистить»
       beep();
-      if (navigator.vibrate) navigator.vibrate(80);
       total++;
       cntEl.textContent = 'Отсканировано: ' + total;
 
@@ -674,7 +670,12 @@
         card._num = data.num; card._variant = data.variant;
         // СНАЧАЛА класс состояния (он сбрасывает className), ПОТОМ фон/счётчики
         card.className = data.alreadyActive ? 'card dup' : 'card ok';
-        if (data.alreadyActive && dupEl) dupEl.textContent = 'товар уже есть в таблице';
+        if (data.alreadyActive && dupEl) {
+          dupEl.textContent = 'товар уже есть в таблице';
+          // уже принимали эту наклейку раньше (в т.ч. в прошлой сессии) — красная рамка + плашка
+          // + двойная вибрация (п.1), как и при выдаче.
+          flashAimDup(); showScanToast('Уже отсканировали ранее'); vibeDup();
+        }
         // обновить счётчики/список/фон в ЭТОЙ карточке и во всех карточках того же типа
         applyVariantInfo(data.num, data.variant,
           { bought: data.bought, scanned: data.scanned, printed: data.printed });
@@ -782,6 +783,12 @@
     function initOrderMode() {
       document.body.classList.add('order-mode');
       reloadOrder();
+      // Держим серверный кэш состава заказа ТЁПЛЫМ: тогда скан выдачи не открывает таблицу-источник
+      // по ID (это и давало ~5с до попапа расхождения). Фоновый пинг каждые 45с (TTL кэша 60с),
+      // результат игнорируем — НЕ перерисовываем бейджики (иначе сбили бы оптимистичные состояния).
+      setInterval(function () {
+        callGas('order_lookup', '', function () {}, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, fresh: 1, warm: 1 });
+      }, 45000);
     }
     // подгрузка/перечитка заказа (uid не нужен — order_lookup читает src/no/nick).
     // Зовём при старте и после ручной привязки/снятия выдачи — бейджики и коды
@@ -887,7 +894,7 @@
       if (!el || el.getAttribute('data-done') !== '1') return;
       if (!el._uid) { setStatus('warn', 'Не знаю код этой выдачи — обновите заказ.'); return; }
       var uid = el._uid;
-      askConfirm('Снять выдачу этой вещи?', function () { sendUnsell(uid); });   // НЕблокирующее — confirm() морозит камеру на iOS
+      askConfirm('Снять выдачу этой вещи?', function () { sendUnsell(uid, el); });   // НЕблокирующее — confirm() морозит камеру на iOS
     }
 
     // Обновить бейджи слота по ответу сервера (given — авторитетное число с сервера).
@@ -915,13 +922,26 @@
 
     // _orderComplete — текущая собранность; _orderInitDone — закончилась ли стартовая отрисовка;
     // _donePopupShown — показан ли попап «Заказ собран» для ТЕКУЩЕГО завершения (чтобы не дублить и
-    // не всплывать при открытии уже собранного заказа); _suppressDone — подавить попап на время
-    // оптимистичной привязки (до подтверждения сервера, иначе ложно «собран» при отказе assign).
-    var _orderComplete = false, _orderInitDone = false, _donePopupShown = false, _suppressDone = false;
+    // не всплывать при открытии уже собранного заказа).
+    // _doneAwaitAssign — попап «собран» показан ОПТИМИСТИЧНО при ручной привязке и ещё НЕ подтверждён
+    // сервером (тогда «Закрыть» в меню должна подождать подтверждения, иначе при отказе уйдём с
+    // ложным «собран»); _leaveAfterAssign — работник нажал «Закрыть», пока привязка не подтверждена.
+    var _orderComplete = false, _orderInitDone = false, _donePopupShown = false;
+    var _doneAwaitAssign = false, _leaveAfterAssign = false;
+    // «Закрыть» в попапе «Заказ собран»: уходим в меню только когда привязка подтверждена сервером.
+    function closeOrderDone() {
+      if (_doneAwaitAssign) {                              // привязка ещё в полёте — ждём подтверждения
+        _leaveAfterAssign = true;
+        var b = document.querySelector('#order-done-popup .odone-close');
+        if (b) { b.textContent = 'Сохраняю…'; b.disabled = true; }
+        return;
+      }
+      leaveToWarehouse();
+    }
     function mpopOpen() { var p = document.getElementById('mismatch-popup'); return !!(p && p.style.display !== 'none'); }
-    // Попап «собран» показываем, только когда ничто его не перекроет и он не подавлен: нет открытого
-    // попапа расхождения, очередь расхождений пуста, не идёт оптимистичное ожидание привязки.
-    function canShowDone() { return !_suppressDone && !mpopOpen() && !MQUEUE.length; }
+    // Попап «собран» показываем, только когда ничто его не перекроет: нет открытого попапа
+    // расхождения и очередь расхождений пуста.
+    function canShowDone() { return !mpopOpen() && !MQUEUE.length; }
     function updateOrderProgress() {
       var pe = document.getElementById('order-progress');
       if (!ORDER) { pe.textContent = ''; return; }
@@ -984,7 +1004,7 @@
       pop.classList.add('show');
       pop.onclick = function (e) {
         e.stopPropagation();
-        if (e.target.closest && e.target.closest('.odone-close')) { leaveToWarehouse(); return; }
+        if (e.target.closest && e.target.closest('.odone-close')) { closeOrderDone(); return; }
         if (e.target.closest && e.target.closest('.odone-fix'))   { pop.classList.remove('show'); pop.innerHTML = ''; }
       };
     }
@@ -1025,8 +1045,7 @@
     // === Скан в режиме заказа: без нижней ленты — результат на бейджиках + баннере + попапе ===
     function onScanOrder(text) {
       seen[text] = true;        // дедуп/повторное наведение уже обработаны в onScan (п.7)
-      beep();
-      if (navigator.vibrate) navigator.vibrate(60);
+      beep();                   // вибрация (зелёная) уже сработала в onScan (vibeOk)
       RETRY[text] = 0;
       callGas('sell', text, function (data) { handleSellResult(text, data); },
               { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
@@ -1050,14 +1069,16 @@
           setStatus('ok', '✓ ' + shortName(data));
           break;
         case 'already':
-          // бейджик уже зелёный из загрузки заказа; у привязанной вручную наклейки свой слот
-          // пуст (кредит ушёл назначенной позиции) — поэтому бейджики НЕ трогаем, только баннер.
+          // наклейка УЖЕ была выдана раньше (в т.ч. в прошлой сессии) — это «уже сканировали»:
+          // красная рамка + плашка + двойная вибрация (п.1). Бейджики НЕ трогаем (у ручной
+          // привязки свой слот пуст — кредит ушёл назначенной позиции), только баннер.
+          flashAimDup(); showScanToast('Уже выдавали ранее'); vibeDup();
           setStatus('warn', '⚠ Уже выдано раньше: ' + shortName(data));
           break;
         case 'overscan':
-          // лишняя вещь: показываем попап «Вы отсканировали…» (информативно, без привязки —
-          // вариант-то совпал, просто этого товара уже достаточно). Вне заказа — баннер.
-          if (ORDER && ORDER.found) { data._overscan = true; enqueueMismatch(data); }
+          // лишняя/другой размер того же товара: попап классифицирует сам (по незакрытым позициям
+          // того же товара) — «размер не соответствует» либо «уже достаточно». Вне заказа — баннер.
+          if (ORDER && ORDER.found) enqueueMismatch(data);
           else setStatus('bad', '✗ Лишняя штука: ' + shortName(data) + ' (нужно ' + (data.need || 0) + ')');
           break;
         case 'wrong_order':
@@ -1092,12 +1113,20 @@
       RETRY_T = {};
     }
 
-    function sendUnsell(uid) {
+    function sendUnsell(uid, el) {
+      // МОМЕНТАЛЬНО гасим бейджик в «ждёт» (серый) + обновляем прогресс, само снятие шлём в ФОНЕ
+      // (п.5: раньше бейджик долго висел зелёным, ждал ответ + перечитку → «нет связи»). Успех —
+      // оставляем как есть; сбой — перечитываем заказ (откат к авторитетному состоянию) + ошибка.
+      if (el) setBadgePending(el);
+      updateOrderProgress();
+      delete seen[uid];                        // снятую наклейку можно сканировать заново
+      setStatus('ok', 'Выдача снята');
       callGas('unsell', uid, function (data) {
-        if (!data || !data.ok) { setStatus('warn', 'Не удалось снять выдачу (склад занят/нет связи). Повторите.'); return; }
-        delete seen[uid];                      // снятую наклейку можно сканировать заново
-        setStatus('ok', 'Выдача снята: ' + shortName(data));
-        reloadOrder();                         // авторитетно перерисует бейджики/коды/прогресс
+        if (!data || !data.ok) {
+          setStatus('warn', 'Не удалось снять выдачу (склад занят/нет связи). Повторите.');
+          reloadOrder();                       // откат к авторитетному состоянию сервера
+        }
+        // успех — бейджик уже серый; не перерисовываем (моментально и без мигания).
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
     }
 
@@ -1221,24 +1250,6 @@
       var listHeading = '<div class="mpop-pick">Клиент заказал:</div>';
       var emptyTxt = 'Нет подходящих позиций. Отсканируйте другой товар.';
 
-      // ── ВРЕМЕННЫЙ отладочный блок: точные данные сравнения скан↔заказ (поймать «(koza)») ──
-      // Зелёным — совпавшее с наклейкой (№/slug), красным — нет. Пришли скрин разработчику.
-      var dbg = data.dbg, dbgHtml = '';
-      if (dbg) {
-        var L = ['<div>СКАН: №<b>' + esc(dbg.scanNum) + '</b> «' + esc(dbg.scanName || '') + '» вариант «' + esc(dbg.scanVar || '')
-                 + '» → slug=<b>' + esc(dbg.scanSlug || '') + '</b></div>',
-                 '<div>итог сервера: <b>' + esc(dbg.match || '') + '</b> · need=' + esc(String(dbg.need))
-                 + (server ? ' · причина=<b>' + esc(server.kind) + '</b> · matchNums=[' + esc((server.matchNums || []).join(',')) + ']' : '') + '</div>'];
-        (dbg.items || []).forEach(function (it) {
-          var hitNum = String(it.num) === String(dbg.scanNum), hitSlug = String(it.slug) === String(dbg.scanSlug);
-          L.push('<div>ЗАКАЗ: №<b class="' + (hitNum ? 'hit' : 'miss') + '">' + esc(it.num) + '</b> «' + esc(it.nm || '')
-            + '» цвет «' + esc(it.color || '') + '» размер «' + esc(it.size || '') + '» → slug=<b class="' + (hitSlug ? 'hit' : 'miss') + '">'
-            + esc(it.slug || '') + '</b>' + (it.net ? ' [нет]' : '') + '</div>');
-        });
-        dbgHtml = '<div class="mpop-dbg"><div class="mpop-dbg-h">🔧 Отладка — пришли скрин этого блока разработчику</div>' + L.join('') + '</div>';
-        try { console.log('[MISMATCH DBG]', JSON.stringify(dbg)); } catch (e) {}
-      }
-
       pop.innerHTML =
         '<div class="mpop-panel">'
         + '<div class="' + titleCls + '"><span class="x">⚠</span>' + esc(mTitle) + '</div>'
@@ -1250,7 +1261,6 @@
         + hintHtml
         + listHeading
         + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">' + esc(emptyTxt) + '</div>') + '</div>'
-        + dbgHtml
         + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button>'
         +   '<div class="mpop-queue"></div></div>'
         + '</div>';
@@ -1312,33 +1322,36 @@
     // Тик по позиции в попапе → привязать наклейку к ней на сервере (action=assign).
     function assignScanToOrder(uid, anum, aslug) {
       if (!uid) return;
-      // МОМЕНТАЛЬНО: закрываем попап и зажигаем выбранный бейджик зелёным СРАЗУ, а привязку
-      // на сервере шлём в ФОНЕ (раньше попап висел ~10с до ответа). Успех — оставляем как есть
-      // (без лишнего round-trip и мигания); неудача — перечитываем заказ (откат) + ошибка.
-      // подавляем попап «Заказ собран» на время оптимистичной привязки — покажем его лишь ПОСЛЕ
-      // подтверждения сервера, иначе при отказе привязки (переполнение слота / нет связи) ложно
-      // показали бы «Заказ собран», хотя заказ откатится.
-      _suppressDone = true;
+      // МОМЕНТАЛЬНО: закрываем попап и зажигаем выбранный бейджик зелёным СРАЗУ, а привязку на
+      // сервере шлём в ФОНЕ. Если привязка ЗАКРЫВАЕТ заказ — попап «Заказ собран» показываем ТОЖЕ
+      // сразу (п.4: раньше он ждал ответа сервера ~3с). При ОТКАЗЕ сервера — прячем попап «собран»
+      // и перечитываем заказ (откат). Успех — оставляем как есть (без round-trip и мигания).
       clearPendingRetries();
       closeMismatchPopup(false);                          // привязано → seen НЕ чистим (наклейка выдана)
       var arr = BADGE_BY_SLOT[String(anum) + '|' + String(aslug)] || [];
       for (var i = 0; i < arr.length; i++) {
         if (arr[i].getAttribute('data-done') !== '1') { setBadgeDone(arr[i], uid); break; }
       }
-      updateOrderProgress();                              // прогресс обновим сразу (попап «собран» пока подавлен)
+      var wasShown = _donePopupShown;
+      updateOrderProgress();                              // прогресс + (если добрали) моментальный попап «Заказ собран»
+      // попап «собран» показался ИМЕННО этой (ещё не подтверждённой) привязкой → «Закрыть» подождёт
+      _doneAwaitAssign = (!wasShown && _donePopupShown);
       setStatus('ok', 'Привязано ✓');
       callGas('assign', uid, function (data) {
-        _suppressDone = false;
         // 'already' = ответ прошлой привязки потерялся при таймауте — на сервере уже верно.
         var done = data && (data.match === 'ok' || data.match === 'already');
         if (!done) {
+          _doneAwaitAssign = false; _leaveAfterAssign = false;
           setStatus('bad', 'Не удалось привязать (' + ((data && (data.error || data.match)) || 'нет связи') + '). Повторите.');
+          var dp = document.getElementById('order-done-popup');
+          if (dp) { dp.classList.remove('show'); dp.innerHTML = ''; }   // прячем ошибочно показанный «собран»
           delete seen[uid];                               // дать пересканировать эту наклейку
           reloadOrder();                                  // откат к авторитетному состоянию сервера
-        } else if (_orderInitDone) {
-          updateOrderProgress();                          // подтверждено → теперь можно показать «Заказ собран»
+        } else {
+          _doneAwaitAssign = false;                       // подтверждено сервером
+          if (_leaveAfterAssign) leaveToWarehouse();      // работник уже нажал «Закрыть» — теперь безопасно уйти
         }
-        // успех — бейджик уже зелёный; не перерисовываем (моментально и без мигания).
+        // успех — бейджик уже зелёный (и попап «собран» уже показан, если добрали); не перерисовываем.
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug });
     }
 
