@@ -431,6 +431,66 @@
       });
     }
 
+    // ─── Подробный диагностический лог (п.7) ───────────────────────────────────
+    // Видно КАЖДОЕ действие сканера и сколько мс оно заняло: камера→запрос→ответ→отрисовка,
+    // + серверные тайминги (data.t) и ПРИЧИНУ решения (data.dbg: почему overscan/ok и т.д.).
+    // Маленькая кнопка «лог» внизу справа показывает панель; ?debug=1 в адресе открывает сразу.
+    // Лог пишется в память всегда (дёшево), на экране — только когда панель открыта.
+    var DBG = qparam('debug') === '1';
+    function perfNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+    function dnum(x) { return (x == null) ? '?' : Math.round(x); }
+    var DLINES = [];
+    function dlog(kind, code, info) {
+      try {
+        info = info || {};
+        var c = code ? seqToCode(String(code).split('-').pop()) : '';
+        var p = ['[' + nowTime() + ']', kind];
+        if (c) p.push(c);
+        if (info.res != null)   p.push('=' + info.res);
+        if (info.err)           p.push('ОШ:' + info.err);
+        if (info.net != null)   p.push('сеть:' + dnum(info.net) + 'мс');
+        if (info.total != null) p.push('итого:' + dnum(info.total) + 'мс');
+        if (info.srv) p.push('сервер:' + dnum(info.srv.total) + 'мс(лог' + dnum(info.srv.log) + '/тов' + dnum(info.srv.item)
+          + (info.srv.order != null ? '/зак' + dnum(info.srv.order) : '')
+          + (info.srv.sales != null ? '/выд' + dnum(info.srv.sales) : '')
+          + '/зап' + dnum(info.srv.write) + ')');
+        if (info.msg)           p.push(info.msg);
+        if (info.dbg)           p.push('| ' + info.dbg);
+        var line = p.join(' ');
+        DLINES.push(line); if (DLINES.length > 120) DLINES.shift();
+        try { console.log('[DBG]', line); } catch (e) {}
+        renderDbgPanel();
+      } catch (e) {}
+    }
+    function renderDbgPanel() {
+      var el = document.getElementById('dbg-panel');
+      if (!el || el.style.display === 'none') return;
+      el.textContent = DLINES.slice().reverse().join('\n');
+    }
+    function ensureDbgUI() {
+      if (document.getElementById('dbg-btn')) return;
+      var btn = document.createElement('button');
+      btn.id = 'dbg-btn'; btn.type = 'button'; btn.textContent = 'лог';
+      btn.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:100001;background:#222;color:#6cb2ff;border:1px solid #444;border-radius:8px;padding:6px 11px;font-size:13px;opacity:.8';
+      var clr = document.createElement('button');
+      clr.id = 'dbg-clr'; clr.type = 'button'; clr.textContent = 'очистить';
+      clr.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:100001;background:#222;color:#f99;border:1px solid #444;border-radius:8px;padding:6px 11px;font-size:13px;display:none';
+      var pan = document.createElement('div');
+      pan.id = 'dbg-panel';
+      pan.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:44vh;z-index:100000;background:rgba(0,0,0,.93);color:#cfe7ff;font:11px/1.5 ui-monospace,Menlo,monospace;padding:8px 10px 40px;overflow:auto;display:none;white-space:pre-wrap;border-top:2px solid #356';
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var show = pan.style.display === 'none';
+        pan.style.display = show ? 'block' : 'none';
+        clr.style.display = show ? 'block' : 'none';
+        if (show) renderDbgPanel();
+      });
+      clr.addEventListener('click', function (e) { e.stopPropagation(); DLINES = []; renderDbgPanel(); });
+      document.body.appendChild(pan); document.body.appendChild(btn); document.body.appendChild(clr);
+      if (DBG) { pan.style.display = 'block'; clr.style.display = 'block'; renderDbgPanel(); }
+    }
+    try { ensureDbgUI(); } catch (e) {}
+
     // Запрос к складу через JSONP (обход CORS для внешней страницы).
     //   action=activate   — скан: отметить «принято» + вернуть карточку товара
     //   action=deactivate — крестик: снять отметку
@@ -486,20 +546,37 @@
     }
 
     var lastScanAt = {};   // text → момент последнего чтения этого кода камерой
+    var lastFreshAt = 0;   // момент последнего НОВОГО скана (любой режим) — гасит ложный «уже» у соседа
+    var dupCand = { text: null, at: 0, warned: false };   // текущее «присутствие» уже-снятого кода в кадре
     function onScan(text) {
       var now = Date.now();
-      // Уже сканировали этот код. Камера читает один QR много раз в секунду, пока наведена, —
-      // на такие подряд-чтения молчим. Красную «Уже отсканировали ранее» (п.7) показываем
-      // только при ОСОЗНАННОМ повторном наведении: между чтениями этого кода был разрыв >1.2с.
+      var tDecode = perfNow();
+      // Уже сканировали этот код. Красную «Уже отсканировали ранее» показываем ТОЛЬКО когда код
+      // ОСОЗНАННО держат в кадре, и НЕ показываем (п.2а), если он лишь мелькнул, пока целятся в
+      // соседнюю наклейку. Отличаем по ВРЕМЕНИ ПРИСУТСТВИЯ кода в кадре (а не по числу чтений —
+      // оно зависит от fps декодера):
+      //  • прошло <1.5с с любого НОВОГО скана → сосед случайно попал в кадр, молчим;
+      //  • большой разрыв (>1.2с) с прошлым чтением = НОВОЕ появление кода → начинаем отсчёт, молчим;
+      //  • код держат непрерывно ≥0.4с → осознанный повтор → красный ОДИН раз за наведение.
       if (seen[text]) {
-        if (now - (lastScanAt[text] || 0) > 1200) { flashAimDup(); showScanToast('Уже отсканировали ранее'); vibeDup(); }
+        var prev = lastScanAt[text] || 0;
         lastScanAt[text] = now;
+        if (now - lastFreshAt < 1500) { dupCand = { text: null, at: 0, warned: false }; return; }
+        if (now - prev > 1200) { dupCand = { text: text, at: now, warned: false }; return; }
+        if (dupCand.text === text && !dupCand.warned && now - dupCand.at >= 400) {
+          dupCand.warned = true;
+          flashAimDup(); showScanToast('Уже отсканировали ранее'); vibeDup();
+          dlog('повтор', text, { res: 'уже сканировали' });
+        }
         return;
       }
       lastScanAt[text] = now;
-      flashAim();                                       // новый код — рамка зеленеет
-      vibeOk();                                         // зелёный скан — 1 короткая вибрация (п.2)
-      if (MODE === 'order') return onScanOrder(text);   // режим «Собрать заказ» — своя логика выдачи
+      lastFreshAt = now;                                // новый код → на 1.5с гасим ложное «уже» у соседей
+      dupCand = { text: null, at: 0, warned: false };
+      if (MODE === 'order') { flashAim(); vibeOk(); return onScanOrder(text, tDecode); }   // выдача — своя логика
+      // ПРИЁМКА: рамку зелёным заранее НЕ красим (п.2б) — иначе у уже принятой наклейки мелькал бы
+      // зелёный, а через мгновение красный. beep = «код пойман»; цвет рамки (зелёный/красный)
+      // ставит renderScanCard по ответу сервера (теперь быстрому — без лишней записи для дубля).
       seen[text] = true;        // сбрасывается только кнопкой «Очистить»
       beep();
       total++;
@@ -552,7 +629,11 @@
       });
 
       // скан = «принял эту единицу»: активируем на складе и рисуем карточку
+      var tSent = perfNow();
       callGas('activate', text, function (data) {
+        dlog('приёмка', text, {
+          res: data ? (data.alreadyActive ? 'дубль' : data.counted ? 'принято' : (data.error || '?')) : 'нет связи',
+          net: perfNow() - tSent, total: perfNow() - tDecode, srv: data && data.t, dbg: data && data.dbg });
         card._activating = false;
         if (card._pendingDeact) {                     // карточку уже сняли крестиком
           if (data && data.counted && !data.alreadyActive) sendDeactivate(text);  // снимаем только свежеучтённое
@@ -670,11 +751,13 @@
         card._num = data.num; card._variant = data.variant;
         // СНАЧАЛА класс состояния (он сбрасывает className), ПОТОМ фон/счётчики
         card.className = data.alreadyActive ? 'card dup' : 'card ok';
-        if (data.alreadyActive && dupEl) {
-          dupEl.textContent = 'товар уже есть в таблице';
+        if (data.alreadyActive) {
+          if (dupEl) dupEl.textContent = 'товар уже есть в таблице';
           // уже принимали эту наклейку раньше (в т.ч. в прошлой сессии) — красная рамка + плашка
-          // + двойная вибрация (п.1), как и при выдаче.
+          // + двойная вибрация (п.2), как и при выдаче.
           flashAimDup(); showScanToast('Уже отсканировали ранее'); vibeDup();
+        } else {
+          flashAim(); vibeOk();   // подтверждённый НОВЫЙ приём → зелёная рамка ПОСЛЕ ответа (п.2б), не оптимистично
         }
         // обновить счётчики/список/фон в ЭТОЙ карточке и во всех карточках того же типа
         applyVariantInfo(data.num, data.variant,
@@ -794,7 +877,11 @@
     // Зовём при старте и после ручной привязки/снятия выдачи — бейджики и коды
     // наклеек берутся из АВТОРИТЕТНОГО состояния сервера (givenBySlot/uidsBySlot).
     function reloadOrder() {
+      var t0 = perfNow();
       callGas('order_lookup', '', function (o) {
+        dlog('заказ загружен', '', {
+          res: (o && o.found) ? (((o.items || []).length) + ' поз.') : 'не найден',
+          net: perfNow() - t0, srv: o && o.t });
         renderOrderBadges(o || { found: false, items: [] });
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, fresh: 1 });   // fresh=1 — состав читаем СВЕЖИМ из листа (владелец мог поправить размер/цвет)
     }
@@ -1043,12 +1130,18 @@
     }
 
     // === Скан в режиме заказа: без нижней ленты — результат на бейджиках + баннере + попапе ===
-    function onScanOrder(text) {
-      seen[text] = true;        // дедуп/повторное наведение уже обработаны в onScan (п.7)
+    function onScanOrder(text, t0) {
+      t0 = t0 || perfNow();
+      seen[text] = true;        // дедуп/повторное наведение уже обработаны в onScan (п.2а)
       beep();                   // вибрация (зелёная) уже сработала в onScan (vibeOk)
       RETRY[text] = 0;
-      callGas('sell', text, function (data) { handleSellResult(text, data); },
-              { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+      var tSent = perfNow();
+      callGas('sell', text, function (data) {
+        dlog('выдача', text, {
+          res: data ? (data.match || data.error || '?') : 'нет связи',
+          net: perfNow() - tSent, total: perfNow() - t0, srv: data && data.t, dbg: data && data.dbg });
+        handleSellResult(text, data);
+      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
     }
 
     // Разбор ответа выдачи: совпало → зелёный бейджик + код; расхождение → попап выбора
@@ -1121,7 +1214,10 @@
       updateOrderProgress();
       delete seen[uid];                        // снятую наклейку можно сканировать заново
       setStatus('ok', 'Выдача снята');
+      dlog('снятие выдачи', uid, {});
+      var tUnsell = perfNow();
       callGas('unsell', uid, function (data) {
+        dlog('снятие выдачи', uid, { res: (data && data.ok) ? 'ок' : 'сбой', net: perfNow() - tUnsell, srv: data && data.t });
         if (!data || !data.ok) {
           setStatus('warn', 'Не удалось снять выдачу (склад занят/нет связи). Повторите.');
           reloadOrder();                       // откат к авторитетному состоянию сервера
@@ -1190,8 +1286,14 @@
       // заказа это РАЗМЕР, значит несовпадение РАЗМЕРНОЕ → «Размер не соответствует» + предлагаем
       // отметить нужную позицию. Если незакрытых позиций того же товара НЕТ → лишняя (overscan)
       // или другой товар — оба показываем как «товар не соответствует» (категория num, решение владельца).
+      // overscan = этот товар В заказе, но нужного уже выдано достаточно. При overscan НИКОГДА не
+      // предлагаем тикать ЧУЖИЕ позиции (анти-пересортица: лишнюю наклейку нельзя привязать к
+      // другому товару) — только незакрытые позиции ТОГО ЖЕ товара (другой размер, напр. «koza»).
+      var isOverscan = (data.match === 'overscan');
       var diffKind, treatAsNum;
       if (sameNum.length > 0) {
+        // есть НЕЗАКРЫТЫЕ позиции того же товара (напр. размер «koza») → не совпал размер/цвет,
+        // тикать можно ТОЛЬКО их (ручной подбор размера/цвета — анти-пересортица за работником).
         var colorMatch = false, sizeMatch = false;
         sameNum.forEach(function (it) {
           var oc = slugify(it.color || ''), os = slugify(cleanSize(it.size) || '');
@@ -1201,15 +1303,21 @@
         diffKind = (colorMatch && !sizeMatch) ? 'size'
                  : (sizeMatch && !colorMatch) ? 'color' : 'both';
         treatAsNum = false;                              // тикать можно только позиции ТОГО ЖЕ товара (подбор размера)
+      } else if (isOverscan) {
+        // нет открытых позиций того же товара → вещь реально ЛИШНЯЯ. Ничего не тикаем, просим отложить.
+        diffKind = 'enough';
+        treatAsNum = false;
       } else {
+        // wrong_order: товара нет в заказе → замена, тикать можно любую незакрытую позицию.
         diffKind = 'num';
-        treatAsNum = true;                               // нет незакрытых позиций того же товара → замена/лишняя
+        treatAsNum = true;
       }
       // Заголовки — СОГЛАСОВАННЫЕ 4 варианта (не выдумывать новых): товар / размер / цвет / оба.
-      var mTitle = diffKind === 'size'  ? 'Размер отсканированного товара не соответствует заказанному'
-                 : diffKind === 'color' ? 'Цвет отсканированного товара не соответствует заказанному'
-                 : diffKind === 'both'  ? 'Цвет и размер отсканированного товара не соответствует заказанному'
-                 :                        'Отсканированный товар не соответствует заказанному';
+      var mTitle = diffKind === 'size'   ? 'Размер отсканированного товара не соответствует заказанному'
+                 : diffKind === 'color'  ? 'Цвет отсканированного товара не соответствует заказанному'
+                 : diffKind === 'both'   ? 'Цвет и размер отсканированного товара не соответствует заказанному'
+                 : diffKind === 'enough' ? 'Этого товара уже достаточно'
+                 :                         'Отсканированный товар не соответствует заказанному';
       var hlName  = (diffKind === 'num');
       var hlColor = (diffKind === 'color' || diffKind === 'both');
       var hlSize  = (diffKind === 'size'  || diffKind === 'both');
@@ -1244,10 +1352,13 @@
       // несовпадения — жёлтым (это предупреждение, не «ошибка»); overscan — тоже жёлтым
       var titleCls = 'mpop-title warn';
       var nameHtml = '<div class="mname' + (hlName ? ' hl' : '') + '">' + esc(scanNum + (name ? ' | ' + name : '')) + '</div>';
-      // подсказка (жёлтым) + заголовок списка «Клиент заказал:» (белым)
-      // СОГЛАСОВАННАЯ подсказка — одна на все случаи (не выдумывать новых текстов).
-      var hintHtml = '<div class="mpop-pick warn">Сканируйте другой товар, либо отметьте галочкой этот товар в заказе клиента.</div>';
-      var listHeading = '<div class="mpop-pick">Клиент заказал:</div>';
+      // подсказка (жёлтым) + заголовок списка «Клиент заказал:» (белым). При «уже достаточно»
+      // (лишняя вещь) — тикать нечего: показываем только просьбу отложить, без списка позиций.
+      var isEnough = (diffKind === 'enough');
+      var hintHtml = isEnough
+        ? '<div class="mpop-pick warn">Этого товара в заказе уже достаточно — отложите лишнюю вещь.</div>'
+        : '<div class="mpop-pick warn">Сканируйте другой товар, либо отметьте галочкой этот товар в заказе клиента.</div>';
+      var listHeading = isEnough ? '' : '<div class="mpop-pick">Клиент заказал:</div>';
       var emptyTxt = 'Нет подходящих позиций. Отсканируйте другой товар.';
 
       pop.innerHTML =
@@ -1260,7 +1371,7 @@
         +   '</div></div>'
         + hintHtml
         + listHeading
-        + '<div class="mpop-list">' + (rows || '<div class="mpop-sub">' + esc(emptyTxt) + '</div>') + '</div>'
+        + '<div class="mpop-list">' + (isEnough ? '' : (rows || '<div class="mpop-sub">' + esc(emptyTxt) + '</div>')) + '</div>'
         + '<div class="mpop-foot"><button type="button" class="mpop-close">Сканировать другой товар</button>'
         +   '<div class="mpop-queue"></div></div>'
         + '</div>';
@@ -1342,13 +1453,22 @@
         var done = data && (data.match === 'ok' || data.match === 'already');
         if (!done) {
           _doneAwaitAssign = false; _leaveAfterAssign = false;
-          setStatus('bad', 'Не удалось привязать (' + ((data && (data.error || data.match)) || 'нет связи') + '). Повторите.');
+          // ВНЯТНАЯ причина отказа (п.3) вместо глухого «не удалось привязать»: чаще всего слот
+          // успели закрыть с другого устройства / попап устарел. reloadOrder обновит список,
+          // наклейку освобождаем — можно отсканировать заново и увидеть актуальное состояние.
+          var fm = data && data.match;
+          var fmsg = (fm === 'overscan')    ? 'Этого товара уже достаточно — отложите лишнюю вещь.'
+                   : (fm === 'wrong_order') ? 'Эта позиция не из заказа — выберите другую.'
+                   :                          'Не удалось привязать (' + ((data && (data.error || fm)) || 'нет связи') + '). Повторите.';
+          setStatus('bad', fmsg);
+          dlog('привязка', uid, { res: 'отказ', err: fm || (data && data.error) || 'нет связи', dbg: data && data.dbg });
           var dp = document.getElementById('order-done-popup');
           if (dp) { dp.classList.remove('show'); dp.innerHTML = ''; }   // прячем ошибочно показанный «собран»
           delete seen[uid];                               // дать пересканировать эту наклейку
           reloadOrder();                                  // откат к авторитетному состоянию сервера
         } else {
           _doneAwaitAssign = false;                       // подтверждено сервером
+          dlog('привязка', uid, { res: 'ок' });
           if (_leaveAfterAssign) leaveToWarehouse();      // работник уже нажал «Закрыть» — теперь безопасно уйти
         }
         // успех — бейджик уже зелёный (и попап «собран» уже показан, если добрали); не перерисовываем.
@@ -1392,6 +1512,7 @@
     startBtn.addEventListener('click', function () { start(false); });
     document.getElementById('clear').addEventListener('click', function () {
       listEl.innerHTML = ''; total = 0; seen = {}; cntEl.textContent = 'Отсканировано: 0';
+      lastScanAt = {}; lastFreshAt = 0; dupCand = { text: null, at: 0, warned: false };   // сброс дедупа вместе с seen
       listEl.classList.remove('show-all'); updateShowAll();
     });
 
