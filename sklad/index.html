@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>BERKONTI</title>
+
+<!-- Это НАША страница (верхний фрейм) — iOS видит её иконку и имя. Apps Script /exec отдаётся
+     внутри песочницы-iframe Google, поэтому apple-touch-icon из самой аппки iOS игнорирует.
+     Лаунчер: добавляешь НА ЭКРАН ДОМОЙ ЭТУ страницу → берётся логотип BERKONTI; тап по иконке
+     с домашнего экрана открывает склад /exec напрямую (аппка работает ровно как всегда). -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="BERKONTI">
+<meta name="application-name" content="BERKONTI">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #fff; color: #222; box-sizing: border-box; padding: 32px;
+         display: flex; flex-direction: column; align-items: center; justify-content: center;
+         gap: 26px; text-align: center; }
+  img.logo { width: 168px; height: 168px; }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; margin: 0; }
+  a.go { display: inline-block; font-size: 25px; font-weight: 700; color: #fff;
+         background: #1a73e8; text-decoration: none; padding: 18px 46px; border-radius: 16px; }
+  a.go:active { transform: scale(0.98); }
+  .hint { font-size: 16px; color: #8a909a; max-width: 360px; line-height: 1.55; }
+  .hint b { color: #5b616b; }
+</style>
+</head>
+<body>
+  <img class="logo" src="icon-512.png" alt="BERKONTI">
+  <h1>BERKONTI · Склад</h1>
+  <a class="go" id="go" href="https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec">Открыть склад</a>
+  <div class="hint">Чтобы поставить иконку на «Домой»: внизу <b>Поделиться</b> → <b>«На экран „Домой"»</b>.
+    Потом открывай склад с этой иконки.</div>
+
+  <script>
+    var GAS = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
+    // Запуск С ЭКРАНА «ДОМОЙ» (standalone) → сразу открываем склад. В обычном Safari НЕ редиректим,
+    // чтобы owner успел добавить страницу на «Домой» (и забрать нашу иконку).
+    var standalone = (window.navigator.standalone === true) ||
+                     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (standalone) { window.location.replace(GAS); }
+  </script>
+</body>
+</html>
