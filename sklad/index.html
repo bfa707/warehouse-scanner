@@ -5,10 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>BERKONTI</title>
 
-<!-- Это НАША страница (верхний фрейм) — iOS видит её иконку и имя. Apps Script /exec отдаётся
-     внутри песочницы-iframe Google, поэтому apple-touch-icon из самой аппки iOS игнорирует.
-     Лаунчер: добавляешь НА ЭКРАН ДОМОЙ ЭТУ страницу → берётся логотип BERKONTI; тап по иконке
-     с домашнего экрана открывает склад /exec напрямую (аппка работает ровно как всегда). -->
+<!-- Лаунчер-иконка склада. Это НАША страница (верхний фрейм) → iOS видит её apple-touch-icon.
+     Apps Script /exec отдаётся в песочнице-iframe Google, поэтому иконку из самой аппки iOS не берёт.
+     Добавляешь на «Домой» ЭТУ страницу → логотип BERKONTI; тап по иконке = чистый сплэш + переход в склад. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -21,34 +20,52 @@
 <link rel="manifest" href="manifest.webmanifest">
 
 <style>
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; height: 100%; background: #fff; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         background: #fff; color: #222; box-sizing: border-box; padding: 32px;
-         display: flex; flex-direction: column; align-items: center; justify-content: center;
-         gap: 26px; text-align: center; }
-  img.logo { width: 168px; height: 168px; }
-  h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; margin: 0; }
-  a.go { display: inline-block; font-size: 25px; font-weight: 700; color: #fff;
-         background: #1a73e8; text-decoration: none; padding: 18px 46px; border-radius: 16px; }
-  a.go:active { transform: scale(0.98); }
-  .hint { font-size: 16px; color: #8a909a; max-width: 360px; line-height: 1.55; }
-  .hint b { color: #5b616b; }
+         color: #1a1a1a; }
+
+  /* — Сплэш: белый экран, большой логотип BERKONTI + переливающееся название (вид «загрузки») — */
+  .splash { position: fixed; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 26px; padding: 32px;
+            box-sizing: border-box; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .splash .logo { width: 170px; height: 170px; animation: breathe 1.9s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { opacity: .82; transform: scale(1); }
+                       50%     { opacity: 1;   transform: scale(1.045); } }
+  /* «BERKONTI» — переливающийся градиент по тексту (shimmer) */
+  .splash .brand { font-size: 36px; font-weight: 800; letter-spacing: 4px;
+                   background: linear-gradient(100deg, #1a1a1a 30%, #b9b9b9 50%, #1a1a1a 70%);
+                   background-size: 220% 100%;
+                   -webkit-background-clip: text; background-clip: text; color: transparent;
+                   animation: shimmer 2.0s linear infinite; }
+  @keyframes shimmer { 0% { background-position: 220% 0; } 100% { background-position: -220% 0; } }
+
+  /* Подсказка «как поставить на Домой» — ТОЛЬКО в Safari (при установке), не на сплэше с иконки */
+  .hint { position: fixed; left: 0; right: 0; bottom: max(22px, env(safe-area-inset-bottom));
+          text-align: center; font-size: 15px; color: #9aa0a8; padding: 0 24px; line-height: 1.5; }
+  .hint b { color: #6b7280; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-  <img class="logo" src="icon-512.png" alt="BERKONTI">
-  <h1>BERKONTI · Склад</h1>
-  <a class="go" id="go" href="https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec">Открыть склад</a>
-  <div class="hint">Чтобы поставить иконку на «Домой»: внизу <b>Поделиться</b> → <b>«На экран „Домой"»</b>.
-    Потом открывай склад с этой иконки.</div>
+  <div class="splash" id="splash">
+    <img class="logo" src="icon-512.png" alt="BERKONTI">
+    <div class="brand">BERKONTI</div>
+  </div>
+  <div class="hint" id="hint" hidden>Чтобы поставить иконку: внизу <b>Поделиться</b> → <b>«На экран „Домой"»</b></div>
 
   <script>
     var GAS = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
-    // Запуск С ЭКРАНА «ДОМОЙ» (standalone) → сразу открываем склад. В обычном Safari НЕ редиректим,
-    // чтобы owner успел добавить страницу на «Домой» (и забрать нашу иконку).
     var standalone = (window.navigator.standalone === true) ||
                      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    if (standalone) { window.location.replace(GAS); }
+    if (standalone) {
+      // Запуск С ИКОНКИ: показываем чистый сплэш и сразу уходим в склад (без всякой инструкции).
+      setTimeout(function () { window.location.replace(GAS); }, 350);
+    } else {
+      // Открыто в Safari (чтобы добавить на «Домой»): показываем мелкую подсказку, по тапу — открыть склад.
+      var h = document.getElementById('hint'); if (h) h.hidden = false;
+      var sp = document.getElementById('splash');
+      if (sp) sp.addEventListener('click', function () { window.location.href = GAS; });
+    }
   </script>
 </body>
 </html>
