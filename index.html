@@ -536,6 +536,141 @@
     //   action=activate   — скан: отметить «принято» + вернуть карточку товара
     //   action=deactivate — крестик: снять отметку
     // onData получает объект {found,name,variant,photoUrl,...} либо null (нет связи).
+    // ── Повтор ТРАНСПОРТНЫХ сбоев с тем же ключом операции ────────────────────────────────────
+    // [ревью Кодекса «живучесть» 06.09.2026, HIGH] Повтор был только у приёмки и выдачи. У «снять
+    // выдачу», «привязать» и крестика приёмки его не было вовсе: один обрыв связи или занятый
+    // склад — и операции не случилось, хотя экран уже сказал «Выдача снята».
+    // Повторяем ТОЛЬКО транспортные исходы: нет ответа (data == null) и 'busy'. Содержательный
+    // отказ сервера («не из этого заказа», «уже выдано другому») повторять нельзя — он не изменится
+    // и второй раз только запутает.
+    // Ключ операции op у всех попыток ОДИН: если запись на самом деле прошла, а ответ потерялся,
+    // сервер отдаст исходный результат и второй раз в лист не полезет.
+    var RETRY_DELAYS = [1500, 3000, 6000];      // три попытки; дальше честно говорим человеку
+    // Привязка держит работницу у экрана («Сохраняю…», выход ждёт ответа), поэтому ей одна попытка
+    // повтора вместо трёх [круг Фейбла 06.09.2026, LOW-2]: иначе при мёртвой связи выход блокировался
+    // бы почти на две минуты. Снятие и крестик идут фоном — им полные три.
+    var RETRY_DELAYS_UI = [1500];
+    function callGasRetry(action, uid, extra, onDone, onGiveUp) {
+      var delays = (action === 'assign') ? RETRY_DELAYS_UI : RETRY_DELAYS;
+      var op = (extra && extra.op) || newOpId(action, uid);
+      var tries = 0;
+      function attempt() {
+        var ex = {}; for (var k in extra) ex[k] = extra[k];
+        ex.op = op;                                  // тот же ключ на все попытки
+        callGas(action, uid, function (data) {
+          var transient = !data || data.error === 'busy';
+          if (!transient) { jrnDone(op); onDone(data); return; }
+          // Попытки кончились — из журнала НЕ убираем: доделаем при следующем открытии страницы.
+          if (tries >= delays.length) { (onGiveUp || onDone)(data); return; }
+          var wait = delays[tries++];
+          RETRY_T[uid] = setTimeout(function () { delete RETRY_T[uid]; attempt(); }, wait);
+        }, ex);
+      }
+      IN_FLIGHT[uid] = true;
+      jrnAdd(action, uid, ex0());
+      function ex0() { var e = {}; for (var k in extra) e[k] = extra[k]; e.op = op; return e; }
+      attempt();
+    }
+
+    // ── ЖУРНАЛ СМЕНЫ: операции переживают перезагрузку страницы ────────────────────────────────
+    // [ревью Кодекса «живучесть» 06.09.2026, HIGH] Всё состояние сканера жило только в памяти:
+    // телефон перезагрузил страницу посреди серии из 20 вещей — и запросы, не дошедшие до сервера,
+    // исчезали совсем, а дошедшие без ответа оставались в неизвестности. Работница переделывала
+    // работу заново и уже не видела, что именно потерялось.
+    //
+    // Теперь каждая незавершённая операция лежит в localStorage телефона (сканер — отдельная
+    // страница на своём домене, его хранилище аппка не стирает). При открытии страницы недоделанное
+    // отправляется заново С ТЕМ ЖЕ ключом op: если сервер её уже выполнил, он отдаст исходный ответ
+    // и второй раз в лист не полезет.
+    //
+    // ⚠️ Это НЕ гарантия: приватное окно, чистка данных браузера или смена телефона журнал уносят.
+    // Поэтому он не молчаливый — при восстановлении показываем человеку, сколько наклеек доделываем.
+    var JRN_KEY = 'wh_scan_journal_v1';
+    var JRN_TTL = 6 * 60 * 60 * 1000;         // 6 часов: смена кончилась — старое не воскрешаем
+    function jrnRead() {
+      try {
+        var raw = localStorage.getItem(JRN_KEY);
+        if (!raw) return {};
+        var o = JSON.parse(raw), now = Date.now(), out = {};
+        Object.keys(o).forEach(function (k) { if (now - (o[k].at || 0) < JRN_TTL) out[k] = o[k]; });
+        return out;
+      } catch (e) { return {}; }             // хранилище недоступно — работаем как раньше
+    }
+    function jrnWrite(all) {
+      try { localStorage.setItem(JRN_KEY, JSON.stringify(all)); } catch (e) {}
+    }
+    function jrnAdd(action, uid, extra) {
+      var all = jrnRead();
+      all[(extra && extra.op) || (action + '|' + uid)] =
+        { action: action, uid: uid, extra: extra || {}, at: Date.now() };
+      jrnWrite(all);
+    }
+    function jrnDone(op) {
+      if (!op) return;
+      var all = jrnRead();
+      if (all[op]) { delete all[op]; jrnWrite(all); }
+    }
+    // Доделать недоделанное после перезагрузки. Зовём один раз при открытии страницы.
+    // Сколько живёт серверная защита «этот же op уже сделан» (OPID_CACHE_TTL на сервере — 5 минут).
+    // Старше — переигрывать РАЗРУШАЮЩЕЕ нельзя.
+    var JRN_SAFE_REPLAY_MS = 5 * 60 * 1000;
+    function jrnRestore() {
+      var all = jrnRead(), keys = Object.keys(all);
+      if (!keys.length) return;
+      // ⚠️ СНЯТИЕ НЕ ПЕРЕИГРЫВАЕМ ВСЛЕПУЮ [круг Фейбла 06.09.2026, MED-3]. Пока запись лежала в
+      // журнале, ту же наклейку могли снять и ВЫДАТЬ ЗАНОВО тому же заказу. Серверная сверка
+      // «тот же заказ?» тогда совпадёт, и старое снятие молча сотрёт СВЕЖУЮ выдачу — работница
+      // выдаст вторую вещь. Пока жива защита по ключу операции (5 минут) повтор безопасен: сервер
+      // узнает его и ничего не сделает. Дальше — не гадаем, а просим человека проверить.
+      var stale = [];
+      keys = keys.filter(function (op) {
+        var j = all[op];
+        var destructive = (j.action === 'unsell' || j.action === 'deactivate');
+        if (destructive && Date.now() - (j.at || 0) > JRN_SAFE_REPLAY_MS) { stale.push(j); jrnDone(op); return false; }
+        return true;
+      });
+      // Текст про непереигранное снятие несём ДАЛЬШЕ [круг Фейбла 06.09.2026, LOW-1]: сам по себе
+      // он тут же перекрывался следующим статусом «доделываю…» и человек его не видел.
+      var staleNote = stale.length
+        ? (' · ПРОВЕРЬТЕ вручную снятие: ' + stale.map(function (j) { return codeFromUid(j.uid); }).join(', '))
+        : '';
+      if (staleNote && !keys.length) {
+        setStatus('bad', 'ПРОВЕРЬТЕ вручную: снятие так и не подтвердилось — '
+                  + stale.map(function (j) { return codeFromUid(j.uid); }).join(', '));
+      }
+      if (!keys.length) return;
+      setStatus(staleNote ? 'bad' : 'warn',
+                'Страница перезагружалась — доделываю ' + keys.length + ' наклеек…' + staleNote);
+      // ⚠️ ПО ОДНОЙ, А НЕ ВСЕ РАЗОМ [круг Кодекса 06.09.2026, HIGH-3]: двадцать записей давали
+      // двадцать одновременных запросов, они дрались за общий замок, получали busy — и раньше
+      // журнал объявлял их завершёнными. Здесь спешить некуда: это фон после перезагрузки,
+      // работница уже сканирует дальше, и очередь из своих же запросов ей только мешает.
+      var qi = 0;
+      (function next() {
+        if (qi >= keys.length) {
+          var leftEnd = Object.keys(jrnRead()).length;
+          setStatus((leftEnd || staleNote) ? (staleNote ? 'bad' : 'warn') : 'ok',
+            (leftEnd ? ('Осталось доделать ' + leftEnd + ' — склад занят или нет связи, доделаю при следующем заходе')
+                     : 'Всё недоделанное с прошлого раза записано ✓') + staleNote);
+          return;
+        }
+        var op = keys[qi++];
+        var j = all[op];
+        var ex = {}; for (var k in j.extra) ex[k] = j.extra[k];
+        ex.op = op;                          // ТОТ ЖЕ ключ: сервер отдаст исходный ответ, если уже сделал
+        callGas(j.action, j.uid, function (data) {
+          // ⚠️ «Склад занят», «нет ответа» и «наклейка ещё пишется» — ЭТО НЕ ИСХОД
+          // [круг Фейбла MED-1 + круг Кодекса HIGH-3]. Раньше любой непустой ответ вычёркивал
+          // запись, и экран говорил «всё записано» — неправда: при троих работницах занятый склад
+          // дело обычное, а not_in_log обычные обработчики сами считают временным и повторяют.
+          if (!data || data.error === 'busy' || data.error === 'not_in_log') { /* оставляем */ }
+          else jrnDone(op);                  // содержательный исход (в т.ч. отказ) — второй раз не шлём
+          setStatus(staleNote ? 'bad' : 'warn', 'Доделываю… осталось ' + (keys.length - qi) + staleNote);
+          next();                            // следующая — только после ответа предыдущей
+        }, ex);
+      })();
+    }
+
     var jsonpId = 0;
     function callGas(action, uid, onData, extra) {
       onData = onData || function () {};
@@ -680,6 +815,7 @@
       var tSent = perfNow();
       card._op = newOpId('activate', text);        // повтор после таймаута идёт С ТЕМ ЖЕ op (HIGH-4)
       IN_FLIGHT[text] = true;
+      jrnAdd('activate', text, { op: card._op });
       callGas('activate', text, function (data) {
         delete IN_FLIGHT[text];
         dlog('приёмка', text, {
@@ -747,22 +883,24 @@
     // Снять активацию с проверкой ответа: при сбое (нет связи / склад занят /
     // нет в журнале) НЕ молчим — предупреждаем, чтобы отметка не осталась висеть.
     function sendDeactivate(uid) {
-      var opDeact = newOpId('deact', uid);
-      callGas('deactivate', uid, function (data) {
+      // Транспортные сбои повторяем сами [ревью Кодекса «живучесть», HIGH]: карточку работница уже
+      // убрала с экрана, и молча оставить отметку «принято» висеть нельзя.
+      callGasRetry('deactivate', uid, {}, function (data) {
+        delete IN_FLIGHT[uid];
         if (!data || !data.ok) {
           showErr(data && data.error === 'issued'
             ? ('Снять приёмку нельзя: вещь уже выдана по заказу ' + (data.orderNo || '') +
                '. Сначала снимите выдачу в заказе.')                       // MED-4
             : (data && data.commitUncertain
                ? 'Таблица НЕ подтвердила снятие — проверьте её и повторите.'   // MED-1
-               : 'Не удалось снять отметку с одной единицы (склад занят/нет связи). ' +
+               : 'Не удалось снять отметку даже с трёх попыток (нет связи / склад занят). ' +
                  'Отсканируйте её заново и снимите ещё раз.'));
           return;
         }
         // после снятия — обновить счётчики/список во всех карточках этого типа
         applyVariantInfo(data.num, data.variant,
           { bought: data.bought, scanned: data.scanned, printed: data.printed });
-      }, { op: opDeact });
+      });
     }
 
     // Карточка по ответу activate. Зелёная — ТОЛЬКО когда реально учтено (counted).
@@ -771,6 +909,9 @@
     // карточки и без накрутки «Отсканировано» — seen НЕ трогаем). Реально «не найдено»
     // или «позиции нет на складе» → красная, без повтора.
     function renderScanCard(card, data) {
+      // Определённый исход по этой наклейке — из журнала смены её убираем (транзиентные сбои
+      // ниже сами поставят повтор и оставят запись).
+      if (data && data.error !== 'busy' && data.error !== 'not_in_log') jrnDone(card._op);
       var wasFresh = !!card._fresh, wasRejected = !!card._rejected;
       card._fresh = !!(data && data.counted && !data.alreadyActive);   // ИМЕННО этот скан учёл (не дубль)
       // «Принято» считаем ТОЛЬКО по подтверждённому новому переходу (LOW-1); всё остальное —
@@ -835,7 +976,8 @@
       }
 
       // транзиентные сбои → жёлтая + повтор
-      var notFlushed = data && data.error === 'not_in_log' && (data.found || data.name);
+      card._lastErr = data && data.error ? data.error : (data ? '' : 'no_net');
+      var notFlushed = data && data.error === 'not_in_log';   // карточку покажем, даже если каталог молчит
       var isBusy     = data && data.error === 'busy';
       var noConn     = !data;
       if (notFlushed || isBusy || noConn) {
@@ -883,9 +1025,17 @@
       card._retries = (card._retries || 0) + 1;
       if (card._retries > 4) {
         var n = card.querySelector('.name');
-        if (n) n.textContent = 'Не удалось учесть — нажмите ✕ и отсканируйте заново';
         delete IN_FLIGHT[card._uid];
         if (!card._rejected) { card._rejected = true; rejected++; renderReceiptCount(); }   // LOW-10
+        // ⚠️ «Наклейки нет в журнале печати» после пяти попыток — это НЕ связь, это потерянная
+        // регистрация тиража [ревью Кодекса «живучесть», HIGH]. Наклейка у работницы в руках, и
+        // это доказательство: даём кнопку дописать её в журнал и принять.
+        if (card._lastErr === 'not_in_log') {
+          if (n) n.textContent = 'Этой наклейки нет в журнале печати — тираж не записался';
+          showFixButton(card);
+        } else if (n) {
+          n.textContent = 'Не удалось учесть — нажмите ✕ и отсканируйте заново';
+        }
         return;
       }
       setTimeout(function () {
@@ -899,6 +1049,61 @@
           renderScanCard(card, data);
         }, { op: card._op });
       }, 2000);
+    }
+
+    // Кнопка «Записать в журнал» на карточке, у которой тираж потерялся. Сервер разберёт UnitID
+    // по каталогу и допишет ту самую строку, которую записала бы печать; всё неоднозначное он
+    // отвергнет сам (неизвестный номер, дубль номера, нераспознанный вариант).
+    function showFixButton(card) {
+      if (!card || card.querySelector('.fixbtn')) return;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'fixbtn';
+      b.textContent = 'Записать в журнал и принять';
+      b.style.cssText = 'margin-top:8px;padding:10px 14px;border:0;border-radius:10px;'
+        + 'background:#0b8043;color:#fff;font:700 15px inherit;cursor:pointer';
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        b.disabled = true; b.textContent = 'Записываю…';
+        callGas('register_lost', card._uid, function (data) {
+          if (!data || !data.ok) {
+            b.disabled = false; b.textContent = 'Записать в журнал и принять';
+            // ⚠️ Словарь обязан знать ВСЕ отказы сервера [круг Фейбла 06.09.2026, MED-1]: после
+            // переписывания дозаписи здесь остались старые коды, а новые уходили на телефон как
+            // «ambiguous_src» — работница такого не понимает и звонит владельцу.
+            var why = !data ? 'нет связи'
+              : data.error === 'ambiguous_src'
+                  ? ('такая же наклейка есть сразу в нескольких закупках ('
+                     + ((data.srcIds || []).length || 2) + ') — аппка не знает, чья это вещь. '
+                     + 'Перепечатайте наклейку из нужной закупки')
+              : data.error === 'unknown_label'
+                  ? 'по этому коду в каталогах нет такого товара с таким цветом/размером — '
+                    + 'возможно, строку каталога переименовали. Перепечатайте наклейку'
+              : data.error === 'seq_not_issued'
+                  ? 'номер этой наклейки ещё не выдавался — код не наш или счётчик наклеек сбрасывали'
+              : data.error === 'code_taken'
+                  ? 'этот короткий код уже стоит за другой наклейкой — перепечатайте'
+              : (data.error === 'bad_uid' || data.error === 'no_uid')
+                  ? 'код наклейки прочитан неверно — отсканируйте ещё раз'
+              : data.error === 'busy' ? 'склад занят — нажмите ещё раз через секунду'
+              : data.commitUncertain ? 'таблица не подтвердила запись — проверьте её'
+              : (data.error || 'сбой');
+            showErr('Не удалось дописать наклейку: ' + why + '.');
+            return;
+          }
+          // Строка появилась — принимаем вещь обычным путём, с новым ключом операции.
+          b.remove();
+          card.className = 'card loading';
+          card._retries = 0; card._op = newOpId('activate', card._uid);
+          IN_FLIGHT[card._uid] = true;
+          jrnAdd('activate', card._uid, { op: card._op });
+          callGas('activate', card._uid, function (d2) {
+            delete IN_FLIGHT[card._uid];
+            renderScanCard(card, d2);
+          }, { op: card._op });
+        });
+      });
+      var meta = card.querySelector('.meta') || card;
+      meta.appendChild(b);
     }
 
     // Разбить вариант («beige» / «beige XL» / «blue M») на цвет и размер.
@@ -996,13 +1201,33 @@
     // подгрузка/перечитка заказа (uid не нужен — order_lookup читает src/no/nick).
     // Зовём при старте и после ручной привязки/снятия выдачи — бейджики и коды
     // наклеек берутся из АВТОРИТЕТНОГО состояния сервера (givenBySlot/uidsBySlot).
+    var _reloadTries = 0;
     function reloadOrder() {
       var t0 = perfNow();
       callGas('order_lookup', '', function (o) {
         dlog('заказ загружен', '', {
-          res: (o && o.found) ? (((o.items || []).length) + ' поз.') : 'не найден',
+          res: (o && o.found) ? (((o.items || []).length) + ' поз.') : (o ? 'не найден' : 'нет ответа'),
           net: perfNow() - t0, srv: o && o.t });
-        renderOrderBadges(o || { found: false, items: [] });
+        // ⚠️ НЕТ ОТВЕТА — ЭТО НЕ «ЗАКАЗ НЕ НАЙДЕН» [ревью Кодекса «живучесть» 06.09.2026, MED].
+        // Раньше оба случая рисовали один экран, и работница шла проверять номер, хотя дело было
+        // в связи. Уже показанный заказ НЕ стираем — он верен, просто не обновился.
+        if (!o) {
+          if (_reloadTries < 3) {
+            _reloadTries++;
+            setStatus('warn', 'Нет ответа склада — пробую ещё раз (' + _reloadTries + ' из 3)…');
+            setTimeout(reloadOrder, 1500 * _reloadTries);
+            return;
+          }
+          setStatus('bad', 'Склад не отвечает. Заказ показан на момент последней загрузки — обновите позже.');
+          if (!ORDER || !ORDER.found) {
+            document.getElementById('order-grid').innerHTML =
+              '<div class="ord-empty">Нет ответа склада.<br>Это НЕ значит, что заказа нет —'
+              + '<br>проверьте связь и потяните страницу заново.</div>';
+          }
+          return;
+        }
+        _reloadTries = 0;
+        renderOrderBadges(o);
       }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, fresh: 1 });   // fresh=1 — состав читаем СВЕЖИМ из листа (владелец мог поправить размер/цвет)
     }
 
@@ -1312,6 +1537,7 @@
       RETRY[text] = 0;
       OP_BY_UID[text] = newOpId('sell', text);
       IN_FLIGHT[text] = true;
+      jrnAdd('sell', text, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, op: OP_BY_UID[text] });
       var tSent = perfNow();
       callGas('sell', text, function (data) {
         delete IN_FLIGHT[text];
@@ -1326,6 +1552,8 @@
     // позиции; лишнее/уже выдано → баннер; транзиентный сбой → тихий повтор (без карточки).
     function handleSellResult(uid, data) {
       delete IN_FLIGHT[uid];                       // ответ пришёл; неопределённые исходы вернут флаг ниже
+      // Определённый исход — вычёркиваем из журнала смены; транзиентный оставляем (доделаем).
+      if (data && data.error !== 'busy' && data.error !== 'not_in_log') jrnDone(OP_BY_UID[uid]);
       if (!data || data.error === 'busy' || data.error === 'not_in_log') {
         if (!data)                      setStatus('warn', 'Нет связи — повтор…');
         else if (data.error === 'busy') setStatus('warn', 'Склад занят — повтор…');
@@ -1452,24 +1680,24 @@
       setStatus('ok', 'Выдача снята');
       dlog('снятие выдачи', uid, {});
       var tUnsell = perfNow();
-      var opUnsell = newOpId('unsell', uid);
-      IN_FLIGHT[uid] = true;
-      callGas('unsell', uid, function (data) {
+      // Транспортные сбои повторяем сами [ревью Кодекса «живучесть», HIGH]: экран уже сказал
+      // «Выдача снята», и молча оставить её несделанной нельзя.
+      callGasRetry('unsell', uid, { no: RESOLVED_NO || ORDER_NO, src: SRC, nick: ORDER_NICK }, function (data) {
         delete IN_FLIGHT[uid];
         dlog('снятие выдачи', uid, { res: (data && data.ok) ? 'ок' : 'сбой', net: perfNow() - tUnsell, srv: data && data.t });
         if (!data || !data.ok) {
+          // 'not_sold' сервер теперь отдаёт с ok:true — состояние «не выдано» достигнуто,
+          // это успех [круг Кодекса 06.09.2026, MED-2], сюда он больше не попадает.
           // unsell_conflict (внешнее ревью CRIT-3): наклейку уже сняли и выдали другому заказу —
           // сервер НЕ стал стирать чужую актуальную выдачу. Перечитываем заказ к авторитетному
           // состоянию (наш оптимистичный серый бейджик откатится к реальному).
           setStatus('warn', (data && data.match === 'unsell_conflict')
             ? 'Крестик не применён: наклейка уже числится за другим заказом. Обновляю…'
-            : 'Не удалось снять выдачу (склад занят/нет связи). Повторите.');
+            : 'Не удалось снять выдачу даже с трёх попыток (нет связи / склад занят). Обновляю заказ — проверьте.');
           reloadOrder();                       // откат к авторитетному состоянию сервера
         }
         // успех — бейджик уже серый; не перерисовываем (моментально и без мигания).
-        // no: разрешённый сервером номер (при открытии по нику ORDER_NO пуст) — без него
-        // серверная сверка «та ли это выдача» выключается [HIGH-6].
-      }, { no: RESOLVED_NO || ORDER_NO, src: SRC, nick: ORDER_NICK, op: opUnsell });
+      });
     }
 
     // Очередь расхождений (п.2): при серийном скане несколько проблемных наклеек копятся,
@@ -1711,8 +1939,10 @@
       PENDING_ASSIGN[uid] = true; IN_FLIGHT[uid] = true;
       if (!wasShown && _donePopupShown) _doneAwaitAssign = true;
       setStatus('warn', 'Сохраняю привязку…');
-      var opAssign = newOpId('assign', uid);
-      callGas('assign', uid, function (data) {
+      // Транспортные сбои повторяем сами [ревью Кодекса «живучесть», HIGH]: бейджик уже занят
+      // этой наклейкой, и потерять привязку из-за одного обрыва нельзя.
+      callGasRetry('assign', uid, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug },
+        function (data) {
         // 'already' = ответ прошлой привязки потерялся при таймауте — на сервере уже верно.
         var done = data && (data.match === 'ok' || data.match === 'already') && !data.commitUncertain;
         delete PENDING_ASSIGN[uid]; delete IN_FLIGHT[uid];
@@ -1744,7 +1974,7 @@
           }
         }
         // успех — бейджик уже зелёный (и попап «собран» уже показан, если добрали); не перерисовываем.
-      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug, op: opAssign });
+      });
     }
 
     // auto=true — тихая попытка включить камеру при открытии страницы. Сработает,
@@ -1789,6 +2019,7 @@
     });
 
     renderReceiptCount();          // сразу показываем «Принято: 0 · считано: 0»
+    jrnRestore();                  // доделать то, что не успели до перезагрузки страницы
 
     // Пробуем включить камеру сразу при открытии. Если доступ ещё не разрешён
     // (первый заход на iPhone) — покажется кнопка «Включить камеру».
