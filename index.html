@@ -2,6 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<!-- ⚠️ Страница закрыта от поисковиков [владелец, коммит noindex в репозитории Pages]. Держим
+     мету ЗДЕСЬ, в источнике: без неё каждая следующая выкладка сканера её молча стирала. -->
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -35,6 +37,11 @@
          border-radius: 12px; pointer-events: none; display: none; transition: border-color .12s, box-shadow .12s; }
   /* поймали QR — рамка зеленеет (визуальный отклик, что код считан) */
   .aim.caught { border-color: #34d058; box-shadow: 0 0 0 4px rgba(52,208,88,.35), 0 0 18px rgba(52,208,88,.5); }
+  /* «код считан», ответа сервера ещё нет — НЕЙТРАЛЬНЫЙ жёлтый, не зелёный (HIGH-3) */
+  .aim.seen { border-color: #f0c040; box-shadow: 0 0 0 3px rgba(240,192,64,.28); }
+  /* ручная замена отправлена, ответа сервера ещё нет: НЕ зелёный, иначе он читается как готово
+     [круг Фейбла 06.09.2026, LOW-2 — правило .saving отсутствовало, и бейджик оставался зелёным] */
+  .obadge.done.saving { background: #3b3418; border-left-color: #e8a317; }
   /* при qrbox html5-qrcode рисует свою рамку/затемнение — прячем её, оставляем свой .aim */
   #qr-shaded-region { display: none !important; }
   .start { display: block; width: calc(100% - 32px); max-width: 380px; margin: 16px auto 6px;
@@ -314,12 +321,25 @@
         b.addEventListener('click', function (e) {
           e.preventDefault();
           e.stopPropagation();                      // не запускать камеру при выходе
-          leaveToWarehouse();
+          // Незавершённые повторы/привязки не бросаем молча (CRIT-1) — спрашиваем.
+          if (typeof warnIfPending === 'function') warnIfPending(leaveToWarehouse);
+          else leaveToWarehouse();
         });
       }
     })();
 
     var qr = null, seen = {}, total = 0;
+    // ДВА РАЗНЫХ ЧИСЛА [ревью Кодекса 06.09.2026, LOW-1]: total — сколько кодов ПРОЧИТАЛА камера,
+    // accepted — сколько вещей сервер РЕАЛЬНО принял (новый переход). Раньше показывали только
+    // первое, и оно случайно совпадало с числом вещей в коробке, хотя дубли, «нет в журнале» и
+    // упавшие запросы тоже прибавляли единицу — коробку закрывали с недостающей записью.
+    var accepted = 0, rejected = 0;
+    function renderReceiptCount() {
+      var el = document.getElementById('cnt');
+      if (!el) return;
+      el.textContent = 'Принято: ' + accepted + ' · считано: ' + total
+                     + (rejected ? ' · не принято: ' + rejected : '');
+    }
 
     // Возврат на склад (кнопка «Назад» и «Закрыть» в попапе «Заказ собран»): моментально
     // накрываем экран «Загрузка…» (чтобы не было видно, как сканер «съезжает» при гашении
@@ -392,9 +412,23 @@
       updateShowAll();
     });
 
+    // ОДИН AudioContext на сессию [ревью Кодекса 06.09.2026, ускорение №11]: раньше каждый писк
+    // создавал новый и не закрывал его — на серии из 30 вещей телефон копил объекты, звук мог
+    // отвалиться совсем. Контекст возобновляем (iOS отдаёт его 'suspended' до касания экрана).
+    var _ac = null;
+    function audioCtx() {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        if (!_ac) _ac = new AC();
+        if (_ac.state === 'suspended' && _ac.resume) { try { _ac.resume(); } catch (e) {} }
+        return _ac;
+      } catch (e) { return null; }
+    }
     function beep() {
       try {
-        var ac = new (window.AudioContext || window.webkitAudioContext)();
+        var ac = audioCtx();
+        if (!ac) return;
         var o = ac.createOscillator(), g = ac.createGain();
         o.connect(g); g.connect(ac.destination);
         o.frequency.value = 880; o.start();
@@ -407,6 +441,12 @@
     // Вибрация (п.2): зелёный скан — 1 короткая; красная рамка «уже сканировали» — 2 коротких.
     function vibeOk()  { try { if (navigator.vibrate) navigator.vibrate(55); } catch (e) {} }
     function vibeDup() { try { if (navigator.vibrate) navigator.vibrate([55, 90, 55]); } catch (e) {} }
+    // «код считан» — НЕЙТРАЛЬНЫЙ отклик [ревью Кодекса 06.09.2026, HIGH-3]. Раньше в режиме заказа
+    // сразу давали ЗЕЛЁНЫЙ + успешную вибрацию, а сервер только через 4,4–7,0 с мог ответить
+    // «не тот размер / не из этого заказа». Работник к тому моменту уже смотрел на следующую вещь
+    // и клал непривязанную вещь в посылку. Теперь: тихая короткая вибрация = «увидел код»,
+    // зелёный — только по подтверждению сервера.
+    function vibeSeen() { try { if (navigator.vibrate) navigator.vibrate(18); } catch (e) {} }
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
     function nowTime() {
@@ -527,10 +567,13 @@
     var _aimT = null;
     function setAim(cls) {
       if (!aim) return;
-      aim.classList.remove('caught', 'dup');
+      aim.classList.remove('caught', 'dup', 'seen');
       if (cls) aim.classList.add(cls);
       if (_aimT) clearTimeout(_aimT);
-      _aimT = setTimeout(function () { aim.classList.remove('caught', 'dup'); }, cls === 'dup' ? 1500 : 600);
+      // «seen» держим дольше (до ответа сервера) — иначе рамка гасла и работник не понимал,
+      // ждёт ли что-то ещё. Ответ перекрасит её сам.
+      var hold = (cls === 'dup') ? 1500 : (cls === 'seen') ? 8000 : 600;
+      _aimT = setTimeout(function () { aim.classList.remove('caught', 'dup', 'seen'); }, hold);
     }
     function flashAim()    { setAim('caught'); }   // новый код — зелёным
     function flashAimDup() { setAim('dup'); }      // уже сканировали — красным
@@ -574,14 +617,16 @@
       lastScanAt[text] = now;
       lastFreshAt = now;                                // новый код → на 1.5с гасим ложное «уже» у соседей
       dupCand = { text: null, at: 0, warned: false };
-      if (MODE === 'order') { flashAim(); vibeOk(); return onScanOrder(text, tDecode); }   // выдача — своя логика
+      // ⚠️ НЕ красим рамку зелёным и НЕ даём «успешную» вибрацию до ответа сервера (HIGH-3):
+      // только нейтральный «код считан». Зелёный ставит handleSellResult по исходу.
+      if (MODE === 'order') { setAim('seen'); vibeSeen(); return onScanOrder(text, tDecode); }   // выдача — своя логика
       // ПРИЁМКА: рамку зелёным заранее НЕ красим (п.2б) — иначе у уже принятой наклейки мелькал бы
       // зелёный, а через мгновение красный. beep = «код пойман»; цвет рамки (зелёный/красный)
       // ставит renderScanCard по ответу сервера (теперь быстрому — без лишней записи для дубля).
       seen[text] = true;        // сбрасывается только кнопкой «Очистить»
       beep();
       total++;
-      cntEl.textContent = 'Отсканировано: ' + total;
+      renderReceiptCount();
 
       var card = document.createElement('div');
       card.className = 'card loading';
@@ -612,9 +657,11 @@
         // НЕблокирующее подтверждение — нативный confirm() морозит камеру на iOS.
         askConfirm('Удалить этот товар?', function () {   // пункт 7 — подтверждение
           if (card.parentNode) card.parentNode.removeChild(card);
-          delete seen[text];                            // код снова можно отсканировать
+          delete seen[text]; delete IN_FLIGHT[text];    // код снова можно отсканировать (и он больше не «в полёте»)
           total = Math.max(0, total - 1);
-          cntEl.textContent = 'Отсканировано: ' + total;
+          if (card._fresh) accepted = Math.max(0, accepted - 1);
+          if (card._rejected) rejected = Math.max(0, rejected - 1);
+          renderReceiptCount();
           updateShowAll();
           // если activate ещё не вернулся — снимем ПОСЛЕ него (иначе deactivate может
           // обогнать activate, и единица останется активной при удалённой карточке).
@@ -631,7 +678,10 @@
 
       // скан = «принял эту единицу»: активируем на складе и рисуем карточку
       var tSent = perfNow();
+      card._op = newOpId('activate', text);        // повтор после таймаута идёт С ТЕМ ЖЕ op (HIGH-4)
+      IN_FLIGHT[text] = true;
       callGas('activate', text, function (data) {
+        delete IN_FLIGHT[text];
         dlog('приёмка', text, {
           res: data ? (data.alreadyActive ? 'дубль' : data.counted ? 'принято' : (data.error || '?')) : 'нет связи',
           net: perfNow() - tSent, total: perfNow() - tDecode, srv: data && data.t, dbg: data && data.dbg });
@@ -641,7 +691,7 @@
           return;
         }
         renderScanCard(card, data);
-      });
+      }, { op: card._op });
     }
 
     // info = {bought, scanned, printed:[{code,scanned}]} — данные по товару+варианту.
@@ -697,16 +747,22 @@
     // Снять активацию с проверкой ответа: при сбое (нет связи / склад занят /
     // нет в журнале) НЕ молчим — предупреждаем, чтобы отметка не осталась висеть.
     function sendDeactivate(uid) {
+      var opDeact = newOpId('deact', uid);
       callGas('deactivate', uid, function (data) {
         if (!data || !data.ok) {
-          showErr('Не удалось снять отметку с одной единицы (склад занят/нет связи). ' +
-                  'Отсканируйте её заново и снимите ещё раз.');
+          showErr(data && data.error === 'issued'
+            ? ('Снять приёмку нельзя: вещь уже выдана по заказу ' + (data.orderNo || '') +
+               '. Сначала снимите выдачу в заказе.')                       // MED-4
+            : (data && data.commitUncertain
+               ? 'Таблица НЕ подтвердила снятие — проверьте её и повторите.'   // MED-1
+               : 'Не удалось снять отметку с одной единицы (склад занят/нет связи). ' +
+                 'Отсканируйте её заново и снимите ещё раз.'));
           return;
         }
         // после снятия — обновить счётчики/список во всех карточках этого типа
         applyVariantInfo(data.num, data.variant,
           { bought: data.bought, scanned: data.scanned, printed: data.printed });
-      });
+      }, { op: opDeact });
     }
 
     // Карточка по ответу activate. Зелёная — ТОЛЬКО когда реально учтено (counted).
@@ -715,7 +771,19 @@
     // карточки и без накрутки «Отсканировано» — seen НЕ трогаем). Реально «не найдено»
     // или «позиции нет на складе» → красная, без повтора.
     function renderScanCard(card, data) {
+      var wasFresh = !!card._fresh, wasRejected = !!card._rejected;
       card._fresh = !!(data && data.counted && !data.alreadyActive);   // ИМЕННО этот скан учёл (не дубль)
+      // «Принято» считаем ТОЛЬКО по подтверждённому новому переходу (LOW-1); всё остальное —
+      // в «не принято», чтобы работник видел реальный недобор коробки.
+      // «Не принято» — ЛЮБОЙ исход, кроме нового учтённого приёма и дубля: включая «нет связи»
+      // (data == null) [круг Кодекса 06.09.2026, LOW-10]. Дубль (alreadyActive) — отдельный случай:
+      // вещь в таблице есть, недобора коробки он не означает, поэтому в «не принято» не идёт.
+      card._rejected = !card._fresh && !(data && data.alreadyActive);
+      if (card._fresh && !wasFresh) accepted++;
+      if (!card._fresh && wasFresh) accepted = Math.max(0, accepted - 1);
+      if (card._rejected && !wasRejected) rejected++;
+      if (!card._rejected && wasRejected) rejected = Math.max(0, rejected - 1);
+      renderReceiptCount();
       var thumb   = card.querySelector('.thumb');
       var nameEl  = card.querySelector('.name');
       var colorEl = card.querySelector('.color');
@@ -782,7 +850,22 @@
 
       // постоянные ошибки → красная, без повтора
       card.className = 'card bad';
-      if (data && data.error === 'item_missing') {
+      if (data && data.commitUncertain) {
+        // Таблица не подтвердила запись [MED-1] — врать «принято» нельзя, просим проверить.
+        if (data.name) fillItem();
+        nameEl.textContent = nm() + ' — таблица НЕ подтвердила запись, проверьте и отсканируйте заново';
+      } else if (data && data.error === 'dup_num') {
+        // В каталоге две строки с одним № [CRIT-2] — какая это вещь, аппка не знает.
+        thumb.innerHTML = '<div class="ph">⚠️</div>';
+        nameEl.textContent = 'В каталоге ДВЕ строки с № ' + ((data && data.num) || '') +
+          ((data.dupNames && data.dupNames.length) ? ' (' + data.dupNames.join(' / ') + ')' : '') +
+          ' — поменяйте номер у одной и перепечатайте наклейки';
+      } else if (data && data.error === 'issued') {
+        // Крестик по уже выданной вещи [MED-4].
+        if (data.name) fillItem();
+        nameEl.textContent = nm() + ' — уже выдана по заказу ' + (data.orderNo || '') +
+          '. Сначала снимите выдачу в заказе.';
+      } else if (data && data.error === 'item_missing') {
         if (data.name) fillItem();
         nameEl.textContent = nm() + ' — позиции нет на складе';
       } else {
@@ -796,20 +879,25 @@
     // не плодя дубли. До 4 попыток с паузой 2с, потом оставляем жёлтую с подсказкой.
     function scheduleRetry(card) {
       if (!card._uid) return;
+      IN_FLIGHT[card._uid] = true;              // исход по этой наклейке ещё не определён (MED-7)
       card._retries = (card._retries || 0) + 1;
       if (card._retries > 4) {
         var n = card.querySelector('.name');
         if (n) n.textContent = 'Не удалось учесть — нажмите ✕ и отсканируйте заново';
+        delete IN_FLIGHT[card._uid];
+        if (!card._rejected) { card._rejected = true; rejected++; renderReceiptCount(); }   // LOW-10
         return;
       }
       setTimeout(function () {
-        if (!card.parentNode) return;             // карточку убрали крестиком
+        if (!card.parentNode) { delete IN_FLIGHT[card._uid]; return; }   // карточку убрали крестиком (LOW-3)
         card._activating = true;
+        if (!card._op) card._op = newOpId('activate', card._uid);   // тот же op на все попытки (HIGH-4)
         callGas('activate', card._uid, function (data) {
-          card._activating = false;
+          delete IN_FLIGHT[card._uid];            // ответ пришёл [ревью Кодекса «живучесть», MED]:
+          card._activating = false;               // раньше флаг оставался, и «назад» ложно предупреждал
           if (card._pendingDeact) { if (data && data.counted && !data.alreadyActive) sendDeactivate(card._uid); return; }
           renderScanCard(card, data);
-        });
+        }, { op: card._op });
       }, 2000);
     }
 
@@ -863,6 +951,37 @@
     var statusTimer = null;
     var RETRY = {};               // uid → счётчик тихих повторов выдачи (без нижней ленты)
     var RETRY_T = {};             // uid → handle отложенного повтора (для отмены устаревших)
+    var SLOT_REV = {};            // slot → ревизия последнего ПРИМЕНЁННОГО ответа (см. applyRev)
+    var RESOLVED_NO = '';         // № заказа, который РАЗРЕШИЛ сервер (только для снятия выдачи)
+    var IN_FLIGHT = {};           // uid → true, пока запрос по нему в сети (приёмка/выдача/привязка/снятие)
+    var PENDING_ASSIGN = {};      // uid → true, пока привязка не подтверждена сервером
+
+    // Ключ слота — ПОБУКВЕННО как на сервере (skladSlotKey_ в sklad-log.gs)
+    // [ревью Кодекса 06.09.2026, LOW-2]: раньше клиент клеил num+'|'+slug без экранирования, и у
+    // номера с «|» или «\» стартовые «уже выдано» не приклеивались к бейджикам.
+    function slotKeyEsc(x) {
+      return String(x == null ? '' : x).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+    }
+    function slotKey(num, slug) { return slotKeyEsc(num) + '|' + String(slug == null ? '' : slug); }
+
+    // Ревизия ответа [ревью Кодекса 06.09.2026, MED-3]: сервер ставит её ПОД ЗАМКОМ, поэтому у
+    // более позднего скана она больше. Ответ, обогнавший более свежий, к бейджикам не применяем —
+    // иначе экран откатывал цифру назад и работник сканировал лишнюю вещь.
+    function applyRev(slot, rev) {
+      if (!slot) return true;
+      var r = Number(rev || 0);
+      if (!r) return true;                       // старый сервер без ревизии — ведём себя как раньше
+      if ((SLOT_REV[slot] || 0) > r) return false;
+      SLOT_REV[slot] = r;
+      return true;
+    }
+
+    // opId операции [ревью Кодекса 06.09.2026, HIGH-4]: повтор ТОГО ЖЕ opId после таймаута отдаёт
+    // исходный ответ сервера и не пишет второй раз. Один opId живёт на все попытки одной операции.
+    var _opSeq = 0;
+    function newOpId(kind, uid) {
+      return kind + '.' + (++_opSeq) + '.' + Date.now().toString(36) + '.' + String(uid || '').slice(-8);
+    }
 
     function initOrderMode() {
       document.body.classList.add('order-mode');
@@ -890,13 +1009,47 @@
     function renderOrderBadges(order) {
       ORDER = order || { found: false, items: [] };
       BADGE_BY_SLOT = {};
+      SLOT_REV = {};                            // новый состав — прежние ревизии слотов недействительны
       _orderInitDone = false;                   // стартовая отрисовка: не показывать попап «собран»
+      // Номер, который РАЗРЕШИЛ сервер [HIGH-6]. Нужен ТОЛЬКО крестику «снять выдачу»: страница,
+      // открытая по нику, слала пустой no, и серверная сверка «та ли это выдача» молча
+      // выключалась — старая вкладка могла стереть ЧУЖУЮ актуальную выдачу.
+      // ⚠️ ГЛОБАЛЬНЫЙ ORDER_NO НЕ ТРОГАЕМ [круг Фейбла 06.09.2026, HIGH-1]: заменив его, мы
+      // перевели бы ВСЕ запросы страницы с ключа «ник» на ключ «номер» — промах прогретого кэша
+      // состава (+2–4 с на первом скане) и, хуже, потеря строк БЕЗ номера, которые поиск по нику
+      // присоединяет, а поиск по номеру — нет: бейджик нарисован, а выдать вещь нельзя.
+      RESOLVED_NO = ORDER.orderNo ? String(ORDER.orderNo) : '';
       var noTxt = ORDER.orderNo || ORDER_NO || '';
       var nickTxt = ORDER.nick || ORDER_NICK || '';
       document.getElementById('order-title').textContent = '🧺 Заказ ' + noTxt + (nickTxt ? ' · ' + nickTxt : '');
       var grid = document.getElementById('order-grid');
       var items = ORDER.items || [];
       if (!ORDER.found || !items.length) {
+        // Один № стоит у РАЗНЫХ клиентов (сервер не отдаёт такой заказ — иначе товар уйдёт не тому).
+        if (ORDER.error === 'mixed_clients') {
+          var mx = (ORDER.mixedNicks || []).map(esc).join(' / ');   // esc: ник из кол.C может содержать < &
+          grid.innerHTML = '<div class="ord-empty">⚠️ Этот номер стоит у РАЗНЫХ клиентов'
+            + (mx ? ' (' + mx + ')' : '') + '.<br>Заказ не открыт — иначе товар уйдёт не тому.'
+            + '<br>Если это РАЗНЫЕ клиенты — исправьте № в таблице «Заказы».'
+            + '<br>Если это ОДИН клиент — запишите ник одинаково в колонке C.</div>';
+          updateOrderProgress();
+          return;
+        }
+        // У одного ника несколько незакрытых заказов — сервер не смешивает их (HIGH-2).
+        if (ORDER.error === 'mixed_orders') {
+          var mn = (ORDER.mixedNos || []).map(esc).join(' / ');
+          grid.innerHTML = '<div class="ord-empty">⚠️ У этого клиента сейчас несколько заказов'
+            + (mn ? ' (' + mn + ')' : '') + '.<br>По нику открывать нельзя — вещь запишется не в тот заказ.'
+            + '<br>Откройте нужный заказ ПО НОМЕРУ.</div>';
+          updateOrderProgress();
+          return;
+        }
+        if (ORDER.error === 'all_closed') {
+          grid.innerHTML = '<div class="ord-empty">У этого клиента нет незакрытых заказов —'
+            + '<br>все его заказы уже выставлены в инвойс.</div>';
+          updateOrderProgress();
+          return;
+        }
         var why = (ORDER.error === 'no_orders_sheet') ? 'в таблице нет листа «Заказы».'
                 : (ORDER.error === 'src_open_failed') ? 'не удалось открыть таблицу-источник.'
                 : 'проверьте номер/ник и таблицу.';
@@ -928,7 +1081,7 @@
         var del = el.querySelector('.obadge-del');
         if (del) del.addEventListener('click', function (e) { e.stopPropagation(); onBadgeTap(el); });
         if (it.hasNet) { setBadgeNet(el); return; }
-        var slot = it.num + '|' + it.slug;
+        var slot = slotKey(it.num, it.slug);
         (BADGE_BY_SLOT[slot] || (BADGE_BY_SLOT[slot] = [])).push(el);
         setBadgePending(el);
       });
@@ -947,7 +1100,7 @@
     function codeFromUid(uid) { return seqToCode(String(uid || '').split('-').pop()); }
     function setBadgePending(el) {
       if (!el) return;
-      el.classList.remove('done', 'part', 'net');
+      el.classList.remove('done', 'part', 'net', 'saving');
       el.setAttribute('data-net', '0'); el.setAttribute('data-done', '0');
       el._uid = '';
       el.querySelector('.ochip').innerHTML = '<span class="ostate">ждёт</span>';
@@ -955,13 +1108,22 @@
     // uid — наклейка, закрывшая бейджик: под галкой пишем её код (AA001), запоминаем для отмены.
     function setBadgeDone(el, uid) {
       if (!el) return;
-      el.classList.remove('part', 'net'); el.classList.add('done');
+      el.classList.remove('part', 'net', 'saving'); el.classList.add('done');
       el.setAttribute('data-done', '1');
       if (uid) el._uid = uid;
       var code = el._uid ? codeFromUid(el._uid) : '';
       el.querySelector('.ochip').innerHTML =
         '<span class="ostate" style="color:#7ee2a0;font-size:20px">✓</span>'
         + (code ? '<span class="ocode">' + esc(code) + '</span>' : '');
+    }
+    // «Сохраняю…» — позиция уже занята этой наклейкой (прогресс её считает), но сервер ещё не
+    // подтвердил. Отличается от зелёной галки видом, чтобы работница не приняла её за готовое.
+    function setBadgeSaving(el, uid) {
+      if (!el) return;
+      el.classList.remove('part', 'net'); el.classList.add('done', 'saving');
+      el.setAttribute('data-done', '1');
+      if (uid) el._uid = uid;
+      el.querySelector('.ochip').innerHTML = '<span class="ostate" style="color:#f0c040">Сохраняю…</span>';
     }
     function setBadgeNet(el) {
       if (!el) return;
@@ -989,7 +1151,10 @@
     // Только что закрытому бейджику отдаём uid этого скана (для кода/отмены); прежние — свой.
     function updateOrderBadge(data, flash) {
       if (!data || !data.num) return;
-      var slot = data.num + '|' + slugify(data.variant);
+      // Слот кредита: при ручной привязке это ВЫБРАННАЯ позиция, иначе слот самой наклейки.
+      var slot = data.assignSlot || slotKey(data.num, slugify(data.variant));
+      // Ответ, обогнавший более свежий, не применяем — иначе бейджики откатились бы назад (MED-3).
+      if (!applyRev(slot, data.rev)) return;
       var arr = BADGE_BY_SLOT[slot];
       // слота нет в текущей раскладке → бейджики построены по УСТАРЕВШЕМУ составу (заказ
       // поправили между открытием и сканом). Перечитываем свежим — бейджики перестроятся
@@ -1016,15 +1181,23 @@
     // ложным «собран»); _leaveAfterAssign — работник нажал «Закрыть», пока привязка не подтверждена.
     var _orderComplete = false, _orderInitDone = false, _donePopupShown = false;
     var _doneAwaitAssign = false, _leaveAfterAssign = false;
+    // «Закрыть»/«Назад»: если по каким-то наклейкам ещё нет определённого ответа — предупреждаем
+    // [ревью Кодекса 06.09.2026, CRIT-1]. Общего гашения повторов больше нет, поэтому единственная
+    // точка, где незавершённое может потеряться, — уход со страницы. Молча уйти нельзя.
+    function warnIfPending(onGo) {
+      var n = pendingCount();
+      if (!n) { onGo(); return; }
+      askConfirm('Ещё не подтверждено наклеек: ' + n + '. Уйти всё равно?', onGo);
+    }
     // «Закрыть» в попапе «Заказ собран»: уходим в меню только когда привязка подтверждена сервером.
     function closeOrderDone() {
-      if (_doneAwaitAssign) {                              // привязка ещё в полёте — ждём подтверждения
+      if (_doneAwaitAssign || Object.keys(PENDING_ASSIGN).length) {   // привязки ещё в полёте — ждём (HIGH-5)
         _leaveAfterAssign = true;
         var b = document.querySelector('#order-done-popup .odone-close');
         if (b) { b.textContent = 'Сохраняю…'; b.disabled = true; }
         return;
       }
-      leaveToWarehouse();
+      warnIfPending(leaveToWarehouse);
     }
     function mpopOpen() { var p = document.getElementById('mismatch-popup'); return !!(p && p.style.display !== 'none'); }
     // Попап «собран» показываем, только когда ничто его не перекроет: нет открытого попапа
@@ -1131,23 +1304,28 @@
     }
 
     // === Скан в режиме заказа: без нижней ленты — результат на бейджиках + баннере + попапе ===
+    var OP_BY_UID = {};       // uid → opId текущей операции выдачи (повтор шлёт ТОТ ЖЕ)
     function onScanOrder(text, t0) {
       t0 = t0 || perfNow();
       seen[text] = true;        // дедуп/повторное наведение уже обработаны в onScan (п.2а)
-      beep();                   // вибрация (зелёная) уже сработала в onScan (vibeOk)
+      beep();                   // нейтральный «код считан»; зелёный/красный поставит ответ сервера
       RETRY[text] = 0;
+      OP_BY_UID[text] = newOpId('sell', text);
+      IN_FLIGHT[text] = true;
       var tSent = perfNow();
       callGas('sell', text, function (data) {
+        delete IN_FLIGHT[text];
         dlog('выдача', text, {
           res: data ? (data.match || data.error || '?') : 'нет связи',
           net: perfNow() - tSent, total: perfNow() - t0, srv: data && data.t, dbg: data && data.dbg });
         handleSellResult(text, data);
-      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, op: OP_BY_UID[text] });
     }
 
     // Разбор ответа выдачи: совпало → зелёный бейджик + код; расхождение → попап выбора
     // позиции; лишнее/уже выдано → баннер; транзиентный сбой → тихий повтор (без карточки).
     function handleSellResult(uid, data) {
+      delete IN_FLIGHT[uid];                       // ответ пришёл; неопределённые исходы вернут флаг ниже
       if (!data || data.error === 'busy' || data.error === 'not_in_log') {
         if (!data)                      setStatus('warn', 'Нет связи — повтор…');
         else if (data.error === 'busy') setStatus('warn', 'Склад занят — повтор…');
@@ -1155,18 +1333,36 @@
         scheduleRetrySell(uid);
         return;
       }
+      // Сервер не смог подтвердить запись (сбой flush) — НЕ рисуем успех [MED-1].
+      if (data.commitUncertain) {
+        clearRetryFor(uid); delete OP_BY_UID[uid]; delete seen[uid];
+        flashAimDup(); vibeDup();
+        setStatus('bad', '⚠ Таблица не подтвердила запись по ' + codeFromUid(uid) +
+                  '. ПРОВЕРЬТЕ заказ в таблице и отсканируйте заново.');
+        return;
+      }
       switch (data.match) {
         case 'ok':
-          clearPendingRetries();               // определённый исход — гасим устаревшие повторы
-          closeMismatchPopup(true);            // успешный скан закрывает попап прежнего расхождения
+          clearRetryFor(uid);                  // определённый исход ПО ЭТОЙ наклейке (чужие повторы не трогаем)
+          delete OP_BY_UID[uid];
+          flashAim(); vibeOk();                // ЗЕЛЁНЫЙ только здесь — по подтверждению сервера (HIGH-3)
+          // ⚠️ Попап закрываем, ТОЛЬКО если он про ЭТУ наклейку [круг Кодекса 06.09.2026, CRIT-1].
+          // Раньше успех вещи B гасил открытое окно ошибки вещи A и выкидывал A из seen: работница
+          // видела зелёное и считала серию законченной, а вещь A уезжала в посылку без выдачи.
+          closeMismatchPopupFor(uid);
           updateOrderBadge(data, true);
-          setStatus('ok', '✓ ' + shortName(data));
+          setStatus('ok', '✓ ' + codeFromUid(uid) + ' ' + shortName(data) + (data.replayed ? ' (уже было записано)' : ''));
           break;
         case 'already':
           // наклейка УЖЕ была выдана раньше (в т.ч. в прошлой сессии) — это «уже сканировали»:
           // красная рамка + плашка + двойная вибрация (п.1). Бейджики НЕ трогаем (у ручной
           // привязки свой слот пуст — кредит ушёл назначенной позиции), только баннер.
+          clearRetryFor(uid); delete OP_BY_UID[uid];
           flashAimDup(); showScanToast('Уже выдавали ранее'); vibeDup();
+          // Бейджики ОБНОВЛЯЕМ и здесь [ревью Кодекса 06.09.2026, HIGH-4]: сервер прислал
+          // авторитетное given, а раньше экран его игнорировал — заказ выглядел недособранным,
+          // хотя на сервере он уже закрыт, и работник искал «пропавшую» вещь.
+          if (data.given != null) updateOrderBadge(data, false);
           setStatus('warn', '⚠ Уже выдано раньше: ' + shortName(data));
           break;
         case 'overscan':
@@ -1175,8 +1371,32 @@
           if (ORDER && ORDER.found) enqueueMismatch(data);
           else setStatus('bad', '✗ Лишняя штука: ' + shortName(data) + ' (нужно ' + (data.need || 0) + ')');
           break;
+        case 'wrong_source':
+          // ЖЁСТКИЙ отказ (внешнее ревью CRIT-2): наклейка из ДРУГОЙ закупки, без метки закупки,
+          // либо уже выдана другому заказу. Никакого попапа замены и НИКАКОГО бейджа/«привязано» —
+          // сервер операцию запретил заранее. Только красный баннер + вибро-дубль. Бейджики не
+          // трогаем (позиция заказа остаётся незакрытой). Позволять «подобрать» такую вещь нельзя —
+          // это прямой путь пересортицы (физтовар одной закупки закрыл бы заказ другой).
+          clearRetryFor(uid); delete OP_BY_UID[uid];
+          flashAimDup(); vibeDup();
+          showScanToast(data.dupNum ? 'В каталоге две строки с этим №'
+                      : data.error === 'mixed_orders' ? 'У клиента несколько заказов — откройте по номеру'
+                      : data.issuedElsewhere ? 'Уже выдана другому заказу' : 'Из другой закупки');
+          setStatus('bad', '✗ Не из этого заказа/закупки: ' + shortName(data) +
+                    '. Проверьте каталог заказа или перепечатайте наклейку.');
+          break;
         case 'wrong_order':
         case 'net_item':
+          // Строка клиента ещё БЕЗ № заказа [круг Фейбла 06.09.2026, MED-1]: попап замены здесь
+          // ВРЕДЕН — он предложит тикнуть чужую позицию, и вещь уйдёт не туда. Говорим прямо.
+          if (data.unnumbered) {
+            clearRetryFor(uid); delete OP_BY_UID[uid]; delete seen[uid];
+            flashAimDup(); vibeDup();
+            showScanToast('Строка без № заказа');
+            setStatus('bad', '✗ ' + shortName(data) + ' — эта вещь у клиента есть, но её строка ещё '
+                      + 'без № заказа. Проставьте № в «Собрать заказ» и отсканируйте снова.');
+            break;
+          }
           enqueueMismatch(data);               // «Товар отличается от заказа» — выбрать позицию (с очередью)
           break;
         default:
@@ -1189,22 +1409,37 @@
     function scheduleRetrySell(uid) {
       RETRY[uid] = (RETRY[uid] || 0) + 1;
       if (RETRY[uid] > 4) {
-        setStatus('bad', 'Не удалось учесть — отсканируйте наклейку заново.');
-        delete seen[uid]; delete RETRY_T[uid];      // дать пересканировать
+        setStatus('bad', 'Не удалось учесть наклейку ' + codeFromUid(uid) + ' — отсканируйте её заново.');
+        delete seen[uid]; delete RETRY_T[uid]; delete OP_BY_UID[uid]; delete IN_FLIGHT[uid];
         return;
       }
+      IN_FLIGHT[uid] = true;                    // ждём повтора — исход по наклейке ещё не определён
       RETRY_T[uid] = setTimeout(function () {
         delete RETRY_T[uid];
+        // ⚠️ ТОТ ЖЕ opId, что и у первой попытки [HIGH-4]: если сервер на самом деле успел
+        // записать выдачу, а ответ не доехал, повтор получит ИСХОДНЫЙ результат и не задвоит.
         callGas('sell', uid, function (data) { handleSellResult(uid, data); },
-                { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+                { no: ORDER_NO, src: SRC, nick: ORDER_NICK, op: OP_BY_UID[uid] || newOpId('sell', uid) });
       }, 2000);
     }
-    // Отменить ВСЕ отложенные повторы (когда случилось определённое событие — успешный скан,
-    // привязка, открытие попапа), чтобы устаревший повтор не всплыл поверх текущей работы.
-    // Их наклейки освобождаем из seen — при необходимости их пересканируют.
-    function clearPendingRetries() {
-      for (var u in RETRY_T) { try { clearTimeout(RETRY_T[u]); } catch (e) {} delete seen[u]; }
-      RETRY_T = {};
+    // Снять повтор ТОЛЬКО у этой наклейки [ревью Кодекса 06.09.2026, CRIT-1].
+    // Раньше здесь стоял clearPendingRetries(): успешный ответ по вещи B гасил отложенный повтор
+    // вещи A и вычищал её из seen — у A не оставалось ни запроса, ни красного следа, а вещь уже
+    // лежала в посылке. Общего гашения больше нет: каждая наклейка отвечает за себя.
+    function clearRetryFor(uid) {
+      if (!uid) return;
+      if (RETRY_T[uid]) { try { clearTimeout(RETRY_T[uid]); } catch (e) {} delete RETRY_T[uid]; }
+    }
+    // Сколько наклеек ещё не получили ОПРЕДЕЛЁННОГО ответа [круг Кодекса 06.09.2026, MED-7].
+    // Раньше считались только отложенные повторы и привязки — а обычный запрос выдачи, который
+    // висит 4–7 секунд, не считался вовсе: работница успевала нажать «назад» и уйти с неизвестным
+    // исходом. Теперь ключ живёт в IN_FLIGHT от отправки до определённого ответа.
+    function pendingCount() {
+      var n = {};
+      Object.keys(IN_FLIGHT).forEach(function (k) { n[k] = 1; });
+      Object.keys(RETRY_T).forEach(function (k) { n[k] = 1; });
+      Object.keys(PENDING_ASSIGN).forEach(function (k) { n[k] = 1; });
+      return Object.keys(n).length;
     }
 
     function sendUnsell(uid, el) {
@@ -1217,14 +1452,24 @@
       setStatus('ok', 'Выдача снята');
       dlog('снятие выдачи', uid, {});
       var tUnsell = perfNow();
+      var opUnsell = newOpId('unsell', uid);
+      IN_FLIGHT[uid] = true;
       callGas('unsell', uid, function (data) {
+        delete IN_FLIGHT[uid];
         dlog('снятие выдачи', uid, { res: (data && data.ok) ? 'ок' : 'сбой', net: perfNow() - tUnsell, srv: data && data.t });
         if (!data || !data.ok) {
-          setStatus('warn', 'Не удалось снять выдачу (склад занят/нет связи). Повторите.');
+          // unsell_conflict (внешнее ревью CRIT-3): наклейку уже сняли и выдали другому заказу —
+          // сервер НЕ стал стирать чужую актуальную выдачу. Перечитываем заказ к авторитетному
+          // состоянию (наш оптимистичный серый бейджик откатится к реальному).
+          setStatus('warn', (data && data.match === 'unsell_conflict')
+            ? 'Крестик не применён: наклейка уже числится за другим заказом. Обновляю…'
+            : 'Не удалось снять выдачу (склад занят/нет связи). Повторите.');
           reloadOrder();                       // откат к авторитетному состоянию сервера
         }
         // успех — бейджик уже серый; не перерисовываем (моментально и без мигания).
-      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK });
+        // no: разрешённый сервером номер (при открытии по нику ORDER_NO пуст) — без него
+        // серверная сверка «та ли это выдача» выключается [HIGH-6].
+      }, { no: RESOLVED_NO || ORDER_NO, src: SRC, nick: ORDER_NICK, op: opUnsell });
     }
 
     // Очередь расхождений (п.2): при серийном скане несколько проблемных наклеек копятся,
@@ -1251,7 +1496,7 @@
     // можно любую незакрытую позицию. Уже выданные и «не хватило» — серые, недоступны.
     function openMismatchPopup(data) {
       var pop = document.getElementById('mismatch-popup');
-      clearPendingRetries();                    // открыли попап — устаревшие повторы по др. наклейкам гасим
+      clearRetryFor(data.uid);                  // гасим повтор ТОЛЬКО этой наклейки (CRIT-1)
       if (pop.style.display !== 'none' && pop._uid && pop._uid !== data.uid) delete seen[pop._uid];  // прежнее расхождение бросаем
       var cs = splitVariant(data.variant);
       var scanNum = String(data.num || '');
@@ -1412,6 +1657,14 @@
       });
     }
 
+    // Закрыть попап расхождения ТОЛЬКО если он показывает именно эту наклейку. Чужой попап
+    // трогать нельзя: он единственный след того, что та вещь не выдана [CRIT-1].
+    function closeMismatchPopupFor(uid) {
+      var pop = document.getElementById('mismatch-popup');
+      if (!pop || pop.style.display === 'none') return;
+      if (pop._uid && uid && pop._uid !== uid) return;      // окно про ДРУГУЮ наклейку — оставляем
+      closeMismatchPopup(true);
+    }
     function closeMismatchPopup(clearSeen) {
       var pop = document.getElementById('mismatch-popup');
       if (!pop || pop.style.display === 'none') return;
@@ -1438,29 +1691,43 @@
       // сервере шлём в ФОНЕ. Если привязка ЗАКРЫВАЕТ заказ — попап «Заказ собран» показываем ТОЖЕ
       // сразу (п.4: раньше он ждал ответа сервера ~3с). При ОТКАЗЕ сервера — прячем попап «собран»
       // и перечитываем заказ (откат). Успех — оставляем как есть (без round-trip и мигания).
-      clearPendingRetries();
+      clearRetryFor(uid);
       closeMismatchPopup(false);                          // привязано → seen НЕ чистим (наклейка выдана)
-      var arr = BADGE_BY_SLOT[String(anum) + '|' + String(aslug)] || [];
+      // Бейджик зажигаем НЕЙТРАЛЬНЫМ «Сохраняю…», а не зелёной галкой [круг Кодекса 06.09.2026,
+      // MED-9]: раньше работница видела подтверждение и клала вещь в посылку ещё до ответа, а
+      // сервер через пару секунд мог отказать. Позиция всё так же занимается МГНОВЕННО (прогресс
+      // считает её закрытой, скорость не потеряна) — меняется только цвет и подпись до ответа.
+      var arr = BADGE_BY_SLOT[slotKey(anum, aslug)] || [];
+      var savingEl = null;
       for (var i = 0; i < arr.length; i++) {
-        if (arr[i].getAttribute('data-done') !== '1') { setBadgeDone(arr[i], uid); break; }
+        if (arr[i].getAttribute('data-done') !== '1') { setBadgeSaving(arr[i], uid); savingEl = arr[i]; break; }
       }
       var wasShown = _donePopupShown;
       updateOrderProgress();                              // прогресс + (если добрали) моментальный попап «Заказ собран»
-      // попап «собран» показался ИМЕННО этой (ещё не подтверждённой) привязкой → «Закрыть» подождёт
-      _doneAwaitAssign = (!wasShown && _donePopupShown);
-      setStatus('ok', 'Привязано ✓');
+      // НЕСКОЛЬКО ПРИВЯЗОК СРАЗУ [ревью Кодекса 06.09.2026, HIGH-5]: раньше «жду подтверждения»
+      // был ОДНИМ булевым флагом — ответ по замене A гасил его, показывал «заказ собран» и
+      // закрывал страницу, пока замена B была ещё в сети. Теперь считаем НЕПОДТВЕРЖДЁННЫЕ
+      // наклейки поимённо: уйти можно, только когда список пуст.
+      PENDING_ASSIGN[uid] = true; IN_FLIGHT[uid] = true;
+      if (!wasShown && _donePopupShown) _doneAwaitAssign = true;
+      setStatus('warn', 'Сохраняю привязку…');
+      var opAssign = newOpId('assign', uid);
       callGas('assign', uid, function (data) {
         // 'already' = ответ прошлой привязки потерялся при таймауте — на сервере уже верно.
-        var done = data && (data.match === 'ok' || data.match === 'already');
+        var done = data && (data.match === 'ok' || data.match === 'already') && !data.commitUncertain;
+        delete PENDING_ASSIGN[uid]; delete IN_FLIGHT[uid];
         if (!done) {
           _doneAwaitAssign = false; _leaveAfterAssign = false;
           // ВНЯТНАЯ причина отказа (п.3) вместо глухого «не удалось привязать»: чаще всего слот
           // успели закрыть с другого устройства / попап устарел. reloadOrder обновит список,
           // наклейку освобождаем — можно отсканировать заново и увидеть актуальное состояние.
           var fm = data && data.match;
-          var fmsg = (fm === 'overscan')    ? 'Этого товара уже достаточно — отложите лишнюю вещь.'
-                   : (fm === 'wrong_order') ? 'Эта позиция не из заказа — выберите другую.'
-                   :                          'Не удалось привязать (' + ((data && (data.error || fm)) || 'нет связи') + '). Повторите.';
+          var fmsg = (fm === 'overscan')     ? 'Этого товара уже достаточно — отложите лишнюю вещь.'
+                   : (fm === 'wrong_order')  ? 'Эта позиция не из заказа — выберите другую.'
+                   : (fm === 'wrong_source') ? (data.issuedElsewhere
+                                                ? 'Наклейка уже выдана другому заказу — привязать нельзя.'
+                                                : 'Наклейка из другой закупки — привязать к этому заказу нельзя.')
+                   :                           'Не удалось привязать (' + ((data && (data.error || fm)) || 'нет связи') + '). Повторите.';
           setStatus('bad', fmsg);
           dlog('привязка', uid, { res: 'отказ', err: fm || (data && data.error) || 'нет связи', dbg: data && data.dbg });
           var dp = document.getElementById('order-done-popup');
@@ -1468,12 +1735,16 @@
           delete seen[uid];                               // дать пересканировать эту наклейку
           reloadOrder();                                  // откат к авторитетному состоянию сервера
         } else {
-          _doneAwaitAssign = false;                       // подтверждено сервером
+          if (savingEl) { savingEl.classList.remove('saving'); setBadgeDone(savingEl, uid); }
           dlog('привязка', uid, { res: 'ок' });
-          if (_leaveAfterAssign) leaveToWarehouse();      // работник уже нажал «Закрыть» — теперь безопасно уйти
+          // Ждать больше некого — только когда подтвердились ВСЕ привязки.
+          if (!Object.keys(PENDING_ASSIGN).length) {
+            _doneAwaitAssign = false;
+            if (_leaveAfterAssign) leaveToWarehouse();    // работник нажал «Закрыть» — теперь безопасно уйти
+          }
         }
         // успех — бейджик уже зелёный (и попап «собран» уже показан, если добрали); не перерисовываем.
-      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug });
+      }, { no: ORDER_NO, src: SRC, nick: ORDER_NICK, anum: anum, aslug: aslug, op: opAssign });
     }
 
     // auto=true — тихая попытка включить камеру при открытии страницы. Сработает,
@@ -1512,10 +1783,12 @@
 
     startBtn.addEventListener('click', function () { start(false); });
     document.getElementById('clear').addEventListener('click', function () {
-      listEl.innerHTML = ''; total = 0; seen = {}; cntEl.textContent = 'Отсканировано: 0';
+      listEl.innerHTML = ''; total = 0; accepted = 0; rejected = 0; seen = {}; renderReceiptCount();
       lastScanAt = {}; lastFreshAt = 0; dupCand = { text: null, at: 0, warned: false };   // сброс дедупа вместе с seen
       listEl.classList.remove('show-all'); updateShowAll();
     });
+
+    renderReceiptCount();          // сразу показываем «Принято: 0 · считано: 0»
 
     // Пробуем включить камеру сразу при открытии. Если доступ ещё не разрешён
     // (первый заход на iPhone) — покажется кнопка «Включить камеру».
