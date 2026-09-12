@@ -1,8 +1,6 @@
 {
   "name": "BERKONTI · Склад",
   "short_name": "BERKONTI",
-  "start_url": ".",
-  "scope": ".",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",

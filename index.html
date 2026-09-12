@@ -309,10 +309,22 @@
     }
     var GAS = '';
     var MODE = qparam('mode'), SRC = qparam('src'), ORDER_NO = qparam('no'), ORDER_NICK = qparam('nick');
+    // ⭐⭐⭐ КЛЮЧ ТЕЛЕФОНА [владелец 12.09.2026]. Аппка присылает его ПОСЛЕ РЕШЁТКИ, а не в строке
+    // запроса: всё после «?» уходит на сервера GitHub при каждом открытии сканера и оседает в их
+    // логах, а всё после «#» браузер оставляет себе [Кодекс 12.09.2026, HIGH-3].
+    // Приклеиваем его к адресу склада ОДИН раз, здесь: дальше и каждый запрос callGas, и ссылка
+    // «← Назад» берут именно GAS, то есть ключ доезжает везде сам.
+    // ⚠️ Ключа нет — идём без него: пока владелец не завёл ни одного ключа, дверь открыта, и
+    // сканер работает как раньше. Отказ двери приходит кодом no_key, его разбирает showGasError.
+    function whKeyFromHash() {
+      var m = String(location.hash || '').match(/[#&]k=([^&]*)/);
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+    var WH_K = whKeyFromHash();
     (function () {
       var back = qparam('back');
       if (back) {
-        GAS = back;
+        GAS = back + (WH_K ? ((back.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(WH_K)) : '');
         var b = document.getElementById('back');
         b.href = GAS;                        // запасной вариант (если нет истории)
         b.style.display = '';
@@ -671,6 +683,19 @@
       })();
     }
 
+    // Дверь склада не пустила этот телефон: ключа нет или он отозван. Показываем один раз на весь
+    // экран — работник не должен догадываться по слову «сбой».
+    var _whDenied = false;
+    function whKeyDenied() {
+      if (_whDenied) return; _whDenied = true;
+      var d = document.createElement('div');
+      d.setAttribute('style', 'position:fixed;inset:0;z-index:99999;background:#fff;display:flex;'
+        + 'align-items:center;justify-content:center;padding:24px;text-align:center;font:600 18px system-ui');
+      d.innerHTML = 'Этот телефон больше не пускают на склад.<br><br>'
+        + 'Откройте иконку «BERKONTI» заново. Если не пустит — попросите у владельца новую ссылку.';
+      document.body.appendChild(d);
+    }
+
     var jsonpId = 0;
     function callGas(action, uid, onData, extra) {
       onData = onData || function () {};
@@ -687,6 +712,11 @@
         clearTimeout(timer);
         try { delete window[cb]; } catch (e) { window[cb] = undefined; }
         if (s.parentNode) s.parentNode.removeChild(s);
+        // ⭐ ОТКАЗ ДВЕРИ ГОВОРИМ СЛОВАМИ, И ОДИН РАЗ [Фейбл и Кодекс 12.09.2026, MED-3].
+        // Иначе работник читает его как «заказа нет» и перебирает номера заказов. Ответ при этом
+        // ПРОПУСКАЕМ дальше как обычный отказ: подменять его на null нельзя — null у нас значит
+        // «нет связи», и сканер начал бы повторять запрос по кругу.
+        if (data && data.error === 'no_key') whKeyDenied();
         onData(data);
       }
       window[cb] = function (data) { finish(data); };
