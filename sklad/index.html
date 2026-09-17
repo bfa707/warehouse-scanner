@@ -88,7 +88,17 @@
     // Страховки: 25 с (как сторож заставки в самой аппке) и тап по логотипу.
     var sp = document.getElementById('splash');
     function hideSplash() { if (sp) sp.classList.add('hide'); }
-    window.addEventListener('message', function (ev) { if (ev && ev.data === 'wh-sklad-ready') hideSplash(); });
+    // ⭐ «Обновить» в окне новой версии просит перезагрузить САМ ЯРЛЫК [владелец 17.09.2026, iPhone].
+    // Раньше аппка уводила верхнее окно на адрес Google — iPhone открывал полосу браузера, а крестик
+    // на ней оставлял мёртвый экран. Перезагрузка своей страницы остаётся в ярлыке и хранит #k=.
+    window.addEventListener('message', function (ev) {
+      if (ev && ev.data === 'wh-sklad-ready') hideSplash();
+      else if (ev && ev.data === 'wh-sklad-reload') {
+        // Сначала «принял»: аппка гасит свой запасной переход на адрес Google (медленный Wi-Fi).
+        try { if (ev.source) ev.source.postMessage('wh-sklad-reload-ok', '*'); } catch (e) {}
+        try { location.reload(); } catch (e) {}
+      }
+    });
     if (sp) sp.addEventListener('click', hideSplash);
     setTimeout(hideSplash, 25000);
   </script>
