@@ -309,6 +309,9 @@
     }
     var GAS = '';
     var MODE = qparam('mode'), SRC = qparam('src'), ORDER_NO = qparam('no'), ORDER_NICK = qparam('nick');
+    // Имя работника от аппки [владелец 23.09.2026]: уходит в каждый запрос, и склад пишет его
+    // второй строкой под датой приёмки/выдачи в «Лог склада». Нет — пишется одна дата.
+    var WORKER = qparam('w');
     // ⭐⭐⭐ КЛЮЧ ТЕЛЕФОНА [владелец 12.09.2026]. Аппка присылает его ПОСЛЕ РЕШЁТКИ, а не в строке
     // запроса: всё после «?» уходит на сервера GitHub при каждом открытии сканера и оседает в их
     // логах, а всё после «#» браузер оставляет себе [Кодекс 12.09.2026, HIGH-3].
@@ -725,6 +728,7 @@
       var sep = GAS.indexOf('?') >= 0 ? '&' : '?';
       var qs = 'action=' + action + '&uid=' + encodeURIComponent(uid) + '&callback=' + cb;
       if (extra) for (var k in extra) qs += '&' + k + '=' + encodeURIComponent(extra[k]);   // no/src/nick/nums
+      if (WORKER) qs += '&w=' + encodeURIComponent(WORKER);                                  // кто сканирует
       s.src = GAS + sep + qs;
       document.body.appendChild(s);
     }
