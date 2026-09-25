@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Касса тест</title>
+
+<!-- ПРОБНАЯ «КАССА» (25.09.2026, владелец: «делаем вар 3, сначала пробный на моём айфоне»).
+     Вопрос один: переживает ли память ОТДЕЛЬНОЙ страницы (не встроенной в Google) закрытие аппки и
+     перезагрузку айфона. Если да — настоящая «Касса» держит список заказов в телефоне и ищет без Google.
+     Данных клиентов здесь НЕТ: пишется выдуманный список ~1 МБ того же вида, что будет у кассы. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Касса тест">
+<meta name="theme-color" content="#1b5e20">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+
+<style>
+  body { margin: 0; background: #fff; color: #1a1a1a;
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 17px; line-height: 1.4;
+         padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  .card { border-radius: 14px; padding: 18px 16px; font-size: 24px; font-weight: 700; margin-bottom: 14px; }
+  .card small { display: block; font-size: 16px; font-weight: 500; margin-top: 8px; }
+  .wait { background: #eee; }
+  .ok   { background: #e3f4e4; color: #1b5e20; }
+  .new  { background: #e3eefb; color: #0d47a1; }
+  .warn { background: #fff4d6; color: #7a5200; }
+  .bad  { background: #fde4e4; color: #a30000; }
+  .facts div { padding: 6px 0; border-bottom: 1px solid #eee; }
+  button { display: block; width: 100%; font-size: 18px; font-weight: 600; padding: 14px; margin: 14px 0 0;
+           border: 0; border-radius: 12px; background: #1b5e20; color: #fff; }
+  button.ghost { background: #f1f1f1; color: #555; }
+  ol { padding-left: 22px; } li { margin: 6px 0; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; background: #f6f6f6; padding: 10px; border-radius: 8px; }
+  h3 { margin: 22px 0 6px; font-size: 18px; }
+</style>
+</head>
+<body>
+
+<div id="verdict" class="card wait">Проверяю память телефона…</div>
+<div id="facts" class="facts"></div>
+<button id="copy" type="button">Копировать отчёт</button>
+<div id="copied" style="text-align:center;color:#1b5e20;min-height:22px;margin-top:6px"></div>
+
+<h3>Как проверить</h3>
+<ol>
+  <li>Откройте эту страницу в <b>Safari</b> → «Поделиться» (квадрат со стрелкой) → «На экран „Домой“». Если есть переключатель «Открывать как веб-приложение» — он должен быть включён. → «Добавить».</li>
+  <li>Откройте зелёную иконку <b>«Касса тест»</b>. Должно быть «Запуск 1».</li>
+  <li>Закройте её совсем: смахните вверх из списка открытых приложений (просто выйти на «Домой» — мало). Откройте иконку снова → «Память цела · запуск 2».</li>
+  <li>Выключите телефон и включите. Откройте иконку → «Память цела · запуск 3».</li>
+  <li>Смахните приложение, включите авиарежим и выключите Wi-Fi, откройте иконку → «запуск 4», в строке «Интернет: нет». Потом авиарежим выключить.</li>
+  <li>Нажмите «Копировать отчёт» и пришлите мне (или скриншот). Завтра утром откройте ещё раз.</li>
+</ol>
+<p>Если после закрытия или перезагрузки снова написано <b>«Запуск 1»</b> или карточка красная — напишите мне.</p>
+
+<h3>История запусков</h3>
+<pre id="hist">—</pre>
+<button id="reset" class="ghost" type="button">Начать тест заново</button>
+
+<script>
+(function () {
+  'use strict';
+  var MODE = (window.navigator.standalone === true ||
+              (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'icon' : 'safari';
+  var KEY  = 'kt_state_' + MODE;            // Safari и иконка на айфоне — разные хранилища, считаем раздельно
+  var BLOB = 'kt_list_' + MODE;
+  var SW   = !!(navigator.serviceWorker && navigator.serviceWorker.controller);   // страница пришла из памяти телефона
+  var $ = function (id) { return document.getElementById(id); };
+  var report = '', DB = null;
+
+  function hash(s) {                        // сверка «список прочитан целым»
+    var h = 0x811c9dc5;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return h >>> 0;
+  }
+  function makeList() {                     // выдуманный список того же вида, что будет у кассы: № → ник → вещи
+    var colors = ['черный', 'белый', 'бежевый', 'синий', 'зеленый'], sizes = ['XS', 'S', 'M', 'L', 'XL'], out = [];
+    for (var i = 1; i <= 5000; i++) {
+      var it = [];
+      for (var k = 0; k < 6; k++) it.push([100 + ((i * 7 + k * 13) % 900), colors[(i + k) % 5], sizes[(i * k) % 5], '']);
+      out.push({ n: (i % 2 ? '9-' : '5-') + i, nick: 'test_client_' + i, it: it });
+    }
+    return JSON.stringify(out);
+  }
+  function fmt(t) {
+    var d = new Date(t), p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+  function withTimeout(pr, ms) {
+    return Promise.race([pr, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('нет ответа ' + ms / 1000 + ' с')); }, ms); })]);
+  }
+
+  function idbOpen() {
+    return withTimeout(new Promise(function (res, rej) {
+      var r = indexedDB.open('kassa-test', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+      r.onblocked = function () { rej(new Error('blocked')); };
+    }), 5000);
+  }
+  function idbGet(db, k) {
+    return withTimeout(new Promise(function (res, rej) {
+      var q = db.transaction('kv', 'readonly').objectStore('kv').get(k);
+      q.onsuccess = function () { res(q.result); };
+      q.onerror = function () { rej(q.error); };
+    }), 5000);
+  }
+  function idbPut(db, k, v) {
+    return withTimeout(new Promise(function (res, rej) {
+      var tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(v, k);
+      tx.oncomplete = function () { res(); };
+      tx.onerror = tx.onabort = function () { rej(tx.error); };
+    }), 10000);
+  }
+
+  function lsRead() {
+    try { var s = localStorage.getItem(KEY); return { st: s ? JSON.parse(s) : null }; }
+    catch (e) { return { err: String(e && e.message || e) }; }
+  }
+  function lsWrite(st) {
+    try { localStorage.setItem(KEY, JSON.stringify(st)); return ''; }
+    catch (e) { return String(e && e.message || e); }
+  }
+
+  async function run() {
+    var ls = lsRead();
+    var db = null, idbErr = '', idbSt = null, blob = null, tRead0 = performance.now();
+    try {
+      db = DB = await idbOpen();
+      idbSt = await idbGet(db, KEY) || null;
+      blob  = await idbGet(db, BLOB) || null;
+    } catch (e) { idbErr = String(e && e.message || e); }
+    var readMs = Math.round(performance.now() - tRead0);
+
+    // Список: цел ли, сколько читается и ищется
+    var listOk = false, listKb = 0, parseMs = null, searchMs = null, found = '';
+    if (blob && typeof blob.data === 'string') {
+      listKb = Math.round(blob.data.length / 1024);
+      listOk = blob.data.length === blob.len && hash(blob.data) === blob.h;
+      if (listOk) {
+        var t1 = performance.now(), arr = JSON.parse(blob.data);
+        parseMs = Math.round(performance.now() - t1);
+        var t2 = performance.now();
+        for (var i = 0; i < arr.length; i++) if (/-711$/.test(arr[i].n)) { found = arr[i].n + ' · ' + arr[i].nick + ' · вещей ' + arr[i].it.length; break; }
+        searchMs = Math.round((performance.now() - t2) * 10) / 10;
+      }
+    }
+
+    var lsSt = ls.st || null;
+    var prev = (idbSt && (!lsSt || idbSt.n >= lsSt.n)) ? idbSt : lsSt;
+    var n = (prev ? prev.n : 0) + 1;
+    var openMs = Math.round(performance.now());
+    var online = navigator.onLine !== false;
+    var missing = [];
+    if (n > 1) {
+      if (!lsSt) missing.push('обычная память (localStorage)' + (ls.err ? ': ' + ls.err : ''));
+      if (!idbSt) missing.push('база (IndexedDB)' + (idbErr ? ': ' + idbErr : ''));
+      if (!listOk) missing.push('тестовый список' + (blob ? ' (прочитан не целым)' : ''));
+    }
+    // Копия страницы у иконки ставится на 1-м запуске и обязана работать с 3-го (2-й — запас на медленную установку)
+    var noCopy = MODE === 'icon' && n > 2 && !SW;
+    var hist = (prev && prev.hist) ? prev.hist.slice(-29) : [];
+    hist.push({ t: Date.now(), ms: openMs, sw: SW, on: online, lost: missing.join('; ') });
+    var lostBefore = hist.slice(0, -1).map(function (h, i) { return h.lost ? (n - hist.length + i + 1) : 0; }).filter(Boolean);
+    var st = { n: n, first: prev ? prev.first : Date.now(), hist: hist };
+
+    var wrote = false, writeErr = '';
+    var lsWErr = ls.err ? '' : lsWrite(st);
+    if (db) {
+      try {
+        await idbPut(db, KEY, st);
+        if (!blob) {
+          var data = makeList();
+          await idbPut(db, BLOB, { data: data, len: data.length, h: hash(data), at: Date.now() });
+          listKb = Math.round(data.length / 1024); wrote = true;
+        }
+      } catch (e) { writeErr = String(e && e.message || e); }
+    }
+
+    // Защита хранилища от очистки (Safari сам решает, давать ли)
+    var persisted = 'не поддерживается', usage = '';
+    try {
+      if (navigator.storage && navigator.storage.persist) persisted = (await navigator.storage.persist()) ? 'да' : 'нет';
+      if (navigator.storage && navigator.storage.estimate) {
+        var est = await navigator.storage.estimate();
+        usage = Math.round((est.usage || 0) / 1024) + ' КБ';
+      }
+    } catch (e) { persisted = 'ошибка'; }
+
+    // Вердикт
+    var v = $('verdict'), cls, head, sub;
+    if (MODE === 'safari') {
+      cls = 'warn'; head = 'Открыто в Safari, а не с иконки';
+      sub = 'Добавьте страницу на экран «Домой» (шаг 1 ниже) и откройте зелёную иконку. Запуск в Safari № ' + n + '.';
+    } else if (n === 1 && (idbErr || writeErr || lsWErr)) {
+      cls = 'bad'; head = 'Запуск 1 — не удалось записать';
+      sub = [idbErr, writeErr, lsWErr].filter(Boolean).join('; ');
+    } else if (n === 1 && SW) {
+      // Данных нет, а копия страницы в телефоне уже стоит — её ставит только прошлый запуск с иконки
+      cls = 'bad'; head = '❌ Похоже, память стёрлась · запуск 1';
+      sub = 'Данных нет, хотя копия страницы в телефоне уже была. Если вы открываете иконку впервые — продолжайте по шагам, но напишите мне.';
+    } else if (n === 1) {
+      cls = 'new'; head = 'Запуск 1';
+      sub = 'Тестовый список записан (' + listKb + ' КБ). Теперь закройте приложение совсем и откройте иконку снова. ' +
+            'Если вы уже открывали эту иконку раньше — память СТЁРЛАСЬ, напишите мне.';
+    } else if (missing.length) {
+      cls = 'bad'; head = '❌ Часть памяти пропала · запуск ' + n;
+      sub = 'Пропало: ' + missing.join('; ') + '.';
+    } else if (lostBefore.length) {
+      cls = 'warn'; head = '⚠️ Сейчас цело, но раньше пропадало · запуск ' + n;
+      sub = 'Пропадало на запуске № ' + lostBefore.join(', ') + ' — подробности в истории ниже.';
+    } else {
+      cls = 'ok'; head = '✅ Память цела · запуск ' + n;
+      sub = 'Первая запись: ' + fmt(st.first) + '. Список ' + listKb + ' КБ прочитан целым.';
+    }
+    if (noCopy) sub += ' Копии страницы в телефоне нет — без интернета не откроется.';
+    v.className = 'card ' + cls;
+    v.textContent = head;
+    var s = document.createElement('small'); s.textContent = sub; v.appendChild(s);
+
+    var facts = [
+      'Открыта: ' + (MODE === 'icon' ? 'с иконки' : 'в Safari') + ' · запуск ' + n + ' · первая запись ' + fmt(st.first),
+      'Интернет: ' + (online ? 'есть' : 'нет'),
+      'Страница из памяти телефона (откроется без интернета): ' + (SW ? 'да' : 'нет — будет со следующего запуска'),
+      'Страница готова через ' + openMs + ' мс после начала загрузки',
+      blob ? 'Список из памяти прочитан за ' + readMs + ' мс' + (parseMs !== null ? ', разобран за ' + parseMs + ' мс' : '')
+           : 'Списка в памяти не было — записан заново',
+      searchMs !== null ? 'Поиск «711» по списку: ' + searchMs + ' мс → ' + (found || 'не найден') : 'Поиск по списку: будет со следующего запуска',
+      'Обычная память: ' + (ls.err ? 'ошибка ' + ls.err : (lsSt ? 'была' : 'пусто')) + (lsWErr ? ' · запись: ' + lsWErr : ''),
+      'База: ' + (idbErr ? 'ошибка ' + idbErr : (idbSt ? 'была' : 'пусто')) + (writeErr ? ' · запись: ' + writeErr : ''),
+      'Защита от очистки: ' + persisted + (usage ? ' · занято ' + usage : '')
+    ];
+    $('facts').innerHTML = '';
+    facts.forEach(function (f) { var d = document.createElement('div'); d.textContent = f; $('facts').appendChild(d); });
+
+    var hl = hist.map(function (h, i) {
+      return (n - hist.length + i + 1) + ') ' + fmt(h.t) + ' · ' + h.ms + ' мс · из памяти: ' + (h.sw ? 'да' : 'нет') +
+             ' · интернет: ' + (h.on === false ? 'нет' : 'есть') + (h.lost ? ' · ПРОПАЛО: ' + h.lost : '');
+    }).join('\n');
+    $('hist').textContent = hl;
+
+    report = 'Касса тест v2 · запуск ' + n + ' · первая запись ' + fmt(st.first) + ' · ' + head + '\n' + sub + '\n' + facts.join('\n') + '\n' +
+             'Телефон: ' + navigator.userAgent + '\nИстория:\n' + hl;
+  }
+
+  $('copy').onclick = function () {
+    if (!report) { $('copied').textContent = 'Отчёт ещё не готов — сделайте скриншот'; return; }
+    var done = function (ok) { $('copied').textContent = ok ? 'Скопировано — вставьте в чат' : 'Не скопировалось — сделайте скриншот'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(report).then(function () { done(true); }, function () { done(false); });
+    else {
+      var ta = document.createElement('textarea'); ta.value = report; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta); done(ok);
+    }
+  };
+  $('reset').onclick = function () {
+    if (!confirm('Стереть тестовые данные и начать с «Запуск 1»?')) return;
+    try { localStorage.removeItem('kt_state_icon'); localStorage.removeItem('kt_state_safari'); } catch (e) {}
+    try { if (DB) DB.close(); } catch (e) {}
+    var r = indexedDB.deleteDatabase('kassa-test');
+    r.onsuccess = r.onerror = r.onblocked = function () { location.reload(); };
+  };
+
+  run().catch(function (e) {
+    var v = $('verdict'); v.className = 'card bad'; v.textContent = 'Ошибка проверки: ' + (e && e.message || e);
+    report = 'Касса тест v2 · ошибка: ' + (e && e.message || e) + '\n' + navigator.userAgent;
+  });
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+})();
+</script>
+</body>
+</html>
