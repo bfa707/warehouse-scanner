@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Касса</title>
+
+<!-- 🧾 «КАССА» — СТРАНИЦА ВЫДАЧИ ЗАКАЗА (25.09.2026)
+     [владелец: «кассиру нужен только поиск и выдача» — клиент не должен ждать у кассы, пока грузится аппка]
+     Страница и список заказов лежат В ТЕЛЕФОНЕ (сторож sw.js + IndexedDB): иконка открывается за доли
+     секунды, поиск идёт по списку без Google. Google спрашиваем только ФОНОМ — освежить список
+     (двери kassa_tables / kassa_pack склада, apps-script/kassa.js).
+     Вход — по ключу телефона после решётки (#k=…), тот же ключ, что у ярлыка склада: отзыв телефона
+     закрывает и кассу. Ключ после «#» браузер не отправляет на GitHub.
+     ⛔️ Данные клиентов в разметку попадают ТОЛЬКО через textContent — никакого innerHTML с данными. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Касса">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://script.google.com">
+
+<style>
+  :root { --ink: #1a1a1a; --mute: #6b6b6b; --line: #e6e6e6; --bg: #ffffff; --soft: #f4f4f4;
+          --ok: #1b7f3b; --okbg: #e4f4e8; --warn: #8a5a00; --warnbg: #fff3d6; --bad: #b00020; --badbg: #fde6e9;
+          --blue: #0b57d0; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; height: 100%;
+         padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; }
+  #top { padding: 10px 16px 6px; border-bottom: 1px solid var(--line); }
+  #disp { display: flex; align-items: center; gap: 10px; }
+  #num { flex: 1; font-size: 40px; font-weight: 800; letter-spacing: 1px; min-height: 52px; line-height: 52px;
+         padding: 0 12px; border-radius: 12px; background: var(--soft); overflow: hidden; white-space: nowrap; }
+  #num.ph { color: #b3b3b3; font-weight: 600; font-size: 26px; }
+  #sync { margin-top: 6px; font-size: 13px; color: var(--mute); min-height: 18px; }
+  #sync.bad { color: var(--bad); } #sync.warn { color: var(--warn); }
+  #out { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 16px; }
+  #pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px 10px;
+         border-top: 1px solid var(--line); background: #fafafa; }
+  #pad button { font-size: 28px; font-weight: 700; height: 58px; border: 0; border-radius: 12px;
+                background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  #pad button:active { background: #eaeaea; }
+  #pad .go { background: var(--ink); color: #fff; font-size: 22px; }
+  #pad .del { font-size: 24px; color: var(--mute); }
+  #again { display: none; margin: 8px 16px 10px; height: 58px; border: 0; border-radius: 12px;
+           background: var(--ink); color: #fff; font-size: 22px; font-weight: 700; }
+  body.card #pad { display: none; } body.card #again { display: block; }
+  .hint { color: var(--mute); font-size: 15px; line-height: 1.45; }
+  .hint b { color: var(--ink); }
+  .hdr { margin-bottom: 10px; }
+  .hdr .no { font-size: 44px; font-weight: 800; line-height: 1.05; }
+  .hdr .nick { font-size: 26px; font-weight: 700; margin-top: 4px; word-break: break-word; }
+  .hdr .tbl { font-size: 13px; color: var(--mute); margin-top: 4px; }
+  .ban { border-radius: 12px; padding: 10px 12px; font-size: 18px; font-weight: 700; margin: 8px 0; }
+  .ban.bad { background: var(--badbg); color: var(--bad); }
+  .ban.warn { background: var(--warnbg); color: var(--warn); }
+  .ban.info { background: var(--soft); color: var(--ink); font-weight: 600; font-size: 16px; }
+  .sec { margin: 16px 0 6px; font-size: 14px; font-weight: 800; letter-spacing: .5px; color: var(--mute); text-transform: uppercase; }
+  .sec.ok { color: var(--ok); }
+  .it { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .it .ph { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 10px; background: var(--soft) center/cover no-repeat;
+            display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; text-align: center; }
+  .it .tx { flex: 1; min-width: 0; }
+  .it .nm { font-size: 17px; font-weight: 700; word-break: break-word; }
+  .it .vr { font-size: 16px; color: var(--ink); margin-top: 2px; word-break: break-word; }
+  .chips { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 13px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: var(--soft); color: var(--ink); }
+  .chip.ok { background: var(--okbg); color: var(--ok); } .chip.warn { background: var(--warnbg); color: var(--warn); }
+  .chip.bad { background: var(--badbg); color: var(--bad); }
+  .it.off { opacity: .55; } .it.off .nm { text-decoration: line-through; }
+  .row { display: block; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+         padding: 12px; margin: 0 0 8px; font: inherit; color: inherit; }
+  .row .a { font-size: 24px; font-weight: 800; } .row .b { font-size: 18px; font-weight: 700; margin-top: 2px; word-break: break-word; }
+  .row .c { font-size: 13px; color: var(--mute); margin-top: 2px; }
+  #zoom { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; z-index: 50; }
+  #zoom img { max-width: 100%; max-height: 100%; }
+  #deny { position: fixed; inset: 0; background: #fff; z-index: 60; display: none; align-items: center; justify-content: center;
+          padding: 24px; text-align: center; font-size: 19px; font-weight: 600; line-height: 1.5; }
+  #info { font-size: 13px; color: var(--mute); white-space: pre-wrap; margin-top: 18px; }
+  .sec.other { color: var(--warn); }
+  .grp { opacity: .8; }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div id="disp"><div id="num" class="ph">№ заказа</div></div>
+  <div id="sync">Открываю список…</div>
+</div>
+<div id="out"></div>
+<div id="pad">
+  <button type="button" data-d="1">1</button><button type="button" data-d="2">2</button><button type="button" data-d="3">3</button>
+  <button type="button" data-d="4">4</button><button type="button" data-d="5">5</button><button type="button" data-d="6">6</button>
+  <button type="button" data-d="7">7</button><button type="button" data-d="8">8</button><button type="button" data-d="9">9</button>
+  <button type="button" class="del" data-d="del">⌫</button><button type="button" data-d="0">0</button><button type="button" class="go" data-d="go">Найти</button>
+</div>
+<button id="again" type="button">Новый поиск</button>
+<div id="zoom"><img id="zimg" alt=""></div>
+<div id="deny"></div>
+
+<script>
+(function () {
+  'use strict';
+  var VER = 'v1 · 26.09.2026';
+  // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
+  var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
+  var MAXLEN = 6;                 // номер заказа — до 4 цифр, с серией — 5; шестая — запас
+  // ⭐ ОСВЕЖЕНИЕ ПО ХОДУ РАБОТЫ [Кодекс, круг 1, HIGH-4]: касса, открытая с утра, иначе весь день искала
+  // бы по утреннему списку. Пока кассир работает (нажимал кнопки последние 10 мин) и экран виден —
+  // освежаем, если последнему освежению больше 2 мин. Цена — 1 + N коротких вызовов; ответ чаще всего
+  // «та же», лист закупки читает только сборка на сервере, не чаще раза в 5 мин на закупку.
+  var SYNC_EVERY = 120000, ACTIVE_FOR = 600000;
+  // ⚠️ Старые закупки освежаются ВМЕСТЕ со свежей [Кодекс, круг 2, CRIT-1 и MED-5]: сверенным считается
+  // только поиск по ВСЕМ спискам — чужой номер может сидеть в любой закупке. Цена: сервер собирает выжимку
+  // закупки не чаще раза в 5 мин (≤12 чтений в час на документ), остальное — ответы «та же».
+  // ⛔️ САМА КАРТОЧКА ОТКРЫВАЕТСЯ ТОЛЬКО ПО СВЕРЕННОМУ ПОИСКУ [Фейбл HIGH-1 обеих линз, круг 1; Кодекс CRIT-1,
+  // круг 2]: не раньше 5 мин назад сверены И список закупок (не появилась ли новая), И выжимки ВСЕХ закупок
+  // (выжимка на сервере сама живёт 5 мин — свежее не бывает). Свежесть одной найденной ничего не говорит о
+  // соседней, где мог появиться второй такой номер. Первый поиск
+  // после простоя идёт по памяти телефона, где свежего заказа 9-905 ещё нет, — и «905» сама открыла бы
+  // 8-905 чужой клиентки из прошлой закупки. Несверенное — строкой списка с «сверяю…»; сверилось — карточка
+  // открывается сама. Пока кассир работает, освежение каждые 2 мин держит список сверенным — ждать не приходится.
+  var VERIFIED_FOR = 300000;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ── ключ телефона: из ярлыка (#k=…), иначе из памяти этой страницы ─────────────────────
+  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lsSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+  var KEY = (function () {
+    var m = String(location.hash || '').match(/[#&]k=([^&]*)/);
+    var h = '';
+    try { h = m ? decodeURIComponent(m[1]) : ''; } catch (e) { h = ''; }
+    h = h.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    if (h) { lsSet('kassa_k', h); return h; }
+    return lsGet('kassa_k');
+  })();
+
+  // ── память телефона (IndexedDB): список закупок и выжимки ─────────────────────────────
+  var DB = null;
+  function withTimeout(pr, ms) {
+    return Promise.race([pr, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, ms); })]);
+  }
+  function idbOpen() {
+    return withTimeout(new Promise(function (res, rej) {
+      var r = indexedDB.open('kassa', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+      r.onblocked = function () { rej(new Error('blocked')); };
+    }), 5000);
+  }
+  function idbGet(k) {
+    if (!DB) return Promise.resolve(null);
+    return withTimeout(new Promise(function (res, rej) {
+      var q = DB.transaction('kv', 'readonly').objectStore('kv').get(k);
+      q.onsuccess = function () { res(q.result == null ? null : q.result); };
+      q.onerror = function () { rej(q.error); };
+    }), 5000).catch(function () { return null; });
+  }
+  function idbPut(k, v) {
+    if (!DB || DENIED) return Promise.resolve();
+    return withTimeout(new Promise(function (res, rej) {
+      var tx = DB.transaction('kv', 'readwrite');
+      if (v === undefined) tx.objectStore('kv').delete(k); else tx.objectStore('kv').put(v, k);
+      tx.oncomplete = function () { res(); };
+      tx.onerror = tx.onabort = function () { rej(tx.error); };
+    }), 10000).catch(function () {});
+  }
+
+  // ── состояние ─────────────────────────────────────────────────────────────────────────
+  var TABLES = null;          // { at, list: [{id, name}] }
+  var PACKS = {};             // srcId → { id, t, p (разобранная выжимка), checked }
+  var syncing = false, lastSyncAt = 0, lastNet = '';   // lastNet: '' | 'нет связи' | 'не пускают'
+  var typed = '', pendingSearch = '', lastActivity = Date.now();
+  var CUR = null;             // что на экране: { kind: 'card'|'list'|'nf', digits, sel?, sig, fromList? }
+  var DENIED = false;
+
+  function isEfirName(n) { return /эфир|efir/i.test(String(n || '')); }
+  function hhmm(t) {
+    if (!t) return '—';
+    var d = new Date(t), p = function (x) { return (x < 10 ? '0' : '') + x; };
+    var s = p(d.getHours()) + ':' + p(d.getMinutes());
+    if (d.toDateString() !== new Date().toDateString()) s = p(d.getDate()) + '.' + p(d.getMonth() + 1) + ' ' + s;
+    return s;
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = String(text);
+    return e;
+  }
+
+  // ── JSONP к складу (как у сканера): <script src="…&callback=…"> ────────────────────────
+  var jp = 0;
+  function jsonp(action, params, timeoutMs) {
+    return new Promise(function (resolve) {
+      var cb = 'kcb' + (++jp) + '_' + Date.now().toString(36);
+      var s = document.createElement('script'), done = false;
+      var timer = setTimeout(function () { finish(null); }, timeoutMs || 30000);
+      function finish(d) {
+        if (done) return; done = true;
+        clearTimeout(timer);
+        window[cb] = function () {};                       // поздний ответ после таймаута — молча
+        if (s.parentNode) s.parentNode.removeChild(s);
+        if (d && d.error === 'no_key') denied();
+        resolve(d || null);
+      }
+      window[cb] = function (d) { finish(d); };
+      s.onerror = function () { finish(null); };
+      var qs = 'action=' + action + '&callback=' + cb;
+      for (var k in params) if (params[k] !== '' && params[k] != null) qs += '&' + k + '=' + encodeURIComponent(params[k]);
+      if (KEY) qs += '&k=' + encodeURIComponent(KEY);
+      s.src = EXEC + '?' + qs;
+      document.head.appendChild(s);
+    });
+  }
+  // ⛔️ ОТКАЗ ПО КЛЮЧУ — СТИРАЕМ СПИСОК КЛИЕНТОВ ИЗ ТЕЛЕФОНА [Кодекс HIGH-6, Фейбл MED-1, круг 1].
+  // Иначе отозванный телефон в авиарежиме открывал бы сохранённый список как ни в чём не бывало.
+  // Отказ помним по ключу: тот же ключ при следующем запуске сразу видит экран отказа и данных не
+  // читает, но склад всё равно спрашиваем — пустил (защиту выключили) → работаем дальше. Уже летящие
+  // ответы после отказа в память не пишутся (DENIED). Остаток честный: телефон, который вообще не
+  // выходит в сеть, про отзыв не узнает — как и любой офлайн-список.
+  function showDeny() {
+    var d = $('deny');
+    d.textContent = 'Этот телефон не пускают в кассу.\n\nПопросите у владельца ссылку «Касса» для этого телефона ' +
+                    '(в таблице: меню → «🧾 Ссылка «Касса» для телефона»).';
+    d.style.whiteSpace = 'pre-line';
+    d.style.display = 'flex';
+  }
+  function denied() {
+    DENIED = true; lastNet = 'не пускают';
+    lsSet('kassa_denied', KEY || '-');
+    lsSet('kassa_k', '');
+    PACKS = {}; TABLES = null;
+    try { if (DB) DB.close(); } catch (e) {}
+    DB = null;
+    try { indexedDB.deleteDatabase('kassa'); } catch (e) {}
+    showDeny();
+  }
+
+  // ── фоновое освежение списка ──────────────────────────────────────────────────────────
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function syncPack(t, attempt) {
+    var cur = PACKS[t.id];
+    var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1' }, 45000);
+    if (DENIED) return false;
+    if (!r) return null;
+    if (r.ok && r.same && cur) { cur.checked = Date.now(); return false; }
+    if (r.ok && typeof r.pack === 'string') {
+      var p = null;
+      try { p = JSON.parse(r.pack); } catch (e) { p = null; }
+      if (!p || p.v !== 1 || !p.c || !p.n) return false;
+      if (!TABLES || !TABLES.list.some(function (x) { return x.id === t.id; })) return false;   // закупка ушла из списка, пока ждали
+      PACKS[t.id] = { id: String(r.id || ''), t: Number(r.t) || Number(p.t) || 0, p: p, checked: Date.now() };
+      // ⛔️ Экран — СРАЗУ, не дожидаясь соседних закупок [Кодекс, круг 2, CRIT-3]: молчание одной закупки
+      // держало бы на экране прежнего клиента до 45 с, хотя телефон уже знает нового.
+      refreshView();
+      await idbPut('pack_' + t.id, { id: String(r.id || ''), t: Number(r.t) || Number(p.t) || 0, json: r.pack });
+      return true;
+    }
+    // «строится» — другой телефон уже строит; подождём и спросим ещё (недолго). Тормоза/болезнь
+    // документа — держим прежний список, спросим при следующем освежении.
+    if (r.building && (attempt || 0) < 4) { await sleep(5000); return syncPack(t, (attempt || 0) + 1); }
+    // «болен» / «медленно» / отказ — список НЕ сверен: отметку сверки не ставим (иначе старый список
+    // выглядел бы сверенным и открывал бы карточку сам).
+    return false;
+  }
+  async function sync() {
+    if (syncing || DENIED) return;
+    syncing = true; lastNet = ''; renderSync();
+    var changed = false, answered = 0;
+    var done = {};
+    var runPack = function (t) { done[t.id] = 1; return syncPack(t, 0).then(function (r) { if (r) changed = true; if (r !== null) answered++; }); };
+    try {
+      // Выжимки знакомых закупок спрашиваем сразу, не дожидаясь списка: он бывает долгим, а свежий заказ нужен сейчас.
+      var known = TABLES ? TABLES.list.slice() : [];
+      var packsNow = Promise.all(known.map(runPack));
+      var tr = await jsonp('kassa_tables', {}, 30000);
+      if (DENIED) return;
+      if (tr) answered++;
+      if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
+        var ids = tr.list.map(function (t) { return t.id; });
+        var old = TABLES ? TABLES.list.map(function (t) { return t.id; }).join(',') : '';
+        TABLES = { at: tr.at, list: tr.list, checked: Date.now() };
+        await idbPut('tables', { at: tr.at, list: tr.list });
+        if (ids.join(',') !== old) {                         // закупка ушла из списка — её выжимку не храним
+          changed = true;
+          for (var src in PACKS) if (ids.indexOf(src) < 0) { delete PACKS[src]; await idbPut('pack_' + src, undefined); }
+          refreshView();
+        }
+      }
+      var added = TABLES ? TABLES.list.filter(function (t) { return !done[t.id]; }) : [];
+      await Promise.all([packsNow, Promise.all(added.map(runPack))]);
+      if (!answered) lastNet = 'нет связи';
+    } catch (e) {
+      lastNet = lastNet || 'сбой';
+    } finally {
+      syncing = false; lastSyncAt = Date.now(); renderSync();
+      if (!DENIED) {
+        if (pendingSearch && pendingSearch === typed && (!CUR || CUR.kind !== 'card')) { var q = pendingSearch; pendingSearch = ''; search(q, true); }
+        else if (changed || (CUR && (CUR.checking || CUR.kind === 'list'))) refreshView();
+      }
+    }
+  }
+
+  function missingTables() {
+    if (!TABLES) return [];
+    return TABLES.list.filter(function (t) { return !PACKS[t.id]; });
+  }
+  function oldestT() {
+    var t = 0;
+    if (!TABLES) return 0;
+    TABLES.list.forEach(function (x) { var pk = PACKS[x.id]; if (pk && pk.t && (!t || pk.t < t)) t = pk.t; });
+    return t;
+  }
+  function renderSync() {
+    var s = $('sync'), n = 0, have = 0;
+    if (TABLES) TABLES.list.forEach(function (x) { var pk = PACKS[x.id]; if (pk) { have++; n += pk.p.c.length; } });
+    var txt, cls = '';
+    if (!TABLES || !have) {
+      txt = syncing ? 'Загружаю список заказов… (первый раз — до полминуты)' : 'Списка заказов ещё нет.';
+      if (!syncing && lastNet) { txt += ' ' + lastNet + '.'; cls = 'bad'; }
+    } else {
+      var t = oldestT(), age = Date.now() - t;
+      txt = 'Клиентов: ' + n + ' · данные на ' + hhmm(t);
+      var miss = missingTables();
+      if (miss.length) { txt += ' · не загружено: ' + miss.map(function (x) { return x.name; }).join(', '); cls = 'warn'; }
+      if (syncing) txt += ' · обновляю…';
+      else if (lastNet) { txt += ' · ' + lastNet; cls = 'warn'; }
+      if (!syncing && age > 30 * 60000) cls = 'warn';
+    }
+    s.textContent = txt;
+    s.className = cls;
+  }
+
+  // ── номера ──────────────────────────────────────────────────────────────────────────────
+  // Тот же разбор, что у сборки выжимки на сервере (PICK_SPACK_NO_RE / PICK_SPACK_FULL_RE).
+  function tailOf(no) { var m = /[-\/]\s*(\d+)/.exec(String(no || '')); return m ? String(parseInt(m[1], 10)) : ''; }
+  function fullOf(no) { var m = /([A-Za-zА-Яа-яЁёЀ-ӿ]{0,3})\s*(\d+)\s*[-\/]\s*(\d+)/.exec(String(no || '')); return m ? m[2] + m[3] : ''; }
+  function numMatches(no, digits) { return !!no && (tailOf(no) === String(parseInt(digits, 10)) || fullOf(no) === digits); }
+
+  // ── поиск по списку в телефоне ────────────────────────────────────────────────────────
+  // Набранные цифры = хвост номера («711» → 9-711, 8-711…) ИЛИ номер целиком без дефиса («9721» → 9-721).
+  // Полные номера — по КАЖДОЙ строке клиента (индекс f), а не только по главному [Кодекс CRIT-1].
+  function findHits(digits) {
+    var out = [];
+    if (!TABLES) return out;
+    var tail = String(parseInt(digits, 10));
+    TABLES.list.forEach(function (t) {
+      var pk = PACKS[t.id]; if (!pk) return;
+      var P = pk.p, seen = {};
+      var add = function (via) { return function (i) { if (!P.c[i]) return; if (seen[i]) { seen[i].via += via; return; } seen[i] = { t: t, pk: pk, i: i, via: via }; out.push(seen[i]); }; };
+      (P.n[tail] || []).forEach(add('n'));
+      ((P.f && P.f[digits]) || []).forEach(add('f'));
+    });
+    return out;
+  }
+  // ⛔️ Сама открываем карточку ТОЛЬКО когда совпадение одно И списки всех закупок в телефоне есть
+  // [Кодекс CRIT-2]: не загрузилась свежая закупка — «единственным» оказался бы клиент старой с тем же номером.
+  function search(digits, again) {
+    if (!digits) return;
+    lastActivity = Date.now();
+    if (Date.now() - lastSyncAt > SYNC_EVERY) sync();
+    renderResults(findHits(digits), digits, again, null);
+  }
+  // ⛔️ «Номер целиком» («971» = 9-71?) — только выбором кассира [Фейбл «пересортица» HIGH-1]: пока свежий
+  // список едет, заказ 9-971 в нём может ещё не быть, и «971» сама открыла бы 9-71 чужого клиента.
+  function fresh(at) { return !!at && Date.now() - at < VERIFIED_FOR; }
+  function searchVerified() {
+    return !!(TABLES && fresh(TABLES.checked) && TABLES.list.every(function (t) { return PACKS[t.id] && fresh(PACKS[t.id].checked); }));
+  }
+  function canAutoOpen(hits) { return hits.length === 1 && hits[0].via.indexOf('n') >= 0 && !missingTables().length && searchVerified(); }
+  function renderResults(hits, digits, again, banner) {
+    if (canAutoOpen(hits)) return showCard(hits[0], digits, banner, false);
+    if (hits.length) return showList(hits, digits, banner);
+    showNotFound(digits, again, banner);
+  }
+  // Подпись — сами данные клиента, БЕЗ метки сборки [Фейбл, круг 2, MED-4]: сервер пересобирает выжимку раз в
+  // 5 мин, и «данные обновились» на каждой пересборке без изменений превратило бы предупреждение в шум.
+  // В подписи и записи словаря m (название, фото) по № позиций клиента [Кодекс, круг 3, CRIT]: исправили в
+  // таблице название или фото вещи — открытая карточка иначе так и показывала бы прежнюю вещь.
+  function sigOf(h) {
+    if (!h) return '';
+    var P = h.pk.p, c = P.c[h.i], used = {};
+    (Array.isArray(c[2]) ? c[2] : []).forEach(function (it) { var n = String(it[0] || ''); if (n && P.m && P.m[n]) used[n] = P.m[n]; });
+    return h.t.id + '|' + JSON.stringify(c) + '|' + JSON.stringify(used);
+  }
+  function whoOf(hits) { return hits.map(function (h) { return h.t.id + '|' + h.pk.p.c[h.i][0]; }).sort().join('\n'); }
+  // ⛔️ ПРИШЛИ СВЕЖИЕ ДАННЫЕ — ЭКРАН ПЕРЕСОБИРАЕМ [Кодекс CRIT-3]: иначе открытая карточка показывала бы
+  // прежнего клиента и его вещи, когда в таблице номер уже у другого, а свежее «zabrala» не видно.
+  function refreshView() {
+    if (!CUR || !CUR.digits) return;
+    var hits = findHits(CUR.digits);
+    if (CUR.kind === 'card') {
+      var same = hits.filter(function (h) { return h.t.id === CUR.sel.tid && h.pk.p.c[h.i][0] === CUR.sel.nick; });
+      // Выбрана из списка — остаётся, пока набор совпадений прежний; появился или пропал клиент — снова список.
+      var okAlone = same.length === 1 && (CUR.fromList ? whoOf(hits) === CUR.who : canAutoOpen(hits));
+      if (okAlone) {
+        if (sigOf(same[0]) !== CUR.sig) showCard(same[0], CUR.digits, 'Данные заказа обновились — проверьте ещё раз.', CUR.fromList);
+        else if (CUR.checking) showCard(same[0], CUR.digits, null, CUR.fromList);   // сверено — полосу «сверяю» снимаем
+        return;
+      }
+      return renderResults(hits, CUR.digits, true, '⚠️ Заказ изменился в таблице — проверьте номер и клиента заново.');
+    }
+    var sig = hits.map(sigOf).join('\n') + '|' + missingTables().length;
+    if (sig !== CUR.sig) renderResults(hits, CUR.digits, true, CUR.kind === 'list' ? '⚠️ Список обновился — проверьте номер и клиента.' : null);
+    // Сверилось без изменений — снять «сверяю…» / открыть сверенное; предупреждение списка сохраняем.
+    else if (CUR.kind === 'list' && CUR.ver !== searchVerified() + '|' + syncing) renderResults(hits, CUR.digits, true, CUR.banner);
+  }
+
+  // ── экраны ───────────────────────────────────────────────────────────────────────────
+  function setView(v) { document.body.className = (v === 'card') ? 'card' : ''; }
+  function clearOut() { var o = $('out'); o.textContent = ''; o.scrollTop = 0; return o; }
+  function renderNum() {
+    var n = $('num');
+    if (typed) { n.textContent = typed; n.className = ''; } else { n.textContent = '№ заказа'; n.className = 'ph'; }
+  }
+  function showHome() {
+    setView('pad'); CUR = null;
+    var o = clearOut();
+    o.appendChild(el('div', 'hint', 'Наберите номер заказа — можно без серии: «711» найдёт 9-711.'));
+    appendInfo(o);
+  }
+  function missBanner(o) {
+    var miss = missingTables();
+    if (miss.length) o.appendChild(el('div', 'ban warn', '⚠️ Ещё не загружен список: ' + miss.map(function (x) { return x.name; }).join(', ') +
+      '. Там может быть другой клиент с этим номером — проверьте номер на пакете.'));
+  }
+  function showNotFound(digits, again, banner) {
+    setView('pad');
+    var o = clearOut();
+    CUR = { kind: 'nf', digits: digits, sig: '|' + missingTables().length };
+    if (banner) o.appendChild(el('div', 'ban bad', banner));
+    var anyPack = TABLES && TABLES.list.some(function (x) { return !!PACKS[x.id]; });
+    if (!anyPack) {
+      if (again) {                                          // освежение прошло, а списка всё нет — не по кругу
+        o.appendChild(el('div', 'ban bad', 'Список заказов не загрузился' + (lastNet ? ' (' + lastNet + ')' : '') +
+          '. Нажмите на строку сверху, чтобы попробовать ещё раз, или ищите в приложении склада.'));
+        return;
+      }
+      o.appendChild(el('div', 'ban warn', '⏳ Список заказов ещё загружается — найду «' + digits + '», как только придёт.'));
+      pendingSearch = digits;
+      if (!syncing) sync();
+      return;
+    }
+    o.appendChild(el('div', 'ban warn', 'Заказ «' + digits + '» не найден'));
+    missBanner(o);
+    var h = el('div', 'hint');
+    h.appendChild(el('div', null, 'Список заказов на ' + hhmm(oldestT()) + '. Проверьте номер.'));
+    h.appendChild(el('div', null, 'Заказ собран только что? Он появится в течение 5 минут — нажмите «Найти» ещё раз.'));
+    h.appendChild(el('div', null, 'Касса ищет в закупках: ' + (TABLES ? TABLES.list.map(function (x) { return x.name; }).join(', ') : '—') +
+      '. Более старый заказ ищите в приложении склада.'));
+    o.appendChild(h);
+    // Не нашли, а список давно не освежали — освежаем ВСЁ и ищем ещё раз сами (только если номер не меняли).
+    if (!again && (Date.now() - lastSyncAt > 30000 || syncing || missingTables().length)) {
+      pendingSearch = digits;
+      o.appendChild(el('div', 'hint', 'Обновляю список и ищу ещё раз…'));
+      sync();
+    }
+  }
+  // Номера пакетов клиента, подходящие под набранные цифры (у вещей «в пакете» — свой номер или номер клиента).
+  function pkgNosOf(P, i, digits) {
+    var c = P.c[i], items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
+    var set = {};
+    for (var k = 0; k < items.length; k++) {
+      if (st.charAt(k).toLowerCase() !== 'n') continue;
+      var no = own[k] || c[1] || '';
+      if (no && numMatches(no, digits)) set[no] = 1;
+    }
+    return Object.keys(set);
+  }
+  function showList(hits, digits, banner) {
+    setView('pad');
+    var o = clearOut();
+    CUR = { kind: 'list', digits: digits, sig: hits.map(sigOf).join('\n') + '|' + missingTables().length, ver: searchVerified() + '|' + syncing,
+            banner: banner || null };
+    if (banner) o.appendChild(el('div', 'ban bad', banner));
+    missBanner(o);
+    if (!searchVerified()) {
+      var at = hhmm(oldestT());
+      o.appendChild(el('div', 'ban warn', syncing ? '⏳ Сверяю список с таблицей (он на ' + at + ')…'
+        : '⚠️ Список на ' + at + ' не сверен с таблицей — сверьте серию номера и ник на пакете.'));
+    }
+    o.appendChild(el('div', 'sec', 'Найдено: ' + hits.length + ' — выберите'));
+    hits.forEach(function (h) {
+      var P = h.pk.p, c = P.c[h.i];
+      var b = el('button', 'row'); b.type = 'button';
+      var nos = P.efir ? efirNos(c, digits) : pkgNosOf(P, h.i, digits);
+      b.appendChild(el('div', 'a', P.efir ? ('эфир · ' + (nos.length ? nos.join(' · ') : '№…' + String(parseInt(digits, 10))))
+                                          : (nos.length ? nos.join(' · ') : (c[1] || ('№ …' + digits)))));
+      b.appendChild(el('div', 'b', c[0]));
+      b.appendChild(el('div', 'c', h.t.name));
+      b.onclick = function () {
+        var now = findHits(digits).filter(function (x) { return x.t.id === h.t.id && x.pk.p.c[x.i][0] === c[0]; });
+        if (now.length !== 1) return renderResults(findHits(digits), digits, true, '⚠️ Список обновился — выберите заново.');
+        showCard(now[0], digits, null, true);
+      };
+      o.appendChild(b);
+    });
+  }
+
+  // Эфир: сервер везёт номера клиента списком (c[1]) — показываем те, что подходят под набранное.
+  function efirNos(c, digits) { return (Array.isArray(c[1]) ? c[1] : []).filter(function (no) { return numMatches(no, digits); }); }
+  var GIVEN_RE = /(zabrala|zabrāla|забрала|zabral|забрал|unisend|omniva|izsniegts|vydano|выдано)/i;
+  function photoUrl(P, fid, size) {
+    if (!fid || !P.pu) return '';
+    var u = String(P.pu).replace('{id}', encodeURIComponent(fid));
+    return size ? u.replace(/=s\d+(-rj)?$/, '=s' + size + '-rj') : u;
+  }
+
+  function showCard(h, digits, banner, fromList) {
+    if (!CUR || CUR.kind !== 'card') cardAt = Date.now();
+    setView('card');
+    var P = h.pk.p, c = P.c[h.i], o = clearOut();
+    // Список не сверен с таблицей в этом сеансе (из памяти телефона) или сверен давно, а освежение идёт —
+    // карточка честно говорит «сверяю»; пришли данные — полоса снимается или карточка пересобирается.
+    var checking = syncing && !searchVerified();
+    CUR = { kind: 'card', digits: digits, sel: { tid: h.t.id, nick: c[0] }, sig: sigOf(h), fromList: !!fromList, checking: checking,
+            who: whoOf(findHits(digits)) };
+    var hdr = el('div', 'hdr');
+    var noEl = el('div', 'no', '');
+    hdr.appendChild(noEl);
+    hdr.appendChild(el('div', 'nick', c[0]));
+    hdr.appendChild(el('div', 'tbl', h.t.name + ' · данные на ' + hhmm(h.pk.t)));
+    o.appendChild(hdr);
+    if (banner) o.appendChild(el('div', 'ban warn', banner));
+    if (checking) o.appendChild(el('div', 'ban warn', '⏳ Сверяю с таблицей — список на ' + hhmm(h.pk.t) + '…'));
+    else if (!searchVerified()) o.appendChild(el('div', 'ban warn', '⚠️ Список на ' + hhmm(oldestT()) + ' не сверен с таблицей — сверьте серию номера и ник на пакете.'));
+    if (fromList) missBanner(o);
+
+    if (P.efir) {
+      var en = efirNos(c, digits);
+      noEl.textContent = 'эфир · ' + (en.length ? en.join(' · ') : '№…' + String(parseInt(digits, 10)));
+      o.appendChild(el('div', 'ban info', 'Заказ эфира: касса показывает только клиента. Состав — в приложении склада.'));
+      return appendInfo(o);
+    }
+    var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
+    if (P.lite || !items.length) {
+      noEl.textContent = c[1] || ('№ …' + digits);
+      o.appendChild(el('div', 'ban info', 'Состав этого заказа касса сейчас не видит — откройте его в приложении склада.'));
+      return appendInfo(o);
+    }
+    if (!st) {                                     // выжимка старого вида (без букв) — только состав, без «в пакете»
+      noEl.textContent = c[1] || ('№ …' + digits);
+      o.appendChild(el('div', 'ban info', 'Отметки сборки ещё не пришли — показываю весь заказ; при следующей сверке с таблицей обновлю сам.'));
+      o.appendChild(el('div', 'sec', 'Состав — ' + items.length));
+      items.forEach(function (it) { o.appendChild(itemRow(P, { it: it, code: '?', given: false, mark: markOf(it), no: '' }, it[3] === 'c')); });
+      return appendInfo(o);
+    }
+    // Вещи по пакетам: «в пакете» — буква n, пакет = свой номер вещи или номер клиента.
+    var pk = {}, pkOrder = [], given = [], rest = [], canc = [], inv = {};
+    for (var k = 0; k < items.length; k++) {
+      var it = items[k], L = st.charAt(k) || '?', code = L.toLowerCase();
+      var row = { it: it, code: code, given: L !== code, mark: markOf(it), no: code === 'n' ? (own[k] || c[1] || '') : '' };
+      if (row.mark && /^R\d/i.test(row.mark)) inv[row.mark] = 1;
+      if (row.given) given.push(row);
+      else if (it[3] === 'c' || code === 'c') canc.push(row);
+      else if (code === 'n') { if (!pk[row.no]) { pk[row.no] = []; pkOrder.push(row.no); } pk[row.no].push(row); }
+      else rest.push(row);
+    }
+    var hit = pkOrder.filter(function (no) { return numMatches(no, digits); });
+    var other = pkOrder.filter(function (no) { return hit.indexOf(no) < 0; });
+    var givenHit = given.filter(function (r) { return !r.no || hit.indexOf(r.no) >= 0 || (!hit.length && numMatches(r.no, digits)); });
+    var givenNos = uniq(givenHit.map(function (r) { return r.no; }).filter(Boolean));
+    noEl.textContent = hit.length ? hit.join(' · ') : (givenNos.length ? givenNos.join(' · ') : (c[1] || ('№ …' + digits)));
+    var inPack = hit.reduce(function (s, no) { return s + pk[no].length; }, 0);
+    if (givenHit.length && !inPack) o.appendChild(el('div', 'ban bad', '⚠️ Заказ уже выдан: ' + uniq(givenHit.map(function (r) { return r.mark || 'выдано'; })).join(', ')));
+    else if (givenHit.length) o.appendChild(el('div', 'ban bad', '⚠️ Часть заказа уже выдана: ' + givenHit.length));
+    var invs = Object.keys(inv);
+    if (invs.length) o.appendChild(el('div', 'ban info', 'Счёт: ' + invs.join(', ')));
+
+    hit.forEach(function (no) {
+      o.appendChild(el('div', 'sec ok', 'В пакете ' + no + ' — ' + pk[no].length));
+      pk[no].forEach(function (r) { o.appendChild(itemRow(P, r, false)); });
+    });
+    if (!hit.length && !givenHit.length) o.appendChild(el('div', 'hint', canc.length && !rest.length && !other.length
+      ? 'Все вещи этого заказа отменены.' : 'Под этим номером нет собранных вещей.'));
+    if (given.length) {
+      o.appendChild(el('div', 'sec', 'Уже выдано — ' + given.length));
+      given.forEach(function (r) { o.appendChild(itemRow(P, r, false)); });
+    }
+    other.forEach(function (no) {
+      o.appendChild(el('div', 'sec other', 'Другой пакет этого клиента: ' + no + ' — ' + pk[no].length));
+      var g = el('div', 'grp');
+      pk[no].forEach(function (r) { g.appendChild(itemRow(P, r, false)); });
+      o.appendChild(g);
+    });
+    if (rest.length) {
+      o.appendChild(el('div', 'sec', 'Не в пакете — ' + rest.length));
+      rest.forEach(function (r) { o.appendChild(itemRow(P, r, false)); });
+    }
+    if (canc.length) {
+      o.appendChild(el('div', 'sec', 'Отменено — ' + canc.length));
+      canc.forEach(function (r) { o.appendChild(itemRow(P, r, true)); });
+    }
+    appendInfo(o);
+  }
+  function uniq(a) { var s = {}, out = []; a.forEach(function (x) { if (!s[x]) { s[x] = 1; out.push(x); } }); return out; }
+  function markOf(it) { var f = String(it[3] || ''); return f.indexOf('d:') === 0 ? f.slice(2) : ''; }
+  var CODE_TXT = { s: ['★ куплено, не собрано', 'warn'], e: ['ещё не куплено', ''], w: ['нет — ждём', 'warn'],
+                   o: ['другая пометка — проверьте в таблице', 'warn'], c: ['отменено', 'bad'] };
+  function itemRow(P, r, off) {
+    var it = r.it, num = String(it[0] || ''), m = P.m && P.m[num];
+    var name = it.length > 4 && it[4] ? it[4] : (m ? m[0] : '');
+    var fid = m ? m[1] : '';
+    var box = el('div', 'it' + (off ? ' off' : ''));
+    var ph = el('div', 'ph');
+    var thumb = photoUrl(P, fid, 240);
+    if (thumb) {
+      ph.style.backgroundImage = 'url("' + thumb.replace(/"/g, '%22') + '")';
+      var big = photoUrl(P, fid, 0);
+      ph.onclick = function () { $('zimg').src = big; $('zoom').style.display = 'flex'; };
+    } else ph.textContent = 'фото нет';
+    box.appendChild(ph);
+    var tx = el('div', 'tx');
+    tx.appendChild(el('div', 'nm', (num ? num + ' · ' : '') + (name || '—')));
+    var vr = [it[1], it[2]].map(function (x) { return String(x || '').replace(/\s*\n\s*/g, ' / ').trim(); }).filter(Boolean).join(' · ');
+    if (vr) tx.appendChild(el('div', 'vr', vr));
+    var chips = el('div', 'chips');
+    if (r.given) chips.appendChild(el('span', 'chip bad', 'выдано'));
+    else if (CODE_TXT[r.code]) chips.appendChild(el('span', 'chip ' + CODE_TXT[r.code][1], CODE_TXT[r.code][0]));
+    if (r.mark && !(r.given && GIVEN_RE.test(r.mark) && r.mark.length < 12)) chips.appendChild(el('span', 'chip' + (GIVEN_RE.test(r.mark) ? ' bad' : ''), r.mark));
+    if (chips.childNodes.length) tx.appendChild(chips);
+    box.appendChild(tx);
+    return box;
+  }
+  function appendInfo(o) {
+    var lines = ['Касса ' + VER];
+    if (TABLES) TABLES.list.forEach(function (t) {
+      var pk = PACKS[t.id];
+      lines.push('• ' + t.name + ': ' + (pk ? ('клиентов ' + pk.p.c.length + ', данные на ' + hhmm(pk.t)) : 'списка нет'));
+    });
+    if (!KEY) lines.push('Ключ телефона не найден — откройте ссылку «Касса» из таблицы.');
+    var d = el('div', null, lines.join('\n')); d.id = 'info';
+    o.appendChild(d);
+  }
+
+  // ── клавиатура ───────────────────────────────────────────────────────────────────────
+  $('pad').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if (!b) return;
+    lastActivity = Date.now();
+    var d = b.getAttribute('data-d');
+    if (d === 'go') { pendingSearch = ''; if (typed) search(typed, false); return; }
+    // ⛔️ Правка номера гасит прежний поиск [Кодекс, круг 2, CRIT-2]: иначе освежение, пришедшее между
+    // правкой и «Найти», пересобирало бы экран по СТАРЫМ цифрам и само открывало бы чужую карточку.
+    if (d === 'del') typed = typed.slice(0, -1);
+    else if (typed.length < MAXLEN) typed += d;
+    else return;
+    pendingSearch = '';
+    renderNum();
+    if (CUR) showHome();
+  });
+  var cardAt = 0;
+  $('again').onclick = function () {
+    if (Date.now() - cardAt < 400) return;             // двойной тап по «Найти» не закрывает карточку сразу
+    lastActivity = Date.now(); typed = ''; pendingSearch = ''; renderNum(); showHome();
+  };
+  $('zoom').onclick = function () { $('zoom').style.display = 'none'; $('zimg').removeAttribute('src'); };
+  $('sync').onclick = function () { lastActivity = Date.now(); sync(); };
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') { lastActivity = Date.now(); if (Date.now() - lastSyncAt > 60000) sync(); }
+  });
+  setInterval(function () {
+    if (DENIED) return;
+    renderSync();
+    if (document.visibilityState === 'visible' && Date.now() - lastActivity < ACTIVE_FOR && Date.now() - lastSyncAt > SYNC_EVERY) sync();
+  }, 30000);
+
+  // ── старт: сначала всё из памяти телефона, потом фоном — Google ─────────────────────────
+  (async function boot() {
+    renderNum(); showHome();
+    var dk = lsGet('kassa_denied');
+    if (dk && dk === (KEY || '-')) {
+      // Этот ключ склад уже не пускал: данных не читаем, но спрашиваем склад ещё раз.
+      DENIED = true; showDeny();
+      var r = await (function () { DENIED = false; return jsonp('kassa_tables', {}, 30000); })();
+      if (!r || !r.ok) { DENIED = true; showDeny(); return; }
+      lsSet('kassa_denied', ''); $('deny').style.display = 'none';
+    }
+    try {
+      DB = await idbOpen();
+      var tb = await idbGet('tables');
+      if (tb && tb.list && tb.list.length) {
+        TABLES = { at: tb.at, list: tb.list, checked: 0 };     // из памяти — не сверен в этом сеансе
+        for (var i = 0; i < tb.list.length; i++) {
+          var rec = await idbGet('pack_' + tb.list[i].id);
+          if (rec && typeof rec.json === 'string') {
+            try { var p = JSON.parse(rec.json); if (p && p.v === 1 && p.c && p.n) PACKS[tb.list[i].id] = { id: rec.id, t: rec.t, p: p, checked: 0 }; } catch (e) {}
+          }
+        }
+      }
+    } catch (e) { DB = null; }
+    if (DENIED) return;
+    renderSync(); showHome();
+    sync();
+  })();
+
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) {}
+  // Новая версия страницы: сторож тянет её в фоне; при возврате в кассу просим проверить обновление.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(function (reg) {
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { try { reg.update(); } catch (e) {} } });
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>
