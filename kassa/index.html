@@ -106,7 +106,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v1 · 26.09.2026';
+  var VER = 'v2 · 26.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 6;                 // номер заказа — до 4 цифр, с серией — 5; шестая — запас
@@ -126,6 +126,11 @@
   // 8-905 чужой клиентки из прошлой закупки. Несверенное — строкой списка с «сверяю…»; сверилось — карточка
   // открывается сама. Пока кассир работает, освежение каждые 2 мин держит список сверенным — ждать не приходится.
   var VERIFIED_FOR = 300000;
+  // ⏱ СКОЛЬКО ЖДАТЬ GOOGLE [живая проверка владельца 26.09.2026]: в тот день Google держал ЛЮБОЙ запрос к складу
+  // 10–114 с (сам склад отвечал за 0,1–2 с — журнал), и при прежних 45 с большая закупка не грузилась НИКОГДА:
+  // ответ приходил на 50-й секунде, а касса его уже выбросила. Ждать дольше ничего не стоит — поиск по уже
+  // загруженному идёт из памяти телефона, пока запрос летит.
+  var WAIT_TABLES = 90000, WAIT_PACK = 150000;
   var $ = function (id) { return document.getElementById(id); };
 
   // ── ключ телефона: из ярлыка (#k=…), иначе из памяти этой страницы ─────────────────────
@@ -201,7 +206,7 @@
     return new Promise(function (resolve) {
       var cb = 'kcb' + (++jp) + '_' + Date.now().toString(36);
       var s = document.createElement('script'), done = false;
-      var timer = setTimeout(function () { finish(null); }, timeoutMs || 30000);
+      var timer = setTimeout(function () { finish(null); }, timeoutMs || WAIT_TABLES);
       function finish(d) {
         if (done) return; done = true;
         clearTimeout(timer);
@@ -247,7 +252,7 @@
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   async function syncPack(t, attempt) {
     var cur = PACKS[t.id];
-    var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1' }, 45000);
+    var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1' }, WAIT_PACK);
     if (DENIED) return false;
     if (!r) return null;
     if (r.ok && r.same && cur) { cur.checked = Date.now(); return false; }
@@ -280,7 +285,7 @@
       // Выжимки знакомых закупок спрашиваем сразу, не дожидаясь списка: он бывает долгим, а свежий заказ нужен сейчас.
       var known = TABLES ? TABLES.list.slice() : [];
       var packsNow = Promise.all(known.map(runPack));
-      var tr = await jsonp('kassa_tables', {}, 30000);
+      var tr = await jsonp('kassa_tables', {}, WAIT_TABLES);
       if (DENIED) return;
       if (tr) answered++;
       if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
@@ -323,7 +328,7 @@
     if (TABLES) TABLES.list.forEach(function (x) { var pk = PACKS[x.id]; if (pk) { have++; n += pk.p.c.length; } });
     var txt, cls = '';
     if (!TABLES || !have) {
-      txt = syncing ? 'Загружаю список заказов… (первый раз — до полминуты)' : 'Списка заказов ещё нет.';
+      txt = syncing ? 'Загружаю список заказов… (первый раз — до нескольких минут)' : 'Списка заказов ещё нет.';
       if (!syncing && lastNet) { txt += ' ' + lastNet + '.'; cls = 'bad'; }
     } else {
       var t = oldestT(), age = Date.now() - t;
@@ -438,7 +443,9 @@
     if (banner) o.appendChild(el('div', 'ban bad', banner));
     var anyPack = TABLES && TABLES.list.some(function (x) { return !!PACKS[x.id]; });
     if (!anyPack) {
-      if (again) {                                          // освежение прошло, а списка всё нет — не по кругу
+      // Идёт освежение — «загружается», а не «не загрузился» [Фейбл, 26.09.2026, LOW-1]: список закупок пришёл
+      // раньше выжимок и пересобрал экран, а загрузка ещё идёт. Кончилось — отложенный поиск повторит сам.
+      if (again && !syncing) {                              // освежение прошло, а списка всё нет — не по кругу
         o.appendChild(el('div', 'ban bad', 'Список заказов не загрузился' + (lastNet ? ' (' + lastNet + ')' : '') +
           '. Нажмите на строку сверху, чтобы попробовать ещё раз, или ищите в приложении склада.'));
         return;
@@ -679,7 +686,7 @@
     if (dk && dk === (KEY || '-')) {
       // Этот ключ склад уже не пускал: данных не читаем, но спрашиваем склад ещё раз.
       DENIED = true; showDeny();
-      var r = await (function () { DENIED = false; return jsonp('kassa_tables', {}, 30000); })();
+      var r = await (function () { DENIED = false; return jsonp('kassa_tables', {}, WAIT_TABLES); })();
       if (!r || !r.ok) { DENIED = true; showDeny(); return; }
       lsSet('kassa_denied', ''); $('deny').style.display = 'none';
     }
