@@ -106,7 +106,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v3 · 26.09.2026';
+  var VER = 'v4 · 26.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 6;                 // номер заказа — до 4 цифр, с серией — 5; шестая — запас
@@ -115,6 +115,9 @@
   // освежаем, если последнему освежению больше 2 мин. Цена — 1 + N коротких вызовов; ответ чаще всего
   // «та же», лист закупки читает только сборка на сервере, не чаще раза в 5 мин на закупку.
   var SYNC_EVERY = 120000, ACTIVE_FOR = 600000;
+  // Не хватает какой-то закупки — освежаем чаще: первый запуск не должен ждать по 2 мин между попытками.
+  // 25 с при таймере раз в 30 с — это каждый его тик, то есть на деле раз в 30 с [Фейбл v4, LOW-2].
+  var MISSING_EVERY = 25000;
   // ⚠️ Старые закупки освежаются ВМЕСТЕ со свежей [Кодекс, круг 2, CRIT-1 и MED-5]: сверенным считается
   // только поиск по ВСЕМ спискам — чужой номер может сидеть в любой закупке. Цена: сервер собирает выжимку
   // закупки не чаще раза в 5 мин (≤12 чтений в час на документ), остальное — ответы «та же».
@@ -216,7 +219,9 @@
         resolve(d || null);
       }
       window[cb] = function (d) { finish(d); };
-      s.onerror = function () { finish(null); };
+      // ⚠️ ОШИБКА ДОСТАВКИ ≠ МОЛЧАНИЕ [живая проверка 26.09.2026]: Google отдавал на каждый 2–3-й ответ склада «404»
+      // (сам склад отвечал за 0,3 с). Отличаем её от таймаута — такой запрос имеет смысл сразу повторить.
+      s.onerror = function () { finish({ ok: false, net: 1 }); };
       var qs = 'action=' + action + '&callback=' + cb;
       for (var k in params) if (params[k] !== '' && params[k] != null) qs += '&' + k + '=' + encodeURIComponent(params[k]);
       if (KEY) qs += '&k=' + encodeURIComponent(KEY);
@@ -255,6 +260,8 @@
     var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1' }, WAIT_PACK);
     if (DENIED) return false;
     if (!r) return null;
+    // Google не доставил ответ («404») — повторяем через 2 с, до двух раз; не вышло — как молчание.
+    if (r.net) { if ((attempt || 0) < 2) { await sleep(2000); return DENIED ? false : syncPack(t, (attempt || 0) + 1); } return null; }
     if (r.ok && r.same && cur) { cur.checked = Date.now(); return false; }
     if (r.ok && typeof r.pack === 'string') {
       var p = null;
@@ -286,6 +293,8 @@
       var known = TABLES ? TABLES.list.slice() : [];
       var packsNow = Promise.all(known.map(runPack));
       var tr = await jsonp('kassa_tables', {}, WAIT_TABLES);
+      for (var ta = 0; tr && tr.net && ta < 2 && !DENIED; ta++) { await sleep(2000); tr = await jsonp('kassa_tables', {}, WAIT_TABLES); }
+      if (tr && tr.net) tr = null;                           // Google так и не доставил — как молчание
       if (DENIED) return;
       if (tr) answered++;
       if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
@@ -313,6 +322,9 @@
     }
   }
 
+  // Пора освежать? Не хватает закупки (или списка нет вовсе), а прошлое освежение хоть что-то получило — чаще.
+  // Не пришло ничего (нет связи, Google лежит) — как обычно, раз в 2 мин: частить некуда [Фейбл v4, LOW-2/LOW-3].
+  function syncDue() { return Date.now() - lastSyncAt > ((!lastNet && (!TABLES || missingTables().length)) ? MISSING_EVERY : SYNC_EVERY); }
   function missingTables() {
     if (!TABLES) return [];
     return TABLES.list.filter(function (t) { return !PACKS[t.id]; });
@@ -680,7 +692,7 @@
   setInterval(function () {
     if (DENIED) return;
     renderSync();
-    if (document.visibilityState === 'visible' && Date.now() - lastActivity < ACTIVE_FOR && Date.now() - lastSyncAt > SYNC_EVERY) sync();
+    if (document.visibilityState === 'visible' && Date.now() - lastActivity < ACTIVE_FOR && syncDue()) sync();
   }, 30000);
 
   // ── старт: сначала всё из памяти телефона, потом фоном — Google ─────────────────────────
