@@ -6,13 +6,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Касса</title>
 
-<!-- 🧾 «КАССА» — СТРАНИЦА ВЫДАЧИ ЗАКАЗА (25.09.2026)
+<!-- 🧾 «КАССА» — СТРАНИЦА ВЫДАЧИ ЗАКАЗА (25.09.2026; вид B и выдача — 26.09.2026)
      [владелец: «кассиру нужен только поиск и выдача» — клиент не должен ждать у кассы, пока грузится аппка]
-     Страница и список заказов лежат В ТЕЛЕФОНЕ (сторож sw.js + IndexedDB): иконка открывается за доли
-     секунды, поиск идёт по списку без Google. Google спрашиваем только ФОНОМ — освежить список
-     (двери kassa_tables / kassa_pack склада, apps-script/kassa.js).
+     Страница и список заказов лежат В ТЕЛЕФОНЕ/КОМПЬЮТЕРЕ (сторож sw.js + IndexedDB): иконка открывается за доли
+     секунды, поиск идёт по списку без Google. Google спрашиваем ФОНОМ — освежить список (двери kassa_tables /
+     kassa_pack склада, apps-script/kassa.js) — и на нажатие кнопок выдачи (kassa_give / kassa_unnet).
      Вход — по ключу телефона после решётки (#k=…), тот же ключ, что у ярлыка склада: отзыв телефона
      закрывает и кассу. Ключ после «#» браузер не отправляет на GitHub.
+     ⭐ ВИД B [владелец 26.09.2026: «90% на компе (у нас на кассе стоит комп)… приблизь к дизайну Собрать заказ,
+     только всё бОльшего размера на компе»; «вариант 2… чтобы в экран влезло минимум 6, а лучше 9 вещей»]:
+     на экране шире 900 px — слева поиск, заказ, сумма и две кнопки (всегда на месте), справа вещи плитками 3×3
+     (больше 9 — прокручивается только правая часть). Уже 900 px — одна колонка, как было, с кнопками-цифрами.
+     ⛔️ Слова «пакет» на экране НЕТ [владелец: «Всегда речь только о „заказе“»].
      ⛔️ Данные клиентов в разметку попадают ТОЛЬКО через textContent — никакого innerHTML с данными. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -24,57 +29,102 @@
 <link rel="preconnect" href="https://script.google.com">
 
 <style>
-  :root { --ink: #1a1a1a; --mute: #6b6b6b; --line: #e6e6e6; --bg: #ffffff; --soft: #f4f4f4;
-          --ok: #1b7f3b; --okbg: #e4f4e8; --warn: #8a5a00; --warnbg: #fff3d6; --bad: #b00020; --badbg: #fde6e9;
-          --blue: #0b57d0; }
+  :root { --ink: #18202c; --mute: #6b7280; --line: #e3e7ee; --bg: #f4f6f9; --card: #ffffff; --soft: #f3f4f6;
+          --ok: #0b8043; --okbg: #e9f7ef; --okline: #d3ebdc; --oktx: #4a735b;
+          --warn: #9a5b00; --warnbg: #fff4e0; --warnline: #e8a33d; --bad: #b00020; --badbg: #fde6e9;
+          --blue: #1a73e8; --bluebg: #eef3fe; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   body { display: flex; flex-direction: column; height: 100%;
          padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; }
-  #top { padding: 10px 16px 6px; border-bottom: 1px solid var(--line); }
-  #disp { display: flex; align-items: center; gap: 10px; }
-  #num { flex: 1; font-size: 40px; font-weight: 800; letter-spacing: 1px; min-height: 52px; line-height: 52px;
-         padding: 0 12px; border-radius: 12px; background: var(--soft); overflow: hidden; white-space: nowrap; }
-  #num.ph { color: #b3b3b3; font-weight: 600; font-size: 26px; }
-  #sync { margin-top: 6px; font-size: 13px; color: var(--mute); min-height: 18px; }
+  button { font: inherit; }
+  #top { flex: none; background: var(--card); padding: 10px 16px 6px; border-bottom: 1px solid var(--line); }
+  #disp { display: flex; align-items: center; gap: 8px; }
+  #num { flex: 1; min-width: 0; width: 100%; font: inherit; font-size: 32px; font-weight: 800; letter-spacing: .5px;
+         height: 56px; padding: 0 14px; border: 3px solid var(--blue); background: var(--bluebg); border-radius: 14px;
+         color: var(--ink); outline: none; }
+  #num::placeholder { color: #9aa3b2; font-weight: 600; font-size: 20px; letter-spacing: 0; }
+  #abc { flex: none; height: 56px; min-width: 60px; border: 0; border-radius: 14px; background: var(--soft);
+         font-size: 20px; font-weight: 800; color: var(--ink); cursor: pointer; }
+  #abc.on { background: var(--blue); color: #fff; }
+  #sync { margin-top: 6px; font-size: 13px; color: var(--mute); min-height: 18px; cursor: pointer; }
   #sync.bad { color: var(--bad); } #sync.warn { color: var(--warn); }
-  #out { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 16px 16px; }
-  #pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px 10px;
+  #main { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #head { padding: 12px 16px 0; }
+  #head:empty { display: none; }
+  #out { padding: 8px 16px 16px; }
+  #acts { flex: none; display: none; gap: 8px; padding: 8px 16px 0; background: #fafafa; border-top: 1px solid var(--line); }
+  body.card #acts { display: grid; grid-template-columns: 1fr 1fr; }
+  .btn { border: 0; border-radius: 14px; font-weight: 800; cursor: pointer; height: 58px; font-size: 19px; padding: 0 10px; }
+  .btn:disabled { opacity: .38; cursor: default; }
+  #giveAll { background: var(--ok); color: #fff; }
+  #givePart { background: #fff; color: #b3700f; border: 3px solid var(--warnline); }
+  #pad { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px 10px;
          border-top: 1px solid var(--line); background: #fafafa; }
-  #pad button { font-size: 28px; font-weight: 700; height: 58px; border: 0; border-radius: 12px;
+  #pad button { font-size: 28px; font-weight: 700; height: 56px; border: 0; border-radius: 12px;
                 background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
   #pad button:active { background: #eaeaea; }
   #pad .go { background: var(--ink); color: #fff; font-size: 22px; }
   #pad .del { font-size: 24px; color: var(--mute); }
-  #again { display: none; margin: 8px 16px 10px; height: 58px; border: 0; border-radius: 12px;
-           background: var(--ink); color: #fff; font-size: 22px; font-weight: 700; }
+  #again { flex: none; display: none; margin: 8px 16px 10px; height: 52px; border: 0; border-radius: 12px;
+           background: var(--ink); color: #fff; font-size: 20px; font-weight: 700; }
   body.card #pad { display: none; } body.card #again { display: block; }
-  .hint { color: var(--mute); font-size: 15px; line-height: 1.45; }
+  .hint { color: var(--mute); font-size: 16px; line-height: 1.5; }
   .hint b { color: var(--ink); }
-  .hdr { margin-bottom: 10px; }
-  .hdr .no { font-size: 44px; font-weight: 800; line-height: 1.05; }
-  .hdr .nick { font-size: 26px; font-weight: 700; margin-top: 4px; word-break: break-word; }
-  .hdr .tbl { font-size: 13px; color: var(--mute); margin-top: 4px; }
-  .ban { border-radius: 12px; padding: 10px 12px; font-size: 18px; font-weight: 700; margin: 8px 0; }
+  .hdr .lbl { color: #8a919c; font-size: 15px; font-weight: 700; }
+  .hdr .no { font-size: 42px; font-weight: 900; color: var(--blue); line-height: 1.05; word-break: break-word; }
+  .hdr .nick { font-size: 26px; font-weight: 800; margin-top: 4px; word-break: break-word; }
+  .hdr .tbl { color: #8a919c; font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .sumb { background: var(--okbg); border: 1px solid var(--okline); border-radius: 16px; padding: 10px 16px; margin-top: 12px; }
+  .sumb .l { color: var(--oktx); font-size: 17px; font-weight: 700; }
+  .sumb .r { color: var(--ok); font-size: 42px; font-weight: 900; line-height: 1.1; }
+  .sumb .iv { color: var(--oktx); font-size: 15px; font-weight: 600; margin-top: 4px; }
+  .sumb .np { color: var(--warn); font-size: 15px; font-weight: 700; margin-top: 4px; }
+  .note { background: var(--soft); border-radius: 12px; padding: 8px 12px; color: var(--mute); font-size: 15px; font-weight: 600; margin-top: 10px; }
+  .ban { border-radius: 12px; padding: 10px 12px; font-size: 17px; font-weight: 700; margin: 10px 0 0; line-height: 1.35; }
   .ban.bad { background: var(--badbg); color: var(--bad); }
   .ban.warn { background: var(--warnbg); color: var(--warn); }
   .ban.info { background: var(--soft); color: var(--ink); font-weight: 600; font-size: 16px; }
-  .sec { margin: 16px 0 6px; font-size: 14px; font-weight: 800; letter-spacing: .5px; color: var(--mute); text-transform: uppercase; }
-  .sec.ok { color: var(--ok); }
-  .it { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
-  .it .ph { flex: 0 0 72px; width: 72px; height: 72px; border-radius: 10px; background: var(--soft) center/cover no-repeat;
+  .ban.ok { background: var(--okbg); color: var(--ok); }
+  .ban .x { float: right; border: 0; background: transparent; color: inherit; font: inherit; font-size: 24px; line-height: 1;
+            padding: 0 4px; margin: -2px -4px 0 10px; cursor: pointer; }
+  .sec { margin: 18px 0 8px; font-size: 15px; font-weight: 800; letter-spacing: .3px; color: var(--mute); }
+  .sec:first-child { margin-top: 4px; }
+  .sec.ok { color: var(--ok); font-size: 19px; }
+  .sec.w { color: var(--warn); }
+  .sec.other { color: var(--warn); }
+  .sec small { font-weight: 600; font-size: 14px; color: var(--mute); margin-left: 8px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .it { display: flex; gap: 12px; align-items: stretch; background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 8px; }
+  .it .ph { flex: 0 0 72px; width: 72px; height: 96px; border-radius: 8px; background: var(--soft) center/cover no-repeat;
             display: flex; align-items: center; justify-content: center; font-size: 11px; color: #aaa; text-align: center; }
-  .it .tx { flex: 1; min-width: 0; }
-  .it .nm { font-size: 17px; font-weight: 700; word-break: break-word; }
-  .it .vr { font-size: 16px; color: var(--ink); margin-top: 2px; word-break: break-word; }
+  .it .ph.z { cursor: zoom-in; }
+  .it .tx { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .it .nm { font-size: 17px; font-weight: 800; line-height: 1.2; word-break: break-word;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .it .vr { font-size: 15px; color: #777; margin-top: 4px; word-break: break-word; }
+  .it .vr b { color: #333; }
+  .it .inv { font-size: 14px; font-weight: 800; color: var(--ok); margin-top: 4px; word-break: break-word; }
+  .it .pr { font-size: 20px; font-weight: 900; color: var(--ok); margin-top: auto; padding-top: 4px; }
+  .it .pr.np { color: var(--warn); font-size: 16px; }
+  .it.st-n { background: var(--okbg); border-color: var(--ok); }
+  .it.st-w { background: var(--warnbg); border-color: var(--warnline); }
+  .it.st-g { background: #f1f3f4; border-color: #d6dbe3; }
+  .it.st-g .pr { color: var(--mute); }
+  .it.off { opacity: .55; } .it.off .nm { text-decoration: line-through; }
+  .sw { display: inline-block; padding: 0 8px; border-radius: 7px; font-weight: 800; border: 2px solid transparent; line-height: 1.35; }
   .chips { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { font-size: 13px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: var(--soft); color: var(--ink); }
   .chip.ok { background: var(--okbg); color: var(--ok); } .chip.warn { background: var(--warnbg); color: var(--warn); }
   .chip.bad { background: var(--badbg); color: var(--bad); }
-  .it.off { opacity: .55; } .it.off .nm { text-decoration: line-through; }
+  .un { margin-top: 6px; border: 0; border-radius: 10px; background: #b3700f; color: #fff; font-weight: 800; padding: 8px 10px;
+        font-size: 15px; cursor: pointer; align-self: flex-start; }
+  .un:disabled { opacity: .45; cursor: default; }
+  .sw2 { margin: 6px 0 0; border: 2px solid var(--warnline); border-radius: 10px; background: #fff; color: #b3700f; font-weight: 800;
+         padding: 6px 12px; font-size: 15px; cursor: pointer; }
   .row { display: block; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: #fff;
-         padding: 12px; margin: 0 0 8px; font: inherit; color: inherit; }
+         padding: 12px; margin: 0 0 8px; font: inherit; color: inherit; cursor: pointer; }
   .row .a { font-size: 24px; font-weight: 800; } .row .b { font-size: 18px; font-weight: 700; margin-top: 2px; word-break: break-word; }
   .row .c { font-size: 13px; color: var(--mute); margin-top: 2px; }
   #zoom { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; z-index: 50; }
@@ -82,17 +132,97 @@
   #deny { position: fixed; inset: 0; background: #fff; z-index: 60; display: none; align-items: center; justify-content: center;
           padding: 24px; text-align: center; font-size: 19px; font-weight: 600; line-height: 1.5; }
   #info { font-size: 13px; color: var(--mute); white-space: pre-wrap; margin-top: 18px; }
-  .sec.other { color: var(--warn); }
   .grp { opacity: .8; }
+  /* Окно «Какие вещи забрала?» и «Снять «нет»?» */
+  #dlg { position: fixed; inset: 0; background: rgba(17,24,39,.55); display: none; align-items: center; justify-content: center;
+         z-index: 40; padding: 10px; }
+  #dlg.on { display: flex; }
+  .dlgbox { background: #fff; border-radius: 18px; width: min(1180px, 100%); max-height: 100%; padding: 16px 18px;
+            display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  .dlgbox h3 { margin: 0; font-size: 24px; font-weight: 900; }
+  .dlgbox .sub { color: var(--mute); font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .dlgbox .lst { overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-height: 0; }
+  .ck { display: flex; align-items: center; gap: 10px; border: 3px solid #d6dbe3; border-radius: 14px; padding: 6px 10px;
+        background: #fff; cursor: pointer; text-align: left; width: 100%; color: inherit; }
+  .ck.on { border-color: var(--ok); background: var(--okbg); }
+  .ck .bx { width: 40px; height: 40px; border-radius: 10px; border: 3px solid #9aa0a8; flex: none; display: flex;
+            align-items: center; justify-content: center; font-size: 26px; font-weight: 900; color: #fff; }
+  .ck.on .bx { background: var(--ok); border-color: var(--ok); }
+  .ck .cph { width: 48px; height: 64px; border-radius: 8px; flex: none; background: var(--soft) center/cover no-repeat; }
+  .ck .t { font-size: 17px; font-weight: 800; line-height: 1.2; min-width: 0; word-break: break-word; }
+  .ck .t small { display: block; color: var(--mute); font-size: 14px; font-weight: 600; margin-top: 3px; }
+  .ck .p { margin-left: auto; font-size: 19px; font-weight: 900; color: var(--ok); white-space: nowrap; padding-left: 8px; }
+  .dlgft { display: flex; align-items: center; gap: 12px; border-top: 2px solid #eef0f4; padding-top: 12px; flex-wrap: wrap; }
+  .dlgft .s { font-size: 16px; color: var(--oktx); font-weight: 700; margin-right: auto; }
+  .dlgft .s b { display: block; font-size: 30px; color: var(--ok); }
+  .dlgft .btn { height: 62px; padding: 0 22px; font-size: 21px; }
+  .dlgft .ok { background: var(--ok); color: #fff; } .dlgft .no { background: #fff; color: var(--mute); border: 3px solid #d6dbe3; }
+  .dlgft .okw { background: #b3700f; color: #fff; }
+
+  /* ── КОМПЬЮТЕР: две половины [вид B] ─────────────────────────────────────────────────────── */
+  @media (min-width: 900px) {
+    body { display: grid; grid-template-columns: 440px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+    #top { grid-column: 1; grid-row: 1; padding: 20px 22px 8px; border-bottom: 0; border-right: 1px solid var(--line); }
+    #main { display: contents; }
+    #head { grid-column: 1; grid-row: 2; overflow-y: auto; background: var(--card); padding: 6px 22px 12px;
+            border-right: 1px solid var(--line); }
+    #head:empty { display: block; }
+    #out { grid-column: 2; grid-row: 1 / span 3; overflow-y: auto; padding: 18px 22px 28px; }
+    #acts, body.card #acts { grid-column: 1; grid-row: 3; grid-template-columns: 1fr; gap: 12px; padding: 12px 22px 20px;
+                             background: var(--card); border-top: 0; border-right: 1px solid var(--line); }
+    #pad, #abc, #again, body.card #again { display: none; }
+    #num { height: 74px; font-size: 42px; }
+    #num::placeholder { font-size: 24px; }
+    #sync { font-size: 15px; }
+    .btn { height: 86px; font-size: 30px; border-radius: 16px; }
+    .hdr .lbl { font-size: 17px; }
+    .hdr .no { font-size: 58px; }
+    .hdr .nick { font-size: 32px; margin-top: 6px; }
+    .hdr .tbl { font-size: 16px; }
+    .sumb { padding: 14px 18px; margin-top: 14px; }
+    .sumb .l { font-size: 20px; }
+    .sumb .r { font-size: 64px; }
+    .sumb .iv, .sumb .np { font-size: 17px; }
+    .note { font-size: 16px; padding: 10px 14px; margin-top: 12px; }
+    .sec { font-size: 18px; margin: 22px 0 12px; }
+    .sec.ok { font-size: 26px; }
+    .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    /* Узкий экран кассы (1920 с масштабом 150 % = 1280, ноутбук 1366 со 125 %) — две колонки: в три плитки мнутся
+       названия и цены [Фейбл «сценарий», MED-2]. Шесть вещей в экране остаются (минимум владельца). */
+    @media (max-width: 1349px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .it { height: 258px; padding: 10px; border-radius: 14px; }
+    .it .ph { flex: 0 0 122px; width: 122px; height: auto; border-radius: 10px; }
+    .it .nm { font-size: 20px; }
+    .it .vr { font-size: 17px; margin-top: 8px; }
+    .it .inv { font-size: 15px; margin-top: 6px; }
+    .it .pr { font-size: 28px; }
+    .it .pr.np { font-size: 18px; }
+    .row { padding: 14px 18px; }
+    .dlgbox { padding: 22px 26px; gap: 14px; max-height: 92vh; }
+    .dlgbox h3 { font-size: 32px; }
+    .dlgbox .sub { font-size: 18px; }
+    .dlgbox .lst { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .ck .bx { width: 44px; height: 44px; font-size: 30px; }
+    .ck .cph { width: 56px; height: 80px; }
+    .ck .t { font-size: 19px; } .ck .t small { font-size: 15px; }
+    .ck .p { font-size: 22px; }
+    .dlgft .s { font-size: 22px; } .dlgft .s b { font-size: 44px; }
+    .dlgft .btn { height: 80px; padding: 0 34px; font-size: 28px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="top">
-  <div id="disp"><div id="num" class="ph">№ заказа</div></div>
+  <div id="disp"><input id="num" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+       enterkeyhint="search" placeholder="№ заказа или ник"><button id="abc" type="button" title="Набрать ник">Аа</button></div>
   <div id="sync">Открываю список…</div>
 </div>
-<div id="out"></div>
+<div id="main"><div id="head"></div><div id="out"></div></div>
+<div id="acts">
+  <button id="giveAll" class="btn" type="button" disabled>✅ Забрала всё</button>
+  <button id="givePart" class="btn" type="button" disabled>Не забрала всё…</button>
+</div>
 <div id="pad">
   <button type="button" data-d="1">1</button><button type="button" data-d="2">2</button><button type="button" data-d="3">3</button>
   <button type="button" data-d="4">4</button><button type="button" data-d="5">5</button><button type="button" data-d="6">6</button>
@@ -100,16 +230,18 @@
   <button type="button" class="del" data-d="del">⌫</button><button type="button" data-d="0">0</button><button type="button" class="go" data-d="go">Найти</button>
 </div>
 <button id="again" type="button">Новый поиск</button>
+<div id="dlg"></div>
 <div id="zoom"><img id="zimg" alt=""></div>
 <div id="deny"></div>
 
 <script>
 (function () {
   'use strict';
-  var VER = 'v4 · 26.09.2026';
+  var VER = 'v5 · 27.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
-  var MAXLEN = 6;                 // номер заказа — до 4 цифр, с серией — 5; шестая — запас
+  var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
+  var PADLEN = 6;                 // кнопками-цифрами: номер — до 4 цифр, с серией — 5; шестая — запас
   // ⭐ ОСВЕЖЕНИЕ ПО ХОДУ РАБОТЫ [Кодекс, круг 1, HIGH-4]: касса, открытая с утра, иначе весь день искала
   // бы по утреннему списку. Пока кассир работает (нажимал кнопки последние 10 мин) и экран виден —
   // освежаем, если последнему освежению больше 2 мин. Цена — 1 + N коротких вызовов; ответ чаще всего
@@ -134,7 +266,10 @@
   // ответ приходил на 50-й секунде, а касса его уже выбросила. Ждать дольше ничего не стоит — поиск по уже
   // загруженному идёт из памяти телефона, пока запрос летит.
   var WAIT_TABLES = 150000, WAIT_PACK = 150000;   // список закупок тоже бывал на 114-й секунде [Кодекс, 26.09.2026]
+  var WAIT_WRITE = 150000;        // выдача: столько же — склад пишет за 1–3 с, остальное дорога Google
+  var URL_MAX = 7000;             // длиннее адрес Google может не принять — такой заказ выдавать в приложении склада
   var $ = function (id) { return document.getElementById(id); };
+  var DESK = window.matchMedia ? window.matchMedia('(min-width: 900px)') : { matches: false };
 
   // ── ключ телефона: из ярлыка (#k=…), иначе из памяти этой страницы ─────────────────────
   function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
@@ -185,8 +320,16 @@
   var PACKS = {};             // srcId → { id, t, p (разобранная выжимка), checked }
   var syncing = false, lastSyncAt = 0, lastNet = '';   // lastNet: '' | 'нет связи' | 'не пускают'
   var typed = '', pendingSearch = '', lastActivity = Date.now();
-  var CUR = null;             // что на экране: { kind: 'card'|'list'|'nf', digits, sel?, sig, fromList? }
+  // Что на экране: { kind: 'card'|'list'|'nf', qk (ключ запроса), q, sel?, sig, fromList?, no? (выбранный заказ) }
+  var CUR = null;
   var DENIED = false;
+  var BUSY = false;           // летит запрос выдачи / «снять нет» — кнопки записи неактивны (искать дальше можно)
+  var INFL = null;            // что пишется: { tok, label } — итог покажем, даже если кассир уже ищет другой заказ
+  var LAST = null;            // итог последней записи { text, cls, at } — полосой вверху любого экрана ~1 мин
+  var refreshLater = false;   // свежие данные пришли во время записи — пересоберём экран после её ответа
+  var resync = false;         // «заказ изменился»: освежить сразу после идущего освежения, а не через 2 мин
+  var refreshSwap = false;    // экран пересобирает освежение (а не кассир) — см. паузу кнопок в showCard
+  var WOP = null;             // { key, n } — код операции записи: повтор того же нажатия идёт тем же кодом
 
   function isEfirName(n) { return /эфир|efir/i.test(String(n || '')); }
   function hhmm(t) {
@@ -202,9 +345,20 @@
     if (text != null) e.textContent = String(text);
     return e;
   }
+  function plural(n, one, few, many) {
+    var a = Math.abs(n) % 100, b = a % 10;
+    return (a > 10 && a < 20) ? many : b === 1 ? one : (b >= 2 && b <= 4) ? few : many;
+  }
+  function things(n) { return n + ' ' + plural(n, 'вещь', 'вещи', 'вещей'); }
 
   // ── JSONP к складу (как у сканера): <script src="…&callback=…"> ────────────────────────
   var jp = 0;
+  function jsonpUrl(action, params, cb) {
+    var qs = 'action=' + action + '&callback=' + cb;
+    for (var k in params) if (params[k] !== '' && params[k] != null) qs += '&' + k + '=' + encodeURIComponent(params[k]);
+    if (KEY) qs += '&k=' + encodeURIComponent(KEY);
+    return EXEC + '?' + qs;
+  }
   function jsonp(action, params, timeoutMs) {
     return new Promise(function (resolve) {
       var cb = 'kcb' + (++jp) + '_' + Date.now().toString(36);
@@ -222,10 +376,10 @@
       // ⚠️ ОШИБКА ДОСТАВКИ ≠ МОЛЧАНИЕ [живая проверка 26.09.2026]: Google отдавал на каждый 2–3-й ответ склада «404»
       // (сам склад отвечал за 0,3 с). Отличаем её от таймаута — такой запрос имеет смысл сразу повторить.
       s.onerror = function () { finish({ ok: false, net: 1 }); };
-      var qs = 'action=' + action + '&callback=' + cb;
-      for (var k in params) if (params[k] !== '' && params[k] != null) qs += '&' + k + '=' + encodeURIComponent(params[k]);
-      if (KEY) qs += '&k=' + encodeURIComponent(KEY);
-      s.src = EXEC + '?' + qs;
+      // Скрипт загрузился, а ответа в нём нет (Google отдал страницу вместо JSONP: старый адрес, сбой) — это тоже «не
+      // доставлено», и ждать 150 с незачем [Фейбл «сценарий», HIGH-3]. JSONP зовёт callback ДО onload.
+      s.onload = function () { setTimeout(function () { finish({ ok: false, net: 1 }); }, 0); };
+      s.src = jsonpUrl(action, params, cb);
       document.head.appendChild(s);
     });
   }
@@ -250,6 +404,7 @@
     try { if (DB) DB.close(); } catch (e) {}
     DB = null;
     try { indexedDB.deleteDatabase('kassa'); } catch (e) {}
+    closeDlg();
     showDeny();
   }
 
@@ -282,8 +437,11 @@
     // выглядел бы сверенным и открывал бы карточку сам).
     return false;
   }
-  async function sync() {
-    if (syncing || DENIED) return;
+  // force — «освежить обязательно»: идёт освежение — ещё раз сразу после него [Фейбл «гонки», MED-4: «заказ
+  // изменился» иначе ждал бы следующего круга до 2 мин, и заказ нельзя было выдать].
+  async function sync(force) {
+    if (DENIED) return;
+    if (syncing) { if (force) resync = true; return; }
     syncing = true; lastNet = ''; renderSync();
     var changed = false, answered = 0;
     var done = {};
@@ -316,8 +474,9 @@
     } finally {
       syncing = false; lastSyncAt = Date.now(); renderSync();
       if (!DENIED) {
-        if (pendingSearch && pendingSearch === typed && (!CUR || CUR.kind !== 'card')) { var q = pendingSearch; pendingSearch = ''; search(q, true); }
+        if (pendingSearch && pendingSearch === typed.trim() && (!CUR || CUR.kind !== 'card')) { var q = pendingSearch; pendingSearch = ''; search(q, true); }
         else if (changed || (CUR && (CUR.checking || CUR.kind === 'list'))) refreshView();
+        if (resync) { resync = false; setTimeout(function () { sync(); }, 0); }
       }
     }
   }
@@ -359,43 +518,107 @@
   // Тот же разбор, что у сборки выжимки на сервере (PICK_SPACK_NO_RE / PICK_SPACK_FULL_RE).
   function tailOf(no) { var m = /[-\/]\s*(\d+)/.exec(String(no || '')); return m ? String(parseInt(m[1], 10)) : ''; }
   function fullOf(no) { var m = /([A-Za-zА-Яа-яЁёЀ-ӿ]{0,3})\s*(\d+)\s*[-\/]\s*(\d+)/.exec(String(no || '')); return m ? m[2] + m[3] : ''; }
-  function numMatches(no, digits) { return !!no && (tailOf(no) === String(parseInt(digits, 10)) || fullOf(no) === digits); }
+  // Ключ номера — как у сервера (normNo_): без пробелов, латиница вместо похожей кириллицы, без регистра.
+  // «9 - 711» и «9-711» — один заказ; разбей мы их по-разному, касса и склад считали бы вещи разных наборов.
+  var CYR = 'АВЕКМНОРСТУХІЅЈ', LAT = 'ABEKMHOPCTYXISJ';
+  function nk(no) {
+    var s = String(no || '').toUpperCase().replace(/\s+/g, ''), o = '';
+    for (var i = 0; i < s.length; i++) { var j = CYR.indexOf(s.charAt(i)); o += j >= 0 ? LAT.charAt(j) : s.charAt(i); }
+    return o;
+  }
+  // Запрос: цифры («711» — хвост, «9721» — номер целиком), номер с дефисом («9-711»), иначе ник (буквы или длинный телефон).
+  function parseQ(s) {
+    s = String(s || '').trim();
+    if (!s) return null;
+    var m = /^([A-Za-zА-Яа-яЁёЀ-ӿ]{0,3})\s*(\d+)\s*[-\/]\s*(\d+)$/.exec(s);
+    if (m) return { kind: 'full', text: s, digits: m[2] + m[3], pre: nk(m[1]) };
+    if (/^\d{1,6}$/.test(s)) return { kind: 'num', text: s, digits: s };
+    var nn = nickNorm(s);
+    if (nn.length >= 2) return { kind: 'nick', text: s, norm: nn };
+    return { kind: 'short', text: s };
+  }
+  function nickNorm(s) { return String(s || '').toLowerCase().replace(/[@._\-\s]+/g, ''); }
+  // Номер подходит под запрос: цифрами — хвост или номер целиком; с дефисом — только целиком (и буквы серии, если набраны).
+  function numMatches(no, q) {
+    if (!no || !q) return false;
+    if (q.kind === 'num') return tailOf(no) === String(parseInt(q.digits, 10)) || fullOf(no) === q.digits;
+    if (q.kind === 'full') {
+      if (fullOf(no) !== q.digits) return false;
+      if (!q.pre) return true;
+      var m = /([A-Za-zА-Яа-яЁёЀ-ӿ]{0,3})\s*\d+\s*[-\/]/.exec(String(no));
+      return !!m && nk(m[1]) === q.pre;
+    }
+    return false;
+  }
 
   // ── поиск по списку в телефоне ────────────────────────────────────────────────────────
-  // Набранные цифры = хвост номера («711» → 9-711, 8-711…) ИЛИ номер целиком без дефиса («9721» → 9-721).
+  // Цифры = хвост номера («711» → 9-711, 8-711…) ИЛИ номер целиком без дефиса («9721» → 9-721).
   // Полные номера — по КАЖДОЙ строке клиента (индекс f), а не только по главному [Кодекс CRIT-1].
-  function findHits(digits) {
+  // Ник — подстрокой по нику клиента (без регистра, @ . _ - и пробелов).
+  var NICK_MAX = 60;
+  function findHits(q) {
     var out = [];
-    if (!TABLES) return out;
-    var tail = String(parseInt(digits, 10));
+    if (!TABLES || !q) return out;
     TABLES.list.forEach(function (t) {
       var pk = PACKS[t.id]; if (!pk) return;
       var P = pk.p, seen = {};
       var add = function (via) { return function (i) { if (!P.c[i]) return; if (seen[i]) { seen[i].via += via; return; } seen[i] = { t: t, pk: pk, i: i, via: via }; out.push(seen[i]); }; };
-      (P.n[tail] || []).forEach(add('n'));
-      ((P.f && P.f[digits]) || []).forEach(add('f'));
+      if (q.kind === 'num') {
+        (P.n[String(parseInt(q.digits, 10))] || []).forEach(add('n'));
+        ((P.f && P.f[q.digits]) || []).forEach(add('f'));
+      } else if (q.kind === 'full') {
+        ((P.f && P.f[q.digits]) || []).forEach(function (i) {
+          if (!P.c[i] || (q.pre && !clientNos(P, i).some(function (no) { return numMatches(no, q); }))) return;
+          add('f')(i);
+        });
+      } else if (q.kind === 'nick') {
+        for (var i = 0; i < P.c.length && out.length < NICK_MAX; i++) {
+          var nn = nickNorm(P.c[i][0]);
+          if (nn.indexOf(q.norm) >= 0) add(nn === q.norm ? 'x' : 's')(i);
+        }
+      }
     });
+    if (q.kind === 'nick') out.sort(function (a, b) { return (a.via === 'x' ? 0 : 1) - (b.via === 'x' ? 0 : 1); });
     return out;
   }
-  // ⛔️ Сама открываем карточку ТОЛЬКО когда совпадение одно И списки всех закупок в телефоне есть
-  // [Кодекс CRIT-2]: не загрузилась свежая закупка — «единственным» оказался бы клиент старой с тем же номером.
-  function search(digits, again) {
-    if (!digits) return;
+  // Все номера клиента (закупка — по вещам; эфир — списком c[1]).
+  function clientNos(P, i) {
+    var c = P.c[i];
+    if (P.efir) return Array.isArray(c[1]) ? c[1] : [];
+    var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {}, set = {}, o = [];
+    for (var k = 0; k < items.length; k++) {
+      if (st.charAt(k).toLowerCase() !== 'n') continue;
+      var no = own[k] || c[1] || '';
+      if (no && !set[nk(no)]) { set[nk(no)] = 1; o.push(no); }
+    }
+    if (!o.length && c[1]) o.push(c[1]);
+    return o;
+  }
+  function qKey(q) { return q ? q.kind + ':' + (q.digits || q.norm || q.text) : ''; }
+  function search(text, again) {
+    var q = parseQ(text);
+    if (!q) return;
     lastActivity = Date.now();
     if (Date.now() - lastSyncAt > SYNC_EVERY) sync();
-    renderResults(findHits(digits), digits, again, null);
+    if (q.kind === 'short') return showShort(q);
+    renderResults(findHits(q), q, again, null);
   }
   // ⛔️ «Номер целиком» («971» = 9-71?) — только выбором кассира [Фейбл «пересортица» HIGH-1]: пока свежий
   // список едет, заказ 9-971 в нём может ещё не быть, и «971» сама открыла бы 9-71 чужого клиента.
+  // С дефисом («9-971») серия набрана явно — такой номер открывается сам. Ник — только ТОЧНЫЙ и единственный.
   function fresh(at) { return !!at && Date.now() - at < VERIFIED_FOR; }
   function searchVerified() {
     return !!(TABLES && fresh(TABLES.checked) && TABLES.list.every(function (t) { return PACKS[t.id] && fresh(PACKS[t.id].checked); }));
   }
-  function canAutoOpen(hits) { return hits.length === 1 && hits[0].via.indexOf('n') >= 0 && !missingTables().length && searchVerified(); }
-  function renderResults(hits, digits, again, banner) {
-    if (canAutoOpen(hits)) return showCard(hits[0], digits, banner, false);
-    if (hits.length) return showList(hits, digits, banner);
-    showNotFound(digits, again, banner);
+  function canAutoOpen(hits, q) {
+    if (hits.length !== 1 || missingTables().length || !searchVerified()) return false;
+    var v = hits[0].via;
+    return q.kind === 'num' ? v.indexOf('n') >= 0 : q.kind === 'full' ? v.indexOf('f') >= 0 : v === 'x';
+  }
+  function renderResults(hits, q, again, banner) {
+    if (canAutoOpen(hits, q)) return showCard(hits[0], q, banner, false, null);
+    if (hits.length) return showList(hits, q, banner);
+    showNotFound(q, again, banner);
   }
   // Подпись — сами данные клиента, БЕЗ метки сборки [Фейбл, круг 2, MED-4]: сервер пересобирает выжимку раз в
   // 5 мин, и «данные обновились» на каждой пересборке без изменений превратило бы предупреждение в шум.
@@ -415,240 +638,491 @@
   // ⛔️ ПРИШЛИ СВЕЖИЕ ДАННЫЕ — ЭКРАН ПЕРЕСОБИРАЕМ [Кодекс CRIT-3]: иначе открытая карточка показывала бы
   // прежнего клиента и его вещи, когда в таблице номер уже у другого, а свежее «zabrala» не видно.
   function refreshView() {
-    if (!CUR || !CUR.digits) return;
-    var hits = findHits(CUR.digits);
+    refreshSwap = true;
+    try { refreshView_(); } finally { refreshSwap = false; }
+  }
+  function refreshView_() {
+    if (!CUR || !CUR.q) return;
+    // ⛔️ Пока пишется выдача этой карточки — не перебиваем её [Фейбл «гонки», MED-3]: свежие данные (их, бывает, и
+    // вызвала сама запись) выбивали карточку в список, и ответ «выдано» терялся. Пересоберём сразу после ответа.
+    if (BUSY && INFL && cardTok() === INFL.tok) { refreshLater = true; return; }
+    var hits = findHits(CUR.q);
     if (CUR.kind === 'card') {
       var same = hits.filter(function (h) { return h.t.id === CUR.sel.tid && h.pk.p.c[h.i][0] === CUR.sel.nick; });
       // Выбрана из списка — остаётся, пока набор совпадений прежний; появился или пропал клиент — снова список.
-      var okAlone = same.length === 1 && (CUR.fromList ? whoOf(hits) === CUR.who : canAutoOpen(hits));
+      var okAlone = same.length === 1 && (CUR.fromList ? whoOf(hits) === CUR.who : canAutoOpen(hits, CUR.q));
       if (okAlone) {
-        if (sigOf(same[0]) !== CUR.sig) showCard(same[0], CUR.digits, 'Данные заказа обновились — проверьте ещё раз.', CUR.fromList);
-        else if (CUR.checking) showCard(same[0], CUR.digits, null, CUR.fromList);   // сверено — полосу «сверяю» снимаем
+        if (sigOf(same[0]) !== CUR.sig) { if (!BUSY && dlgOpen()) closeDlg(); showCard(same[0], CUR.q, 'Данные заказа обновились — проверьте ещё раз.', CUR.fromList, CUR.no, CUR.flash); }
+        else if (CUR.checking) showCard(same[0], CUR.q, null, CUR.fromList, CUR.no, CUR.flash);   // сверено — полосу «сверяю» снимаем
+        else { CUR.h = same[0]; if (CUR.model) CUR.model = cardModel(same[0], CUR.q, CUR.no); }   // те же данные — дальше работаем со свежей выжимкой
         return;
       }
-      return renderResults(hits, CUR.digits, true, '⚠️ Заказ изменился в таблице — проверьте номер и клиента заново.');
+      if (dlgOpen()) closeDlg();
+      return renderResults(hits, CUR.q, true, '⚠️ Заказ изменился в таблице — проверьте номер и клиента заново.');
     }
     var sig = hits.map(sigOf).join('\n') + '|' + missingTables().length;
-    if (sig !== CUR.sig) renderResults(hits, CUR.digits, true, CUR.kind === 'list' ? '⚠️ Список обновился — проверьте номер и клиента.' : null);
+    if (sig !== CUR.sig) renderResults(hits, CUR.q, true, CUR.kind === 'list' ? '⚠️ Список обновился — проверьте номер и клиента.' : null);
     // Сверилось без изменений — снять «сверяю…» / открыть сверенное; предупреждение списка сохраняем.
-    else if (CUR.kind === 'list' && CUR.ver !== searchVerified() + '|' + syncing) renderResults(hits, CUR.digits, true, CUR.banner);
+    else if (CUR.kind === 'list' && CUR.ver !== searchVerified() + '|' + syncing) renderResults(hits, CUR.q, true, CUR.banner);
   }
 
   // ── экраны ───────────────────────────────────────────────────────────────────────────
   function setView(v) { document.body.className = (v === 'card') ? 'card' : ''; }
-  function clearOut() { var o = $('out'); o.textContent = ''; o.scrollTop = 0; return o; }
-  function renderNum() {
-    var n = $('num');
-    if (typed) { n.textContent = typed; n.className = ''; } else { n.textContent = '№ заказа'; n.className = 'ph'; }
+  // Итог записи, пока кассир уже на другом экране: «anna 9-711: ✅ Выдано…» полосой вверху, около минуты.
+  function lastBanner(hd) {
+    if (LAST && !LAST.shown && Date.now() - LAST.at < 60000) hd.appendChild(el('div', 'ban ' + LAST.cls, LAST.text));
   }
+  // Отказы записей, пришедшие на чужой экран, — полосой с «×» на любом экране, пока кассир не закроет.
+  var STICKY = [];
+  function renderSticky() {
+    var hd = $('head'), box = $('sticky');
+    if (!STICKY || !STICKY.length) { if (box && box.parentNode) box.parentNode.removeChild(box); return; }
+    if (!box) { box = el('div'); box.id = 'sticky'; hd.insertBefore(box, hd.firstChild); }
+    box.textContent = '';
+    STICKY.forEach(function (x) {
+      var b = el('div', 'ban ' + x.cls, x.text + ' ');
+      var cl = el('button', 'x', '×'); cl.type = 'button'; cl.title = 'Закрыть';
+      cl.onclick = function () { STICKY = STICKY.filter(function (y) { return y !== x; }); renderSticky(); };
+      b.appendChild(cl);
+      box.appendChild(b);
+    });
+  }
+
+  function clearOut() {
+    var h = $('head'), o = $('out');
+    h.textContent = ''; o.textContent = ''; h.scrollTop = 0; o.scrollTop = 0; $('main').scrollTop = 0;
+    renderSticky();
+    return o;
+  }
+  function renderNum() { var n = $('num'); if (n.value !== typed) n.value = typed; }
   function showHome() {
-    setView('pad'); CUR = null;
+    setView('pad'); CUR = null; closeDlg();
     var o = clearOut();
-    o.appendChild(el('div', 'hint', 'Наберите номер заказа — можно без серии: «711» найдёт 9-711.'));
+    lastBanner($('head'));
+    $('head').appendChild(el('div', 'hint', DESK.matches
+      ? 'Наберите номер заказа или ник и нажмите Enter. «711» найдёт 9-711; Esc — новый поиск.'
+      : 'Наберите номер заказа — можно без серии: «711» найдёт 9-711. Ник — кнопка «Аа».'));
     appendInfo(o);
+    renderActs(null);
   }
   function missBanner(o) {
     var miss = missingTables();
     if (miss.length) o.appendChild(el('div', 'ban warn', '⚠️ Ещё не загружен список: ' + miss.map(function (x) { return x.name; }).join(', ') +
-      '. Там может быть другой клиент с этим номером — проверьте номер на пакете.'));
+      '. Там может быть другой клиент с этим номером — проверьте номер заказа и ник.'));
   }
-  function showNotFound(digits, again, banner) {
+  function showShort(q) {
     setView('pad');
     var o = clearOut();
-    CUR = { kind: 'nf', digits: digits, sig: '|' + missingTables().length };
-    if (banner) o.appendChild(el('div', 'ban bad', banner));
+    CUR = null;
+    $('head').appendChild(el('div', 'ban warn', 'Наберите номер заказа или хотя бы две буквы ника.'));
+    appendInfo(o);
+    renderActs(null);
+  }
+  function showNotFound(q, again, banner) {
+    setView('pad');
+    var o = clearOut(), hd = $('head');
+    CUR = { kind: 'nf', q: q, qk: qKey(q), sig: '|' + missingTables().length };
+    renderActs(null);
+    lastBanner(hd);
+    if (banner) hd.appendChild(el('div', 'ban bad', banner));
     var anyPack = TABLES && TABLES.list.some(function (x) { return !!PACKS[x.id]; });
     if (!anyPack) {
       // Идёт освежение — «загружается», а не «не загрузился» [Фейбл, 26.09.2026, LOW-1]: список закупок пришёл
       // раньше выжимок и пересобрал экран, а загрузка ещё идёт. Кончилось — отложенный поиск повторит сам.
       if (again && !syncing) {                              // освежение прошло, а списка всё нет — не по кругу
-        o.appendChild(el('div', 'ban bad', 'Список заказов не загрузился' + (lastNet ? ' (' + lastNet + ')' : '') +
+        hd.appendChild(el('div', 'ban bad', 'Список заказов не загрузился' + (lastNet ? ' (' + lastNet + ')' : '') +
           '. Нажмите на строку сверху, чтобы попробовать ещё раз, или ищите в приложении склада.'));
         return;
       }
-      o.appendChild(el('div', 'ban warn', '⏳ Список заказов ещё загружается — найду «' + digits + '», как только придёт.'));
-      pendingSearch = digits;
+      hd.appendChild(el('div', 'ban warn', '⏳ Список заказов ещё загружается — найду «' + q.text + '», как только придёт.'));
+      pendingSearch = q.text;
       if (!syncing) sync();
       return;
     }
-    o.appendChild(el('div', 'ban warn', 'Заказ «' + digits + '» не найден'));
-    missBanner(o);
+    hd.appendChild(el('div', 'ban warn', (q.kind === 'nick' ? 'Ник «' : 'Заказ «') + q.text + '» не найден'));
+    missBanner(hd);
     var h = el('div', 'hint');
-    h.appendChild(el('div', null, 'Список заказов на ' + hhmm(oldestT()) + '. Проверьте номер.'));
-    h.appendChild(el('div', null, 'Заказ собран только что? Он появится в течение 5 минут — нажмите «Найти» ещё раз.'));
+    h.appendChild(el('div', null, 'Список заказов на ' + hhmm(oldestT()) + '. Проверьте ' + (q.kind === 'nick' ? 'ник.' : 'номер.')));
+    h.appendChild(el('div', null, 'Заказ собран только что? Он появится в течение 5 минут — ищите ещё раз.'));
     h.appendChild(el('div', null, 'Касса ищет в закупках: ' + (TABLES ? TABLES.list.map(function (x) { return x.name; }).join(', ') : '—') +
       '. Более старый заказ ищите в приложении склада.'));
-    o.appendChild(h);
-    // Не нашли, а список давно не освежали — освежаем ВСЁ и ищем ещё раз сами (только если номер не меняли).
+    hd.appendChild(h);
+    appendInfo(o);
+    // Не нашли, а список давно не освежали — освежаем ВСЁ и ищем ещё раз сами (только если запрос не меняли).
     if (!again && (Date.now() - lastSyncAt > 30000 || syncing || missingTables().length)) {
-      pendingSearch = digits;
-      o.appendChild(el('div', 'hint', 'Обновляю список и ищу ещё раз…'));
+      pendingSearch = q.text;
+      hd.appendChild(el('div', 'hint', 'Обновляю список и ищу ещё раз…'));
       sync();
     }
   }
-  // Номера пакетов клиента, подходящие под набранные цифры (у вещей «в пакете» — свой номер или номер клиента).
-  function pkgNosOf(P, i, digits) {
-    var c = P.c[i], items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
-    var set = {};
-    for (var k = 0; k < items.length; k++) {
-      if (st.charAt(k).toLowerCase() !== 'n') continue;
-      var no = own[k] || c[1] || '';
-      if (no && numMatches(no, digits)) set[no] = 1;
-    }
-    return Object.keys(set);
-  }
-  function showList(hits, digits, banner) {
+  function showList(hits, q, banner) {
     setView('pad');
-    var o = clearOut();
-    CUR = { kind: 'list', digits: digits, sig: hits.map(sigOf).join('\n') + '|' + missingTables().length, ver: searchVerified() + '|' + syncing,
+    var o = clearOut(), hd = $('head');
+    CUR = { kind: 'list', q: q, qk: qKey(q), sig: hits.map(sigOf).join('\n') + '|' + missingTables().length, ver: searchVerified() + '|' + syncing,
             banner: banner || null };
-    if (banner) o.appendChild(el('div', 'ban bad', banner));
-    missBanner(o);
+    renderActs(null);
+    lastBanner(hd);
+    if (banner) hd.appendChild(el('div', 'ban bad', banner));
+    missBanner(hd);
     if (!searchVerified()) {
       var at = hhmm(oldestT());
-      o.appendChild(el('div', 'ban warn', syncing ? '⏳ Сверяю список с таблицей (он на ' + at + ')…'
-        : '⚠️ Список на ' + at + ' не сверен с таблицей — сверьте серию номера и ник на пакете.'));
+      hd.appendChild(el('div', 'ban warn', syncing ? '⏳ Сверяю список с таблицей (он на ' + at + ')…'
+        : '⚠️ Список на ' + at + ' не сверен с таблицей — сверьте серию номера и ник.'));
     }
-    o.appendChild(el('div', 'sec', 'Найдено: ' + hits.length + ' — выберите'));
+    o.appendChild(el('div', 'sec', 'Найдено: ' + hits.length + (hits.length >= NICK_MAX && q.kind === 'nick' ? ' (показаны первые — уточните ник)' : '') + ' — выберите'));
     hits.forEach(function (h) {
       var P = h.pk.p, c = P.c[h.i];
       var b = el('button', 'row'); b.type = 'button';
-      var nos = P.efir ? efirNos(c, digits) : pkgNosOf(P, h.i, digits);
-      b.appendChild(el('div', 'a', P.efir ? ('эфир · ' + (nos.length ? nos.join(' · ') : '№…' + String(parseInt(digits, 10))))
-                                          : (nos.length ? nos.join(' · ') : (c[1] || ('№ …' + digits)))));
+      var nos = clientNos(P, h.i), fit = q.kind === 'nick' ? nos : nos.filter(function (no) { return numMatches(no, q); });
+      b.appendChild(el('div', 'a', P.efir ? ('эфир · ' + (fit.length ? fit.join(' · ') : '№…')) : (fit.length ? fit.join(' · ') : (c[1] || '№ …'))));
       b.appendChild(el('div', 'b', c[0]));
       b.appendChild(el('div', 'c', h.t.name));
       b.onclick = function () {
-        var now = findHits(digits).filter(function (x) { return x.t.id === h.t.id && x.pk.p.c[x.i][0] === c[0]; });
-        if (now.length !== 1) return renderResults(findHits(digits), digits, true, '⚠️ Список обновился — выберите заново.');
-        showCard(now[0], digits, null, true);
+        var now = findHits(q).filter(function (x) { return x.t.id === h.t.id && x.pk.p.c[x.i][0] === c[0]; });
+        if (now.length !== 1) return renderResults(findHits(q), q, true, '⚠️ Список обновился — выберите заново.');
+        showCard(now[0], q, null, true, null);
       };
       o.appendChild(b);
     });
   }
 
-  // Эфир: сервер везёт номера клиента списком (c[1]) — показываем те, что подходят под набранное.
-  function efirNos(c, digits) { return (Array.isArray(c[1]) ? c[1] : []).filter(function (no) { return numMatches(no, digits); }); }
   var GIVEN_RE = /(zabrala|zabrāla|забрала|zabral|забрал|unisend|omniva|izsniegts|vydano|выдано)/i;
+  var PARCEL_RE = /(pakomat|пакомат|paku ?skap|kurjer|курьер|dpd|venipak|smartpost)/i;
+  var PRICE_RE = /^-?[0-9]+([.,][0-9]+)?\s*€?$/;   // = правило полосы суммы (PICK_SPACK_PRICE_NUM_RE на сервере)
+  // Счёт — R-номер в начале пометки кол. B, любой регистр, приписка позволена: то же правило, что у склада (KASSA_INV_RE).
+  var INV_RE = /^R\d+\s*-\s*\d+/i;
+  function invOf(mark) { var x = INV_RE.exec(String(mark || '')); return x ? x[0].replace(/\s+/g, '').toUpperCase() : ''; }
+  function cents(s) {
+    s = String(s == null ? '' : s).trim();
+    if (!PRICE_RE.test(s)) return null;
+    var v = parseFloat(s.replace('€', '').replace(',', '.'));
+    return isFinite(v) ? Math.round(v * 100) : null;
+  }
+  function eur(c) {
+    var neg = c < 0; c = Math.abs(Math.round(c));
+    var e = String(Math.floor(c / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return (neg ? '-' : '') + e + ',' + String(100 + c % 100).slice(1) + ' €';
+  }
   function photoUrl(P, fid, size) {
     if (!fid || !P.pu) return '';
     var u = String(P.pu).replace('{id}', encodeURIComponent(fid));
     return size ? u.replace(/=s\d+(-rj)?$/, '=s' + size + '-rj') : u;
   }
+  function uniq(a) { var s = {}, out = []; a.forEach(function (x) { if (!s[x]) { s[x] = 1; out.push(x); } }); return out; }
+  function markOf(it) { var f = String(it[3] || ''); return f.indexOf('d:') === 0 ? f.slice(2) : ''; }
+  // Название вещи — как его везёт выжимка и как его считает склад: своё (it[4], бывает и пустым) или из словаря m.
+  // Оно — одна из примет вещи в запросе выдачи: без него «брюки» и «платье» с одинаковыми № позиции, цветом, размером
+  // и ценой были бы для склада одной вещью [Кодекс, круг 1, CRIT].
+  function itemName(P, it) {
+    if (it.length > 4) return String(it[4] == null ? '' : it[4]);
+    var mm = P.m && P.m[String(it[0] || '')];
+    return mm ? String(mm[0] == null ? '' : mm[0]) : '';
+  }
 
-  function showCard(h, digits, banner, fromList) {
+  // Модель карточки: вещи клиента по разделам ВЫБРАННОГО заказа. Буквы выжимки (сервер, pickSpackBuild_): n — № стоит
+  // (собрано), s — куплено, ждёт сборки, e — ещё не куплено, w — жёлтая «нет», c — отменено, o — прочая пометка;
+  // ЗАГЛАВНАЯ — уже у клиента. Номер вещи — свой (c[4]) или номер клиента c[1].
+  function cardModel(h, q, selNo) {
+    var P = h.pk.p, c = P.c[h.i];
+    var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
+    var prices = String(c[5] == null ? '' : c[5]).split('|');
+    var main = String(c[1] || '');
+    var rows = [], groups = {}, order = [];
+    for (var k = 0; k < items.length; k++) {
+      var it = items[k], L = st.charAt(k) || '?', code = L.toLowerCase();
+      var no = code === 'n' ? String(own[k] || main) : '';
+      var r = { k: k, it: it, code: code, given: L !== code, mark: markOf(it), no: no, key: no ? nk(no) : '',
+                price: prices[k] == null ? '' : String(prices[k]) };
+      rows.push(r);
+      if (code === 'n' && no) { if (!groups[r.key]) { groups[r.key] = { no: no, open: [], given: [] }; order.push(r.key); } groups[r.key][r.given ? 'given' : 'open'].push(r); }
+    }
+    // Какой заказ показываем: выбранный кассиром; иначе — подошедший под набранный номер (с вещами к выдаче — первым);
+    // по нику — заказ клиента c[1], если он есть среди собранных.
+    // Набранный номер не у собранных вещей (например, только у жёлтой «нет») — заказ не выбираем вовсе: показать
+    // «главный» номер клиента значило бы выдать чужой по смыслу заказ под набранным номером [Фейбл LOW-1, «746»].
+    var sel = selNo ? nk(selNo) : '';
+    if (!sel || !groups[sel]) {
+      sel = '';
+      var fit = order.filter(function (key) { return numMatches(groups[key].no, q); });
+      fit.sort(function (a, b) { return (groups[b].open.length ? 1 : 0) - (groups[a].open.length ? 1 : 0); });
+      if (fit.length) sel = fit[0];
+      else if (q.kind === 'nick') sel = groups[nk(main)] ? nk(main) : (order[0] || '');
+    }
+    var g = sel ? groups[sel] : null;
+    var m = { P: P, c: c, h: h, main: main, sel: sel, no: g ? g.no : '', open: g ? g.open : [], givenSel: [], wait: [],
+              rest: [], canc: [], others: [], givenOther: [] };
+    rows.forEach(function (r) {
+      if (r.given) {
+        if ((r.code === 'n' && r.key === sel && sel) || (!r.no && (sel || !order.length))) m.givenSel.push(r); else m.givenOther.push(r);
+      } else if (r.code === 'n') { /* в группах */ }
+      else if (r.code === 'w') m.wait.push(r);
+      else if (r.it[3] === 'c' || r.code === 'c') m.canc.push(r);
+      else m.rest.push(r);
+    });
+    order.forEach(function (key) { if (key !== sel && groups[key].open.length) m.others.push(groups[key]); });
+    // Сумма — по вещам к выдаче: правило «одно число» (как полоса суммы), счёт — вещи с пометкой R6-…
+    var sum = 0, inv = 0, np = 0, invs = {};
+    m.open.forEach(function (r) {
+      var cc = cents(r.price);
+      if (cc === null) { np++; return; }
+      sum += cc;
+      if (invOf(r.mark)) { inv += cc; invs[invOf(r.mark)] = 1; }
+    });
+    m.sum = sum; m.inv = inv; m.np = np; m.invNos = Object.keys(invs);
+    return m;
+  }
+
+  // Карточка. selNo — заказ, который выбрал кассир («Открыть заказ …»); flash — полоса итога записи.
+  function showCard(h, q, banner, fromList, selNo, flash) {
     if (!CUR || CUR.kind !== 'card') cardAt = Date.now();
     setView('card');
-    var P = h.pk.p, c = P.c[h.i], o = clearOut();
+    var P = h.pk.p, c = P.c[h.i], o = clearOut(), hd = $('head');
     // Список не сверен с таблицей в этом сеансе (из памяти телефона) или сверен давно, а освежение идёт —
     // карточка честно говорит «сверяю»; пришли данные — полоса снимается или карточка пересобирается.
     var checking = syncing && !searchVerified();
-    CUR = { kind: 'card', digits: digits, sel: { tid: h.t.id, nick: c[0] }, sig: sigOf(h), fromList: !!fromList, checking: checking,
-            who: whoOf(findHits(digits)) };
+    // Освежение само подменило экран (другого клиента или список — карточкой) — кнопки выдачи глухи 0,7 с: щелчок,
+    // нацеленный на прежний экран, не должен выдать заказ [Фейбл «сценарий», L6; круг 2, MED-1]. На телефоне — после
+    // ЛЮБОЙ новой карточки: ряд «7 8 9» лежит прямо под кнопками выдачи. Свой поиск кассира на компьютере — без паузы.
+    // Кнопки на паузе видно серыми.
+    var same = !!(CUR && CUR.kind === 'card' && CUR.sel.tid === h.t.id && CUR.sel.nick === c[0]);
+    var prevNo = same ? CUR.no : null;
+    var shownAt = same ? CUR.shownAt : ((refreshSwap || !DESK.matches) ? Date.now() : 0);
+    if (shownAt && !same) pauseLater(shownAt);
+    CUR = { kind: 'card', q: q, qk: qKey(q), sel: { tid: h.t.id, nick: c[0] }, sig: sigOf(h), fromList: !!fromList, checking: checking,
+            who: whoOf(findHits(q)), no: selNo || null, flash: flash || null, h: h, shownAt: shownAt };
     var hdr = el('div', 'hdr');
+    hdr.appendChild(el('div', 'lbl', 'Заказ'));
     var noEl = el('div', 'no', '');
     hdr.appendChild(noEl);
     hdr.appendChild(el('div', 'nick', c[0]));
     hdr.appendChild(el('div', 'tbl', h.t.name + ' · данные на ' + hhmm(h.pk.t)));
-    o.appendChild(hdr);
-    if (banner) o.appendChild(el('div', 'ban warn', banner));
-    if (checking) o.appendChild(el('div', 'ban warn', '⏳ Сверяю с таблицей — список на ' + hhmm(h.pk.t) + '…'));
-    else if (!searchVerified()) o.appendChild(el('div', 'ban warn', '⚠️ Список на ' + hhmm(oldestT()) + ' не сверен с таблицей — сверьте серию номера и ник на пакете.'));
-    if (fromList) missBanner(o);
+    hd.appendChild(hdr);
+    var bans = el('div');
+    // Итог записи ДРУГОГО заказа (кассир ушёл искать дальше, пока склад писал) — полосой и здесь, ~1 мин: карточку
+    // может пересобрать освежение, и вставленная раньше полоса пропала бы вместе со старым экраном.
+    if (LAST && !LAST.shown && LAST.tok !== (h.t.id + '|' + c[0] + '|' + qKey(q)) && Date.now() - LAST.at < 60000) bans.appendChild(el('div', 'ban ' + LAST.cls, LAST.text));
+    if (flash) bans.appendChild(el('div', 'ban ' + (flash.cls || 'ok'), flash.text));
+    if (banner) bans.appendChild(el('div', 'ban warn', banner));
+    if (checking) bans.appendChild(el('div', 'ban warn', '⏳ Сверяю с таблицей — список на ' + hhmm(h.pk.t) + '…'));
+    else if (!searchVerified()) bans.appendChild(el('div', 'ban warn', '⚠️ Список на ' + hhmm(oldestT()) + ' не сверен с таблицей — сверьте серию номера и ник.'));
+    if (fromList) missBanner(bans);
 
     if (P.efir) {
-      var en = efirNos(c, digits);
-      noEl.textContent = 'эфир · ' + (en.length ? en.join(' · ') : '№…' + String(parseInt(digits, 10)));
+      var en = clientNos(P, h.i).filter(function (no) { return q.kind === 'nick' || numMatches(no, q); });
+      noEl.textContent = 'эфир · ' + (en.length ? en.join(' · ') : '№…');
+      hd.appendChild(bans);
       o.appendChild(el('div', 'ban info', 'Заказ эфира: касса показывает только клиента. Состав — в приложении склада.'));
+      renderActs(null);
       return appendInfo(o);
     }
-    var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
-    if (P.lite || !items.length) {
-      noEl.textContent = c[1] || ('№ …' + digits);
-      o.appendChild(el('div', 'ban info', 'Состав этого заказа касса сейчас не видит — откройте его в приложении склада.'));
+    var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '';
+    if (P.lite || !items.length || !st) {
+      noEl.textContent = c[1] || '№ …';
+      hd.appendChild(bans);
+      o.appendChild(el('div', 'ban info', !st && items.length
+        ? 'Отметки сборки ещё не пришли — касса покажет заказ при следующей сверке с таблицей.'
+        : 'Состав этого заказа касса сейчас не видит — откройте его в приложении склада.'));
+      renderActs(null);
       return appendInfo(o);
     }
-    if (!st) {                                     // выжимка старого вида (без букв) — только состав, без «в пакете»
-      noEl.textContent = c[1] || ('№ …' + digits);
-      o.appendChild(el('div', 'ban info', 'Отметки сборки ещё не пришли — показываю весь заказ; при следующей сверке с таблицей обновлю сам.'));
-      o.appendChild(el('div', 'sec', 'Состав — ' + items.length));
-      items.forEach(function (it) { o.appendChild(itemRow(P, { it: it, code: '?', given: false, mark: markOf(it), no: '' }, it[3] === 'c')); });
-      return appendInfo(o);
-    }
-    // Вещи по пакетам: «в пакете» — буква n, пакет = свой номер вещи или номер клиента.
-    var pk = {}, pkOrder = [], given = [], rest = [], canc = [], inv = {};
-    for (var k = 0; k < items.length; k++) {
-      var it = items[k], L = st.charAt(k) || '?', code = L.toLowerCase();
-      var row = { it: it, code: code, given: L !== code, mark: markOf(it), no: code === 'n' ? (own[k] || c[1] || '') : '' };
-      if (row.mark && /^R\d/i.test(row.mark)) inv[row.mark] = 1;
-      if (row.given) given.push(row);
-      else if (it[3] === 'c' || code === 'c') canc.push(row);
-      else if (code === 'n') { if (!pk[row.no]) { pk[row.no] = []; pkOrder.push(row.no); } pk[row.no].push(row); }
-      else rest.push(row);
-    }
-    var hit = pkOrder.filter(function (no) { return numMatches(no, digits); });
-    var other = pkOrder.filter(function (no) { return hit.indexOf(no) < 0; });
-    var givenHit = given.filter(function (r) { return !r.no || hit.indexOf(r.no) >= 0 || (!hit.length && numMatches(r.no, digits)); });
-    var givenNos = uniq(givenHit.map(function (r) { return r.no; }).filter(Boolean));
-    noEl.textContent = hit.length ? hit.join(' · ') : (givenNos.length ? givenNos.join(' · ') : (c[1] || ('№ …' + digits)));
-    var inPack = hit.reduce(function (s, no) { return s + pk[no].length; }, 0);
-    if (givenHit.length && !inPack) o.appendChild(el('div', 'ban bad', '⚠️ Заказ уже выдан: ' + uniq(givenHit.map(function (r) { return r.mark || 'выдано'; })).join(', ')));
-    else if (givenHit.length) o.appendChild(el('div', 'ban bad', '⚠️ Часть заказа уже выдана: ' + givenHit.length));
-    var invs = Object.keys(inv);
-    if (invs.length) o.appendChild(el('div', 'ban info', 'Счёт: ' + invs.join(', ')));
+    var m = cardModel(h, q, selNo);
+    CUR.model = m; CUR.no = m.no || null;
+    // Та же клиентка, но итог записи или освежение сменили ЗАКАЗ под курсором — та же пауза: щелчок, нацеленный на 9-731,
+    // не должен выдать 9-730 [Фейбл, круг 3, LOW-1].
+    if (same && refreshSwap && prevNo && CUR.no !== prevNo) { CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); }
+    noEl.textContent = m.no || (q.kind === 'nick' ? (c[1] || '№ …') : '№ …' + (q.kind === 'num' ? String(parseInt(q.digits, 10)) : q.text));
 
-    hit.forEach(function (no) {
-      o.appendChild(el('div', 'sec ok', 'В пакете ' + no + ' — ' + pk[no].length));
-      pk[no].forEach(function (r) { o.appendChild(itemRow(P, r, false)); });
-    });
-    if (!hit.length && !givenHit.length) o.appendChild(el('div', 'hint', canc.length && !rest.length && !other.length
-      ? 'Все вещи этого заказа отменены.' : 'Под этим номером нет собранных вещей.'));
-    if (given.length) {
-      o.appendChild(el('div', 'sec', 'Уже выдано — ' + given.length));
-      given.forEach(function (r) { o.appendChild(itemRow(P, r, false)); });
+    // ⭐ ТОЛЬКО ЧТО ВЫДАЛИ — крупно итог выдачи, а не остаток [Фейбл «сценарий», HIGH-1]: после «Не забрала всё» большая
+    // сумма и зелёная кнопка относились бы к вещам, от которых клиент отказался, и «Забрала всё» по привычке записал бы
+    // их тоже. Остаток — серым «Не забрала», кнопки выдачи молчат до нового поиска.
+    var after = flash && flash.done ? flash.done : null;
+    // Левая половина: сумма, пометки, предупреждения.
+    var sb = el('div', 'sumb');
+    if (after) {
+      sb.appendChild(el('div', 'l', 'Выдано · ' + things(after.n)));
+      sb.appendChild(el('div', 'r', eur(after.sum)));
+      if (after.inv) sb.appendChild(el('div', 'iv', 'по счёту: ' + eur(after.inv) + ' · в магазине: ' + eur(after.store)));
+      if (after.np) sb.appendChild(el('div', 'np', 'без цены: ' + things(after.np)));
+      hd.appendChild(sb);
+    } else {
+      sb.appendChild(el('div', 'l', 'Сумма · ' + things(m.open.length)));
+      sb.appendChild(el('div', 'r', eur(m.sum)));
+      // «в магазине» — то, что пойдёт в статистику магазина (без вещей по счёту) [Фейбл «сценарий», В2]
+      if (m.inv) sb.appendChild(el('div', 'iv', 'из них по счёту ' + m.invNos.join(', ') + ': ' + eur(m.inv) + ' · в магазине: ' + eur(m.sum - m.inv)));
+      if (m.np) sb.appendChild(el('div', 'np', 'без цены: ' + things(m.np) + ' — в сумме их нет'));
+      if (m.open.length) hd.appendChild(sb);
     }
-    other.forEach(function (no) {
-      o.appendChild(el('div', 'sec other', 'Другой пакет этого клиента: ' + no + ' — ' + pk[no].length));
-      var g = el('div', 'grp');
-      pk[no].forEach(function (r) { g.appendChild(itemRow(P, r, false)); });
-      o.appendChild(g);
+    // Второй собранный заказ клиента — слева, на виду, одной кнопкой [Фейбл «сценарий», MED-1: справа он уезжал за край,
+    // и клиент уходил без второго заказа].
+    m.others.forEach(function (g) {
+      var nt = el('div', 'note', 'Ещё заказ ' + g.no + ' — ' + things(g.open.length) + ' ');
+      var ob = el('button', 'sw2', 'Открыть'); ob.type = 'button';
+      ob.onclick = function () { lastActivity = Date.now(); showCard(h, q, null, fromList, g.no); };
+      nt.appendChild(ob);
+      hd.appendChild(nt);
     });
-    if (rest.length) {
-      o.appendChild(el('div', 'sec', 'Не в пакете — ' + rest.length));
-      rest.forEach(function (r) { o.appendChild(itemRow(P, r, false)); });
+    var gOther = uniq(m.givenOther.map(function (r) { return r.no; }).filter(Boolean));
+    if (gOther.length) hd.appendChild(el('div', 'note', 'Раньше выдан заказ ' + gOther.join(', ')));
+    var justOk = !!(flash && (flash.cls === 'ok' || flash.done));   // и «выдано» с предупреждением [Фейбл, круг 2, LOW-4]
+    if (m.givenSel.length && !m.open.length && !justOk) bans.appendChild(el('div', 'ban bad', '⚠️ Заказ уже выдан: ' +
+      uniq(m.givenSel.map(function (r) { return r.mark || 'выдано'; })).join(', ')));
+    else if (m.givenSel.length && !justOk) bans.appendChild(el('div', 'ban bad', '⚠️ Часть заказа уже выдана: ' + things(m.givenSel.length)));
+    var parcel = uniq(m.open.map(function (r) { return r.mark; }).filter(function (x) { return PARCEL_RE.test(x); }));
+    if (parcel.length) bans.appendChild(el('div', 'ban warn', '⚠️ В заказе пометка «' + parcel.join(', ') +
+      '» — это посылка. Выдавайте, только если клиент пришёл за ней сам.'));
+    hd.appendChild(bans);
+
+    // Правая половина: вещи заказа плитками, потом остальное.
+    if (m.open.length && after) {
+      o.appendChild(el('div', 'sec', 'Не забрала — ' + things(m.open.length) + ' (остались в заказе ' + m.no + ')'));
+      var g0 = el('div', 'grid grp');
+      m.open.forEach(function (r) { g0.appendChild(tile(P, r, '')); });
+      o.appendChild(g0);
+    } else if (m.open.length) {
+      var h1 = el('div', 'sec ok', 'Заказ ' + m.no + ' — ' + things(m.open.length));
+      if (DESK.matches) h1.appendChild(el('small', null, 'Esc — новый поиск'));
+      o.appendChild(h1);
+      var g1 = el('div', 'grid');
+      m.open.forEach(function (r) { g1.appendChild(tile(P, r, 'st-n')); });
+      o.appendChild(g1);
+    } else if (!m.givenSel.length) {
+      o.appendChild(el('div', 'hint', m.canc.length && !m.rest.length && !m.others.length && !m.wait.length
+        ? 'Все вещи этого заказа отменены.' : 'Под этим номером нет собранных вещей.'));
     }
-    if (canc.length) {
-      o.appendChild(el('div', 'sec', 'Отменено — ' + canc.length));
-      canc.forEach(function (r) { o.appendChild(itemRow(P, r, true)); });
+    if (m.wait.length) {
+      o.appendChild(el('div', 'sec w', 'Нет в наличии — ' + m.wait.length));
+      var gw = el('div', 'grid');
+      // Экран «после выдачи» — без «Снять «нет»» до нового поиска: снятие перерисовывало карточку в обычный вид, и
+      // отказанная вещь снова оказывалась под живой «Забрала всё» [Фейбл, перепроверка круга 3, HIGH].
+      m.wait.forEach(function (r) { gw.appendChild(tile(P, r, 'st-w', after ? null : r)); });
+      o.appendChild(gw);
+    }
+    m.others.forEach(function (g) {
+      o.appendChild(el('div', 'sec other', 'Другой заказ этого клиента: ' + g.no + ' — ' + g.open.length));
+      var sw = el('button', 'sw2', 'Открыть заказ ' + g.no); sw.type = 'button';
+      sw.onclick = function () { lastActivity = Date.now(); showCard(h, q, null, fromList, g.no); };
+      o.appendChild(sw);
+      var go = el('div', 'grid grp');
+      g.open.forEach(function (r) { go.appendChild(tile(P, r, '')); });
+      o.appendChild(go);
+    });
+    if (m.givenSel.length) {
+      o.appendChild(el('div', 'sec', 'Уже выдано — ' + m.givenSel.length));
+      var gg = el('div', 'grid');
+      m.givenSel.forEach(function (r) { gg.appendChild(tile(P, r, 'st-g')); });
+      o.appendChild(gg);
+    }
+    if (m.rest.length) {
+      o.appendChild(el('div', 'sec', 'Ещё не собрано — ' + m.rest.length));
+      var gr = el('div', 'grid');
+      m.rest.forEach(function (r) { gr.appendChild(tile(P, r, '')); });
+      o.appendChild(gr);
+    }
+    if (m.canc.length) {
+      o.appendChild(el('div', 'sec', 'Отменено — ' + m.canc.length));
+      var gc = el('div', 'grid');
+      m.canc.forEach(function (r) { gc.appendChild(tile(P, r, 'off')); });
+      o.appendChild(gc);
     }
     appendInfo(o);
+    renderActs(after ? null : m);
   }
-  function uniq(a) { var s = {}, out = []; a.forEach(function (x) { if (!s[x]) { s[x] = 1; out.push(x); } }); return out; }
-  function markOf(it) { var f = String(it[3] || ''); return f.indexOf('d:') === 0 ? f.slice(2) : ''; }
-  var CODE_TXT = { s: ['★ куплено, не собрано', 'warn'], e: ['ещё не куплено', ''], w: ['нет — ждём', 'warn'],
+
+  // ── 🎨 плашка цвета — словарь и правила «Собрать заказ» (web-app.js, PCOL / pickColorStyle) ─────────
+  // Работник смотрит на фото, а не на слово: слово цвета — на фоне этого цвета. Не нашли — просто текст.
+  var PCOL = {
+    'black':'#141414', 'total black':'#000000', 'choco':'#5a3a22', 'gorjkij choco':'#3b2213', 'milk':'#f3ead8',
+    'dark milk':'#e2d2b4', 'white':'#ffffff', 'grey':'#9a9a9a', 'gray':'#9a9a9a', 'light grey':'#d4d4d4',
+    'dark grey':'#555555', 'grafit':'#3a3d42', 'bordo':'#7b1e2e', 'dark bordo':'#560f1c', 'light bordo':'#a53d4e',
+    'jarkij bordo':'#9e1330', 'beige':'#d8c09a', 'light beige':'#ebdcc2', 'dark beige':'#b39469', 'taup':'#8b7d6b',
+    'light taup':'#b5a794', 'dark taup':'#5f5448', 'camel':'#c19a6b', 'light camel':'#d9bc91', 'dark camel':'#9c7443',
+    'brown':'#6b4226', 'terrakot':'#c0572f', 'blue':'#1f4fa8', 'dark blue':'#14285e', 'light blue':'#9fd0f2',
+    'jarko goluboj':'#1e9bf0', 'dimcato goluboj':'#8fb2cc', 'nebesko light blue':'#b8e2fb', 'dzinsovij':'#4a6c96',
+    'elektrik':'#1560e0', 'sliva':'#6b2e55', 'dark sliva':'#461a37', 'light sliva':'#9b6a8c', 'red':'#d32020',
+    'koral':'#f2766b', 'pink':'#f4a6c1', 'light pink':'#fad4e1', 'barbi pink':'#e0218a', 'staraja roza':'#c0868c',
+    'pudra':'#e8c4c0', 'fuksija':'#d8228a', 'malinovij':'#c2185b', 'fioletovij':'#6a35a8', 'sirenj':'#b79ad6',
+    'jarko sirenevij':'#a35ed8', 'olive':'#6f7a2e', 'haki':'#78714a', 'hakki':'#78714a', 'green':'#2e9e3e',
+    'dark green':'#1f5a2b', 'izumrud':'#0f7a55', 'salatovij':'#9acd32', 'mentol':'#a8e6cf', 'morskaja volna':'#1f8f8a',
+    'tiffani':'#0abab5', 'biruza':'#1fb5b0', 'yellow':'#f5d90a', 'gor4ica':'#d0a21a', 'orange':'#f28c1c',
+    'persik':'#f7b98f', 'gold':'#d4af37', 'silver':'#c0c0c0', 'bronza':'#a8733a'
+  };
+  var PCOL_MET = { 'gold':'linear-gradient(135deg,#a8842a,#f3dc86,#a8842a)', 'silver':'linear-gradient(135deg,#8e8e8e,#f0f0f0,#8e8e8e)',
+                   'bronza':'linear-gradient(135deg,#7a5026,#d9a066,#7a5026)' };
+  function colorMain(raw) { var t = String(raw == null ? '' : raw).split('\n')[0], k = t.indexOf('('); return (k >= 0 ? t.slice(0, k) : t).trim(); }
+  function colorFind(k) {
+    k = String(k || '').toLowerCase().replace(/^[0-9]+[.] */, '').replace(/zamw/g, ' ').replace(/ +/g, ' ').trim();
+    if (!k) return '';
+    if (PCOL.hasOwnProperty(k)) return k;
+    var w = k.split(' ');
+    if (w.length > 2 && PCOL.hasOwnProperty(w[0] + ' ' + w[1])) return w[0] + ' ' + w[1];
+    return PCOL.hasOwnProperty(w[0]) ? w[0] : '';
+  }
+  function colorLum(hex) { return (0.299 * parseInt(hex.substr(1, 2), 16) + 0.587 * parseInt(hex.substr(3, 2), 16) + 0.114 * parseInt(hex.substr(5, 2), 16)) / 255; }
+  // Стиль плашки или null. Значения — только из словаря выше, данные клиента сюда не попадают.
+  function colorStyle(main) {
+    var s = String(main || '').toLowerCase(), p = s.split('+'), y;
+    if (p.length === 2) {
+      var a = colorFind(p[0]), b = colorFind(p[1]);
+      if (!a || !b) return null;
+      y = Math.max(colorLum(PCOL[a]), colorLum(PCOL[b]));
+      return { background: 'linear-gradient(90deg,' + PCOL[a] + ' 50%,' + PCOL[b] + ' 50%)', color: '#fff',
+               textShadow: '0 0 3px #000,0 0 3px #000', borderColor: y > 0.82 ? '#b5b5b5' : '' };
+    }
+    var c = colorFind(s);
+    if (!c) return null;
+    y = colorLum(PCOL[c]);
+    return { background: PCOL_MET[c] || PCOL[c], color: y > 0.5 ? '#111' : '#fff', textShadow: '', borderColor: y > 0.82 ? '#b5b5b5' : '' };
+  }
+  function colorNode(raw) {
+    var full = String(raw == null ? '' : raw).trim(), main = colorMain(full), stl = main ? colorStyle(main) : null;
+    var f = document.createDocumentFragment();
+    if (!stl) { f.appendChild(document.createTextNode(full.replace(/\s*\n\s*/g, ' / '))); return f; }
+    var sp = el('span', 'sw', main);
+    sp.style.background = stl.background; sp.style.color = stl.color;
+    if (stl.textShadow) sp.style.textShadow = stl.textShadow;
+    if (stl.borderColor) sp.style.borderColor = stl.borderColor;
+    f.appendChild(sp);
+    var tail = full.slice(full.indexOf(main) + main.length).split('\n').join(' ').trim();
+    if (tail) f.appendChild(document.createTextNode(' ' + tail));
+    return f;
+  }
+
+  var CODE_TXT = { s: ['куплено, не собрано', 'warn'], e: ['ещё не куплено', ''], w: ['нет в наличии', 'warn'],
                    o: ['другая пометка — проверьте в таблице', 'warn'], c: ['отменено', 'bad'] };
-  function itemRow(P, r, off) {
-    var it = r.it, num = String(it[0] || ''), m = P.m && P.m[num];
-    var name = it.length > 4 && it[4] ? it[4] : (m ? m[0] : '');
-    var fid = m ? m[1] : '';
-    var box = el('div', 'it' + (off ? ' off' : ''));
+  // Плитка вещи. unnet — вещь с жёлтой «нет», у которой кассир может снять «нет» (клиент берёт замену).
+  function tile(P, r, cls, unnet) {
+    var it = r.it, num = String(it[0] || ''), mm = P.m && P.m[num];
+    var name = itemName(P, it);
+    var fid = mm ? mm[1] : '';
+    var box = el('div', 'it' + (cls ? ' ' + cls : ''));
     var ph = el('div', 'ph');
     var thumb = photoUrl(P, fid, 240);
     if (thumb) {
       ph.style.backgroundImage = 'url("' + thumb.replace(/"/g, '%22') + '")';
+      ph.className = 'ph z';
       var big = photoUrl(P, fid, 0);
       ph.onclick = function () { $('zimg').src = big; $('zoom').style.display = 'flex'; };
     } else ph.textContent = 'фото нет';
     box.appendChild(ph);
     var tx = el('div', 'tx');
-    tx.appendChild(el('div', 'nm', (num ? num + ' · ' : '') + (name || '—')));
-    var vr = [it[1], it[2]].map(function (x) { return String(x || '').replace(/\s*\n\s*/g, ' / ').trim(); }).filter(Boolean).join(' · ');
-    if (vr) tx.appendChild(el('div', 'vr', vr));
+    tx.appendChild(el('div', 'nm', (num ? num + ' | ' : '') + (name || '—')));
+    if (String(it[1] || '').trim()) { var vc = el('div', 'vr', 'цвет: '); vc.appendChild(colorNode(it[1])); tx.appendChild(vc); }
+    if (String(it[2] || '').trim()) { var vs = el('div', 'vr', 'размер: '); vs.appendChild(el('b', null, String(it[2]).replace(/\s*\n\s*/g, ' / '))); tx.appendChild(vs); }
+    if (invOf(r.mark)) tx.appendChild(el('div', 'inv', 'счёт ' + r.mark));
     var chips = el('div', 'chips');
     if (r.given) chips.appendChild(el('span', 'chip bad', 'выдано'));
     else if (CODE_TXT[r.code]) chips.appendChild(el('span', 'chip ' + CODE_TXT[r.code][1], CODE_TXT[r.code][0]));
-    if (r.mark && !(r.given && GIVEN_RE.test(r.mark) && r.mark.length < 12)) chips.appendChild(el('span', 'chip' + (GIVEN_RE.test(r.mark) ? ' bad' : ''), r.mark));
+    if (r.mark && !invOf(r.mark) && !(r.given && GIVEN_RE.test(r.mark) && r.mark.length < 12)) chips.appendChild(el('span', 'chip' + (GIVEN_RE.test(r.mark) ? ' bad' : ''), r.mark));
     if (chips.childNodes.length) tx.appendChild(chips);
+    // Цена: число — крупно; не число или пусто — «без цены» оранжевым (в сумме её нет) [Фейбл «сценарий», L1].
+    var cc = cents(r.price);
+    tx.appendChild(el('div', 'pr' + (cc === null ? ' np' : ''), cc === null ? (r.price ? r.price + ' — без цены' : 'без цены') : eur(cc)));
+    if (unnet) {
+      var ub = el('button', 'un', 'Снять «нет» — клиент берёт'); ub.type = 'button';
+      ub.disabled = BUSY;
+      ub.onclick = function () { askUnnet(unnet); };
+      tx.appendChild(ub);
+    }
     box.appendChild(tx);
     return box;
   }
@@ -663,29 +1137,530 @@
     o.appendChild(d);
   }
 
-  // ── клавиатура ───────────────────────────────────────────────────────────────────────
+  // ── ✅ ВЫДАЧА: «Забрала всё» / «Не забрала всё…» и «Снять «нет»» ────────────────────────────────
+  // [владелец 26.09.2026: «Нужны 2 кнопки: Забрала все и Не забрала все … Если 2), то выводить окно, укажите, какие
+  // товары забрала»; окно — «пусть галки стоят везде, а работник должен убрать там где не забрала»; «если у товара
+  // стояло "нет" (желтое) и клиент на кассе решил взять все же альтернативу … снять нет, чтобы товар отметился зеленым»]
+  // Склад пишет ТОЛЬКО то, что кассир видел: вещи уходят теми же пятью полями, что пришли в выжимке, и сервер сверяет
+  // их с таблицей целиком (kassa.js). Разошлось — «заказ изменился», ничего не записано, список освежается.
+  // ⚠️ Google отдаёт «404», когда склад уже записал: повторяем ТЕМ ЖЕ кодом операции — склад узнаёт повтор и
+  // выдачу второй раз не пишет. Ответ не пришёл совсем — то же нажатие потом идёт тем же кодом.
+  function renderActs(m) {
+    var a = $('giveAll'), b = $('givePart');
+    // Экран «после выдачи» — кнопки молчат до нового поиска, кто бы их ни перерисовал (конец чужой записи, досылка,
+    // таймер паузы): иначе отказанная вещь оказывалась под живой «Забрала всё» [Фейбл, круг 3, HIGH-1].
+    var after = !!(CUR && CUR.kind === 'card' && CUR.flash && CUR.flash.done);
+    var n = (m && !after) ? m.open.length : 0, pause = !!m && tooFresh();
+    a.disabled = BUSY || n < 1 || pause;
+    b.disabled = BUSY || n < 2 || pause;
+    var mine = BUSY && INFL && cardTok() === INFL.tok;
+    a.textContent = mine ? 'Записываю…' : (n > 0 ? '✅ Забрала всё' + (n > 1 ? ' (' + n + ')' : '') : '✅ Забрала всё');
+  }
+  function itemOf(P, r) { return [String(r.it[0] || ''), String(r.it[1] || ''), String(r.it[2] || ''), String(r.it[3] || ''), r.price, itemName(P, r.it)]; }
+  function newOp() {
+    var s = Date.now().toString(36) + '-';
+    try { var a = new Uint8Array(10); crypto.getRandomValues(a); for (var i = 0; i < a.length; i++) s += (a[i] % 36).toString(36); }
+    catch (e) { s += Math.random().toString(36).slice(2, 12); }
+    return s.slice(0, 40);
+  }
+  // Запрос записи с повтором после «404». Код операции живёт, пока исход не известен точно.
+  async function writeCall(action, params, key) {
+    if (!WOP || WOP.key !== key) WOP = { key: key, n: newOp() };
+    params.n = WOP.n;
+    if (jsonpUrl(action, params, 'kcb000_xxxxxxxx').length > URL_MAX) return { ok: false, error: 'too_big' };
+    var r = null;
+    for (var at = 0; at < 3; at++) {
+      r = await jsonp(action, params, WAIT_WRITE);
+      if (DENIED) return { ok: false, error: 'no_key' };
+      if (!r || !r.net) break;
+      await sleep(2000);
+    }
+    // Исход известен (записано — и частично, «изменился», отказ по делу) — следующее нажатие пойдёт новым кодом. Не
+    // известен (нет ответа, «404» подряд, сбой записи на складе) — код остаётся: повтор узнают и не запишут дважды.
+    if (r && !r.net && (r.ok || r.changed || Number(r.wrote) > 0 || /^(bad_args|efir|src_denied|no_src|too_big|ambiguous)$/.test(String(r.error || '')))) WOP = null;
+    return r;
+  }
+  // ⛔️ ИСХОД НЕИЗВЕСТЕН — КАССА ДОСЫЛАЕТ ЗАПРОС САМА [Кодекс, круг 2, HIGH-2; Фейбл, круг 2, MED-1]. Ответ не пришёл или
+  // склад не смог проверить свою запись: он помнит операцию по коду и при повторе ТЕМ ЖЕ кодом перепроверит лист и
+  // допишет журнал (деньги «Статистики»). Ждать повтора от кассира нельзя: он уже у другого клиента (код сменился), а
+  // освежение показывает заказ выданным — кнопки нет. Поэтому запрос с его кодом касса хранит сама и досылает в фоне,
+  // пока исход не станет известен (до 10 мин). Обычная выдача ничего лишнего не делает.
+  var PENDS = [], pendTimer = null;
+  var PEND_STEPS = [10, 20, 40, 60, 90, 120], PEND_FOR = 600000, WAIT_RESEND = 20000;   // досылка держит кассу не дольше 20 с
+  function unknownOut(r) { return !r || !!r.net || !!r.uncertain; }
+  // Что ответ значит для досылки: 'add' — исход неизвестен; 'keep' — склад не смог даже посмотреть (занят, не прочитал,
+  // не открыл закупку, упал): прежний неизвестный исход так и не узнан, досылку не трогаем [Кодекс, круг 3, CRIT-1];
+  // 'forget' — исход известен.
+  function pendFate(r) {
+    if (unknownOut(r)) return 'add';
+    return /^(busy|read_failed|exception|src_open_failed|no_orders_sheet)$/.test(String(r.error || '')) ? 'keep' : 'forget';
+  }
+  function pendAdd(action, params, key, label, no, tok, what) {
+    if (PENDS.some(function (x) { return x.params.n === params.n; })) return;
+    PENDS.push({ action: action, params: Object.assign({}, params), key: key, label: label, no: no, tok: tok, what: what || '', t0: Date.now(), tries: 0 });
+    if (!pendTimer) pendTimer = setTimeout(pendRun, PEND_STEPS[0] * 1000);
+  }
+  // Исход известен и без досылки (кассир нажал ещё раз тем же кодом) — досылать нечего.
+  function pendForget(n) { PENDS = PENDS.filter(function (x) { return x.params.n !== n; }); }
+  function pendNext(sec) { if (pendTimer) clearTimeout(pendTimer); pendTimer = PENDS.length ? setTimeout(pendRun, sec * 1000) : null; }
+  async function pendRun() {
+    pendTimer = null;
+    if (!PENDS.length || DENIED) return;
+    if (BUSY || dlgOpen()) { pendNext(5); return; }    // кассир как раз пишет или отмечает вещи в окне — досылка следом
+    var p = PENDS[0];
+    p.tries++;
+    setBusy(true, p.label, p.tok);
+    var r = null;
+    try {
+      for (var at = 0; at < 3; at++) {
+        r = await jsonp(p.action, p.params, WAIT_RESEND);
+        if (DENIED || !r || !r.net) break;
+        await sleep(2000);
+      }
+    } finally { setBusy(false); }
+    if (DENIED) return;
+    if (PENDS.indexOf(p) < 0) { pendNext(1); return; }  // пока летела, исход узнал сам кассир
+    if (pendFate(r) !== 'forget') {
+      if (refreshLater) { refreshLater = false; setTimeout(refreshView, 0); }   // пришедшие за это время данные [Фейбл, круг 3]
+      if (Date.now() - p.t0 < PEND_FOR) { pendNext(PEND_STEPS[Math.min(p.tries, PEND_STEPS.length - 1)]); return; }
+      pendForget(p.params.n);
+      finishWrite(p.tok, p.no, { text: '⛔️ Склад так и не подтвердил запись. Проверьте заказ в приложении склада и скажите владельцу.', cls: 'bad' });
+      pendNext(1);
+      return;
+    }
+    pendForget(p.params.n);
+    if (WOP && WOP.n === p.params.n) WOP = null;
+    var f;
+    if (p.action === 'kassa_give') f = giveFlash(r, p.no, r.wrote || 0);
+    else if (r.ok) f = { text: '✅ «нет» снято: ' + p.what + ' — вещь в заказе ' + String(r.no || p.no || 'клиента') + ', в сумме.', cls: 'ok' };
+    else if (r.changed) f = { text: '⚠️ Вещь в таблице изменилась — «нет» не снято. Проверьте ещё раз.', cls: 'bad' };
+    else f = { text: '⛔️ «нет» не снято. ' + failText(r), cls: 'bad' };
+    // Удачная выдача — и тут экран «после выдачи» (кнопки молчат, отказанное — серым) [Фейбл, круг 3, HIGH-1]; вещи в
+    // памяти кассы не отмечены — правду принесёт освежение ниже.
+    f.text = 'Проверка: ' + f.text;
+    if (!(p.action === 'kassa_give' && r.ok)) delete f.done;
+    finishWrite(p.tok, (r.ok && r.no) || p.no, f);
+    sync(true);
+    pendNext(1);
+  }
+  // Итог выдачи словами — и для ответа на нажатие, и для досылки. Деньги — по ответу склада.
+  function giveFlash(r, no, n) {
+    if (r && r.ok) {
+      var t = '✅ Выдано: ' + things(n) + ' · ' + eur(Number(r.sum) || 0);
+      if (Number(r.inv)) t += ' (по счёту ' + eur(Number(r.inv)) + ', в магазине ' + eur(Number(r.store) || 0) + ')';
+      if (r.noprice) t += ' · без цены: ' + r.noprice;
+      if (r.moved) t += '. ⚠️ Строки таблицы сдвинулись во время записи — пусть владелец проверит заказ.';
+      if (r.repeat) t += ' (повтор — склад узнал и второй раз не записал)';
+      return { text: t + logSay(r, no), cls: (r.moved || r.log === false || r.log === 'later') ? 'warn' : 'ok',
+               done: { n: n, sum: Number(r.sum) || 0, inv: Number(r.inv) || 0, store: Number(r.store) || 0, np: Number(r.noprice) || 0 } };
+    }
+    // Записалась часть: деньги и журнал за неё — так же честно, как за целую выдачу [Кодекс, круг 2, HIGH-6].
+    if (r && Number(r.wrote) > 0) {
+      return { text: '⚠️ Записано только ' + things(Number(r.wrote)) + ' из ' + (Number(r.wrote) + (Number(r.failed) || 0)) +
+        ' · ' + eur(Number(r.sum) || 0) + ' — остальное склад не подтвердил. Обновляю список — проверьте, что осталось, и отметьте ещё раз только то, что клиент забрал' + logSay(r, no), cls: 'warn' };
+    }
+    if (r && r.changed) {
+      return { text: (r.total === 0 && r.given) ? '⚠️ Этот заказ уже выдан (другая касса, таблица или ваша прошлая попытка, на которую не пришёл ответ). Ничего не записано.'
+        : '⚠️ Заказ изменился в таблице' + (typeof r.total === 'number' ? ' (сейчас к выдаче: ' + things(r.total) + ')' : '') +
+          ' — ничего не записано. Обновляю список, проверьте и нажмите ещё раз.', cls: 'bad' };
+    }
+    return unknownOut(r) ? { text: '⚠️ ' + failText(r), cls: 'warn' } : { text: '⛔️ ' + failText(r), cls: 'bad' };
+  }
+  // Журнал кассы (деньги «Статистики») не лёг — сказать владельцу в обоих случаях: отложенную строку склад держит в
+  // памяти не дольше 6 ч, и Google может выронить её раньше [Кодекс, круг 2, HIGH-3].
+  function logSay(r, no) {
+    if (r.log === 'later') return '. ⚠️ Журнал кассы не ответил — склад попробует дописать сумму сам, но скажите владельцу: заказ ' + no + ', ' + eur(Number(r.store) || 0) + '.';
+    if (r.log === false) return '. ⚠️ Сумма не записалась в журнал кассы — скажите владельцу: заказ ' + no + ', ' + eur(Number(r.store) || 0) + '.';
+    return r.ok ? '' : '.';
+  }
+  function failText(r) {
+    var again = ' — касса проверит сама через несколько секунд, можно работать дальше.';
+    if (!r) return 'Ответ склада не пришёл' + again;
+    if (r.net) return 'Ответ склада не дошёл (нет связи или сбой Google)' + again;
+    if (r.uncertain) return 'Склад не смог проверить свою запись' + again;
+    var e = String(r.error || '');
+    if (e === 'busy') return 'Таблица занята (' + (r.sick ? 'Google не отвечает' : 'идёт другая запись') + ') — нажмите ещё раз через минуту.';
+    if (e === 'too_big') return 'Заказ слишком большой для кассы — отметьте выдачу в приложении склада.';
+    if (e === 'efir') return 'Это заказ эфира — касса его не выдаёт, отметьте в приложении склада.';
+    if (e === 'ambiguous') return 'Таких одинаковых вещей у клиента несколько — снимите «нет» в приложении склада («Собрать заказ»).';
+    if (e === 'flush_failed' || e === 'write_failed' || e === 'exception') return 'Склад не подтвердил запись. Нажмите ещё раз — повтор выдачу дважды не запишет.';
+    if (e === 'read_failed') return 'Таблица не прочиталась (Google тормозит). Нажмите ещё раз через минуту.';
+    if (e === 'src_open_failed' || e === 'no_orders_sheet') return 'Закупка не открылась. Нажмите ещё раз или отметьте в приложении склада.';
+    return 'Не записано (' + (e || 'ошибка') + '). Нажмите ещё раз или отметьте в приложении склада.';
+  }
+  // Секунды на кнопке, пока склад пишет: кассир видит, что касса жива, а не зависла [Фейбл «сценарий», HIGH-3].
+  var busyTimer = null, busyAt = 0;
+  function busyTick() {
+    var sec = Math.round((Date.now() - busyAt) / 1000), t = 'Записываю…' + (sec >= 3 ? ' ' + sec + ' с' : '');
+    var a = $('giveAll');
+    if (BUSY && INFL && cardTok() === INFL.tok) a.textContent = t;
+    // Занято чужой записью (досылка прошлой выдачи) — сказать словами, а не молча серой кнопкой [Фейбл, круг 3, MED-1].
+    else if (BUSY && INFL && CUR && CUR.kind === 'card') a.textContent = '⏳ Склад занят прошлой записью (' + INFL.label + ')…';
+    var ok = document.querySelector('#dlg .dlgft .ok, #dlg .dlgft .okw');
+    if (ok && BUSY) ok.textContent = t;
+  }
+  function setBusy(v, label, tok) {
+    BUSY = !!v;
+    INFL = BUSY ? { tok: tok || cardTok(), label: label || '' } : INFL;
+    if (BUSY) { busyAt = Date.now(); if (!busyTimer) busyTimer = setInterval(busyTick, 1000); }
+    else if (busyTimer) { clearInterval(busyTimer); busyTimer = null; }
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    renderActs(m);
+    document.querySelectorAll('.un').forEach(function (b) { b.disabled = BUSY; });
+    var ok = document.querySelector('#dlg .dlgft .ok, #dlg .dlgft .okw');
+    if (ok) { ok.disabled = BUSY; if (BUSY) ok.textContent = 'Записываю…'; }
+  }
+  // Ответ записи пришёл: своя карточка на экране — итог в ней; кассир уже на другом экране — итог полосой там.
+  function finishWrite(tok, no, flash) {
+    // Итог живёт минуту: и на этой карточке (её может пересобрать свежая выжимка), и на любом другом экране — но только
+    // если кассир ушёл, пока склад писал: увиденный на своей карточке итог к следующему клиенту не переезжает (чужое
+    // «✅ Выдано» там можно принять за своё) [Фейбл, круг 2, MED-4].
+    var mine = cardTok() === tok;
+    var text = (INFL && INFL.label ? INFL.label + ': ' : '') + flash.text;
+    LAST = { text: text, cls: flash.cls, at: Date.now(), tok: tok, flash: flash, shown: mine };
+    // Удачная запись этого же заказа снимает его прежний отказ.
+    if (flash.cls === 'ok') STICKY = STICKY.filter(function (x) { return x.tok !== tok; });
+    // ⛔️ Отказ, пришедший на ЧУЖОЙ экран, держится, пока кассир его не закроет [Фейбл, круг 2, MED-5]: иначе следующая
+    // выдача стирала его через минуту, а заказ так и оставался невыданным, хотя вещи ушли.
+    else if (!mine) { STICKY.push({ text: text, cls: flash.cls, tok: tok }); STICKY = STICKY.slice(-4); LAST.shown = true; }
+    if (mine) afterWrite(no, flash);
+    else if (flash.cls === 'ok') { var hd = $('head'); if (hd) hd.insertBefore(el('div', 'ban ok', text), hd.firstChild); }
+    else renderSticky();
+    if (refreshLater) { refreshLater = false; setTimeout(refreshView, 0); }
+  }
+  // Итог записи виден сразу: вещи помечаем выданными в памяти кассы так же, как их покажет свежая выжимка (буква
+  // заглавная, пометка «zabrala»), — иначе следующая сверка сказала бы «данные обновились» про нашу же запись.
+  function applyGiven(m, rows) {
+    var c = m.c, st = String(c[3] || '').split('');
+    rows.forEach(function (r) {
+      st[r.k] = String(st[r.k] || 'n').toUpperCase();
+      var it = c[2][r.k];
+      if (Array.isArray(it)) it[3] = 'd:zabrala';
+    });
+    c[3] = st.join('');
+  }
+  function applyUnnet(m, r, no, flag) {
+    var c = m.c, st = String(c[3] || '').split('');
+    st[r.k] = 'n';
+    c[3] = st.join('');
+    // Отметка вещи после записи — от склада: пометка «Dz70», которая у жёлтой строку не закрывала, у номера закрывает
+    // [Фейбл «корректность», MED-2]; без этого следующее «Забрала всё» получало бы «заказ изменился».
+    if (typeof flag === 'string' && Array.isArray(c[2][r.k])) c[2][r.k][3] = flag;
+    // Свой номер вещи — как его положит выжимка: только если он не номер клиента.
+    if (!c[4] || typeof c[4] !== 'object') c[4] = {};
+    if (no && nk(no) !== nk(c[1])) c[4][r.k] = no; else delete c[4][r.k];
+  }
+  // Тот же ли экран после ответа склада: клиент, закупка и запрос (объект выжимки мог смениться свежим — это тот же экран).
+  function cardTok() { return CUR && CUR.kind === 'card' ? CUR.sel.tid + '|' + CUR.sel.nick + '|' + CUR.qk : ''; }
+  function afterWrite(no, flash) {
+    if (!CUR || CUR.kind !== 'card') return;
+    refreshSwap = true;                          // экран меняет не кассир — пауза кнопок, если сменился заказ (showCard)
+    try { showCard(CUR.h, CUR.q, null, CUR.fromList, no, flash); } finally { refreshSwap = false; }
+  }
+  function tooFresh() { return !!(CUR && CUR.shownAt && Date.now() - CUR.shownAt < 700); }
+  // Конец паузы — кнопки снова живые (если карточка та же).
+  function pauseLater(at) { setTimeout(function () { if (CUR && CUR.kind === 'card' && CUR.shownAt === at) renderActs(CUR.model); }, 720); }
+  async function give(mode, takeIdx) {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    if (!m || BUSY || !m.open.length || DENIED) return;
+    if (mode === 'all' && tooFresh()) return;
+    lastActivity = Date.now();
+    var h = CUR.h, rows = m.open.slice();
+    var a = rows.map(function (r) { return itemOf(m.P, r); });
+    var take = mode === 'part' ? takeIdx.slice().sort(function (x, y) { return x - y; }) : [];
+    if (mode === 'part' && take.length === rows.length) { mode = 'all'; take = []; }
+    var params = { src: h.t.id, nick: m.c[0], no: m.no, mode: mode, a: JSON.stringify(a) };
+    if (mode === 'part') params.t = take.join(',');
+    var key = 'give|' + h.t.id + '|' + m.c[0] + '|' + m.no + '|' + mode + '|' + params.t + '|' + params.a;
+    // ⛔️ У этого заказа висит досылка неизвестной выдачи — новым кодом не пишем [Фейбл, круг 3, LOW-1]: та запись могла не
+    // лечь, новое нажатие записало бы выдачу, а досылка старого кода засчитала бы её в журнал второй раз. То же нажатие
+    // (тот же код) — можно: склад узнает его.
+    var hang = PENDS.filter(function (x) { return x.action === 'kassa_give' && x.params.src === params.src && x.params.nick === params.nick && x.params.no === params.no; })[0];
+    if (hang && !(WOP && WOP.key === key && WOP.n === hang.params.n)) {
+      closeDlg();
+      afterWrite(m.no, { text: '⏳ Склад ещё проверяет прошлое нажатие по этому заказу — касса дошлёт его сама и покажет итог полосой «Проверка». Нажмите после неё.', cls: 'warn' });
+      pendNext(0);
+      return;
+    }
+    var tok = cardTok(), sig0 = CUR.sig;
+    setBusy(true, m.c[0] + ' ' + m.no);
+    var r = null;
+    try { r = await writeCall('kassa_give', params, key); } finally { setBusy(false); }
+    if (cardTok() === tok) closeDlg();
+    if (DENIED) return;
+    var pf = pendFate(r);
+    if (pf === 'add') pendAdd('kassa_give', params, key, m.c[0] + ' ' + m.no, m.no, tok);
+    else if (pf === 'forget') pendForget(params.n);
+    if (r && r.ok) {
+      // Какие вещи выданы — как их выбрал склад: из одинаковых по всем приметам — первые по порядку [Фейбл LOW-6].
+      var need = {};
+      (mode === 'part' ? take.map(function (i) { return rows[i]; }) : rows).forEach(function (x) { var k = JSON.stringify(itemOf(m.P, x)); need[k] = (need[k] || 0) + 1; });
+      var done = rows.filter(function (x) { var k = JSON.stringify(itemOf(m.P, x)); if (need[k] > 0) { need[k]--; return true; } return false; });
+      // Отмечаем у себя, только если данные за время записи не менялись: иначе номера вещей в памяти уже другие,
+      // и правду принесёт свежая выжимка (склад её сбросил).
+      if (cardTok() === tok && CUR.sig === sig0 && CUR.model) applyGiven(CUR.model, done);
+      else sync(true);                           // кассир ушёл — отметить у себя нечего, правду принесёт освежение [Фейбл, круг 2, LOW-3]
+      return finishWrite(tok, m.no, giveFlash(r, m.no, r.wrote || done.length));
+    }
+    finishWrite(tok, m.no, giveFlash(r, m.no, 0));
+    if (r && (r.changed || Number(r.wrote) > 0)) sync(true);
+  }
+  async function unnet(r) {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    if (!m || BUSY || DENIED) return;
+    lastActivity = Date.now();
+    var h = CUR.h;
+    // № заказа жёлтой вещи выжимка не везёт — шлём подсказкой открытый заказ (иначе номер клиента); склад найдёт её
+    // заказ сам и скажет какой [Фейбл «корректность», LOW-3: из двух одинаковых жёлтых в двух заказах — та, что открыта].
+    var hint = m.no || m.main;
+    var params = { src: h.t.id, nick: m.c[0], no: hint, a: JSON.stringify(itemOf(m.P, r)) };
+    var key = 'unnet|' + h.t.id + '|' + m.c[0] + '|' + hint + '|' + params.a;
+    var tok = cardTok(), sig0 = CUR.sig;
+    setBusy(true, m.c[0] + ' ' + (m.no || m.main));
+    var res = null;
+    try { res = await writeCall('kassa_unnet', params, key); } finally { setBusy(false); }
+    if (cardTok() === tok) closeDlg();
+    if (DENIED) return;
+    var label = String(r.it[0] || '') + (r.it[1] ? ' ' + r.it[1] : '') + (r.it[2] ? ' ' + r.it[2] : '');
+    var pf = pendFate(res);
+    if (pf === 'add') pendAdd('kassa_unnet', params, key, m.c[0] + ' ' + (m.no || m.main), m.no, tok, label);
+    else if (pf === 'forget') pendForget(params.n);
+    if (res && res.ok) {
+      var inNo = String(res.no || hint || '');
+      // «уже» — «нет» сняли раньше (повтор без памяти склада, вторая касса): вещь в заказе так же — отмечаем её у себя
+      // и освежаем список, чтобы данные пришли от склада [Кодекс, круг 1, MED-5].
+      var applied = !!(cardTok() === tok && CUR.sig === sig0 && CUR.model);
+      if (applied) applyUnnet(CUR.model, r, inNo, res.flag);
+      if (res.already || !applied) sync(true);
+      // Показываем заказ, в который вещь встала: касса выдаёт её оттуда [Фейбл «корректность», LOW-3].
+      return finishWrite(tok, inNo || m.no, { text: '✅ «нет» снято: ' + label + ' — вещь в заказе ' + (inNo || 'клиента') + ', в сумме.', cls: 'ok' });
+    }
+    if (res && res.changed) {
+      finishWrite(tok, m.no, { text: '⚠️ Вещь в таблице изменилась — «нет» не снято. Обновляю список, проверьте ещё раз.', cls: 'bad' });
+      sync(true);
+      return;
+    }
+    finishWrite(tok, m.no, unknownOut(res) ? { text: '⚠️ «нет»: ' + failText(res), cls: 'warn' } : { text: '⛔️ «нет» не снято. ' + failText(res), cls: 'bad' });
+  }
+
+  // ── окна ──────────────────────────────────────────────────────────────────────────────
+  function dlgOpen() { return $('dlg').className === 'on'; }
+  function closeDlg() {
+    var d = $('dlg'); if (!d) return;
+    var was = d.className === 'on';
+    d.className = ''; d.textContent = '';
+    if (was && DESK.matches) { try { $('num').focus(); } catch (e) {} }
+  }
+  // Окно открыто — фокус ни на чём: случайная клавиша не закроет ни окно, ни заказ, а Enter/пробел не «щёлкнут» вещь
+  // или кнопку, на которой фокус остался [Фейбл «сценарий» HIGH-2, «гонки» MED-5].
+  var dlgAt = 0;
+  function dlgShow() {
+    var d = $('dlg'); d.className = 'on'; dlgAt = Date.now();
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+  }
+  function thumbOf(P, r) {
+    var mm = P.m && P.m[String(r.it[0] || '')];
+    return photoUrl(P, mm ? mm[1] : '', 240);
+  }
+  // «Какие вещи забрала?» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026].
+  function openPart() {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    if (!m || BUSY || m.open.length < 2 || tooFresh()) return;
+    lastActivity = Date.now();
+    var rows = m.open.slice(), on = rows.map(function () { return true; });
+    var d = $('dlg'); d.textContent = '';
+    var box = el('div', 'dlgbox');
+    box.appendChild(el('h3', null, 'Какие вещи забрала?'));
+    box.appendChild(el('div', 'sub', 'Снимите галочки с вещей, которые клиент НЕ забрал. «zabrala» получат только отмеченные. Заказ ' + m.no + ' · ' + m.c[0]));
+    var lst = el('div', 'lst');
+    var ft = el('div', 'dlgft'), s = el('div', 's'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
+    no.type = 'button'; ok.type = 'button';
+    function redraw() {
+      var n = 0, sum = 0, inv = 0, np = 0;
+      rows.forEach(function (r, i) {
+        if (!on[i]) return;
+        n++;
+        var cc = cents(r.price);
+        if (cc === null) { np++; return; }
+        sum += cc; if (invOf(r.mark)) inv += cc;
+      });
+      s.textContent = '';
+      s.appendChild(document.createTextNode('Забрала ' + n + ' из ' + rows.length));
+      s.appendChild(el('b', null, eur(sum)));
+      if (inv) s.appendChild(document.createTextNode('из них по счёту: ' + eur(inv)));
+      if (np) s.appendChild(document.createTextNode((inv ? ' · ' : '') + 'без цены: ' + np));
+      ok.disabled = BUSY || n === 0;
+      ok.textContent = BUSY ? 'Записываю…' : (n === rows.length ? '✅ Записать: забрала всё' : '✅ Записать: забрала ' + n);
+    }
+    rows.forEach(function (r, i) {
+      var b = el('button', 'ck on'); b.type = 'button';
+      var bx = el('div', 'bx', '✓');
+      b.appendChild(bx);
+      var ph = el('div', 'cph'), th = thumbOf(m.P, r);
+      if (th) ph.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
+      b.appendChild(ph);
+      var t = el('div', 't', (r.it[0] ? r.it[0] + ' | ' : '') + (itemName(m.P, r.it) || '—'));
+      t.appendChild(el('small', null, [r.it[1], r.it[2]].map(function (x) { return String(x || '').replace(/\s*\n\s*/g, ' / ').trim(); })
+        .filter(Boolean).join(' · ') + (invOf(r.mark) ? ' · счёт ' + r.mark : '')));
+      b.appendChild(t);
+      var cc = cents(r.price);
+      b.appendChild(el('div', 'p', cc === null ? (r.price ? 'без цены' : '') : eur(cc)));
+      b.onclick = function () {
+        if (BUSY) return;
+        lastActivity = Date.now();
+        on[i] = !on[i]; b.className = 'ck' + (on[i] ? ' on' : ''); bx.textContent = on[i] ? '✓' : '';
+        redraw();
+      };
+      lst.appendChild(b);
+    });
+    no.onclick = function () { closeDlg(); };
+    // ⛔️ Окно — про ЭТУ карточку: за ним поиск мог открыть другой заказ (Enter в поле) — номера галочек там другие
+    // [Фейбл, круг 2, LOW-2].
+    var dtok = cardTok(), dno = m.no;
+    ok.onclick = function () {
+      if (BUSY) return;
+      if (cardTok() !== dtok || !CUR.model || CUR.model.no !== dno) { closeDlg(); return; }
+      var take = []; on.forEach(function (v, i) { if (v) take.push(i); });
+      if (take.length) give('part', take);
+    };
+    ft.appendChild(s); ft.appendChild(no); ft.appendChild(ok);
+    box.appendChild(lst); box.appendChild(ft);
+    d.appendChild(box);
+    dlgShow();
+    redraw();
+  }
+  function askUnnet(r) {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    if (!m || BUSY) return;
+    lastActivity = Date.now();
+    var d = $('dlg'); d.textContent = '';
+    var box = el('div', 'dlgbox');
+    box.style.maxWidth = '640px';
+    box.appendChild(el('h3', null, 'Снять «нет»?'));
+    var name = (r.it[0] ? r.it[0] + ' | ' : '') + (itemName(m.P, r.it) || '—');
+    box.appendChild(el('div', 'sub', name + ' — клиент берёт эту вещь (или замену). В таблице «нет» снимется — вещь станет ' +
+      'зелёной, войдёт в свой заказ и в сумму.'));
+    var ft = el('div', 'dlgft'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn okw', 'Снять «нет»');
+    no.type = 'button'; ok.type = 'button';
+    ft.appendChild(el('div', 's')); ft.appendChild(no); ft.appendChild(ok);
+    no.onclick = function () { closeDlg(); };
+    var dtok = cardTok(), dno = m.no;
+    ok.onclick = function () { if (BUSY) return; if (cardTok() !== dtok || !CUR.model || CUR.model.no !== dno) { closeDlg(); return; } unnet(r); };
+    box.appendChild(ft);
+    d.appendChild(box);
+    dlgShow();
+  }
+  $('giveAll').onclick = function () { give('all', []); };
+  $('givePart').onclick = function () { openPart(); };
+  // Щелчок в тёмный фон закрывает окно — но не второй щелчок двойного по кнопке, открывшей его [Фейбл «сценарий», MED-4].
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg') && Date.now() - dlgAt > 500) closeDlg(); });
+  // ⛔️ Первые 0,5 с кнопки подвала окна глухи [Фейбл, круг 2, HIGH-1]: на телефоне второй тап двойного по «Не забрала
+  // всё…» попадал в «✅ Записать: забрала всё» — и отказанные вещи получали zabrala. Ловим до кнопок (фаза перехвата).
+  // Галочки не глушим: снятая по ошибке видна сразу («Забрала 4 из 5»), а быстрый кассир не теряет нажатие.
+  $('dlg').addEventListener('click', function (e) {
+    if (Date.now() - dlgAt < 500 && e.target.closest && e.target.closest('#dlg .dlgft')) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  // Галочка не забирает фокус при щелчке: иначе Enter/пробел потом «щёлкали» её ещё раз.
+  $('dlg').addEventListener('mousedown', function (e) { var b = e.target.closest ? e.target.closest('.ck') : null; if (b) e.preventDefault(); });
+
+  // ── ввод: поле (компьютер), кнопки-цифры и «Аа» (телефон) ─────────────────────────────
+  var numEl = $('num'), abcOn = false;
+  // Телефон: поле только показывает набранное (своя клавиатура-цифры), системная — по кнопке «Аа» для ника.
+  function fitInput() {
+    var ro = !DESK.matches && !abcOn;
+    numEl.readOnly = ro;
+    numEl.setAttribute('inputmode', ro ? 'none' : 'text');
+    $('abc').className = abcOn ? 'on' : '';
+  }
+  // ⛔️ Правка запроса гасит прежний поиск [Кодекс, круг 2, CRIT-2]: иначе освежение, пришедшее между
+  // правкой и «Найти», пересобирало бы экран по СТАРЫМ цифрам и само открывало бы чужую карточку.
+  function edited(v) {
+    v = String(v || '').slice(0, MAXLEN);
+    if (v === typed) return;
+    typed = v; pendingSearch = '';
+    lastActivity = Date.now();
+    // Сверка — с первой набранной цифры, а не с Enter: пока кассир набирает, список успевает свериться, и карточка
+    // откроется сама [Фейбл «сценарий», ускорение 2]. Та же сверка, что и так пошла бы по Enter, — только раньше.
+    if (v && !syncing && !searchVerified() && Date.now() - lastSyncAt > 20000) sync();
+    // Во время записи искать можно: код операции не даст складу записать дважды, итог придёт полосой [Фейбл, ускорение 4].
+    if (CUR) showHome();
+  }
+  function go() {
+    if (dlgOpen()) return;                       // окно открыто — поиск за ним не запускаем [Фейбл, круг 2, LOW-2]
+    pendingSearch = '';
+    if (!typed.trim()) return;
+    // Enter второй раз по списку из одной строки — открыть её (явный выбор кассира; склад всё равно сверит заказ при
+    // записи) [Фейбл «сценарий», ускорение 5].
+    // Только по сверенному списку: иначе одна клавиша обходила бы правило «карточка — по сверенному поиску» [Фейбл, круг 2, MED-2].
+    if (CUR && CUR.kind === 'list' && CUR.qk === qKey(parseQ(typed)) && searchVerified() && !missingTables().length) {
+      var one = document.querySelectorAll('#out .row');
+      if (one.length === 1) { one[0].click(); return; }
+    }
+    search(typed, false);
+    // Следующая клавиша начинает новый поиск: набранное выделено и заменится первой же буквой.
+    if (DESK.matches) { try { numEl.focus(); numEl.select(); } catch (e) {} }
+    else if (abcOn) { abcOn = false; fitInput(); try { numEl.blur(); } catch (e) {} }
+  }
+  function newSearch() {
+    lastActivity = Date.now(); typed = ''; pendingSearch = ''; renderNum(); showHome();
+    if (DESK.matches) { try { numEl.focus(); } catch (e) {} }
+  }
+  numEl.addEventListener('input', function () { edited(numEl.value); });
+  // Щелчок в поле — набранное выделено (как в адресной строке): следующий номер не дописывается к прошлому [Фейбл MED-3].
+  // ⛔️ Фокус принесла клавиша (кассир печатает, курсор был не в поле) — отложенно НЕ выделяем [Фейбл, круг 2, CRIT-1]:
+  // select() через setTimeout срабатывал уже ПОСЛЕ первой цифры, и вторая её заменяла: «1321» → «321» → карточка чужого
+  // клиента с хвостом 321. Прежнее содержимое такая клавиша и так заменяет (select() тут же, до её вставки).
+  var keyFocus = false;
+  numEl.addEventListener('focus', function () { if (DESK.matches && !keyFocus) setTimeout(function () { try { numEl.select(); } catch (e) {} }, 0); });
+  numEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); go(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    // Enter и пробел в окне работают ТОЛЬКО на кнопках его подвала («Назад», «Записать»): на галочке они возвращали
+    // снятую галочку, и «zabrala» получала вещь, которую клиент не взял [Фейбл «гонки» MED-5, «сценарий» HIGH-2].
+    // Записать — только осознанным щелчком (или Tab до кнопки): Enter по привычке сразу после открытия окна записал бы всё.
+    if ((e.key === 'Enter' || e.key === ' ') && dlgOpen()) {
+      var ae = document.activeElement;
+      if (!(ae && ae.closest && ae.closest('#dlg .dlgft'))) e.preventDefault();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (dlgOpen()) { closeDlg(); e.preventDefault(); return; }   // и во время записи [Фейбл, круг 2, MED-3]
+      if ($('zoom').style.display === 'flex') { $('zoom').onclick(); return; }
+      e.preventDefault(); newSearch(); return;
+    }
+    // Кассир печатает, а курсор не в поле (кликнул плитку) — буква уходит в поиск, как и ждёт человек.
+    if (DESK.matches && !dlgOpen() && document.activeElement !== numEl && e.key && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      keyFocus = true;
+      try { numEl.focus(); numEl.select(); } catch (err) {}
+      keyFocus = false;
+    }
+  });
+  $('abc').onclick = function () {
+    abcOn = !abcOn; fitInput();
+    try { if (abcOn) numEl.focus(); else numEl.blur(); } catch (e) {}
+  };
+  if (DESK.addEventListener) DESK.addEventListener('change', function () { abcOn = false; fitInput(); if (CUR && CUR.kind === 'card' && CUR.h) showCard(CUR.h, CUR.q, null, CUR.fromList, CUR.no, CUR.flash); });
   $('pad').addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('button') : null;
     if (!b) return;
     lastActivity = Date.now();
     var d = b.getAttribute('data-d');
-    if (d === 'go') { pendingSearch = ''; if (typed) search(typed, false); return; }
-    // ⛔️ Правка номера гасит прежний поиск [Кодекс, круг 2, CRIT-2]: иначе освежение, пришедшее между
-    // правкой и «Найти», пересобирало бы экран по СТАРЫМ цифрам и само открывало бы чужую карточку.
-    if (d === 'del') typed = typed.slice(0, -1);
-    else if (typed.length < MAXLEN) typed += d;
+    if (d === 'go') { go(); return; }
+    var v = typed;
+    if (d === 'del') v = v.slice(0, -1);
+    else if (v.length < PADLEN || !/^\d*$/.test(v)) v += d;
     else return;
-    pendingSearch = '';
-    renderNum();
-    if (CUR) showHome();
+    edited(v); renderNum();
   });
   var cardAt = 0;
   $('again').onclick = function () {
     if (Date.now() - cardAt < 400) return;             // двойной тап по «Найти» не закрывает карточку сразу
-    lastActivity = Date.now(); typed = ''; pendingSearch = ''; renderNum(); showHome();
+    newSearch();
   };
   $('zoom').onclick = function () { $('zoom').style.display = 'none'; $('zimg').removeAttribute('src'); };
-  $('sync').onclick = function () { lastActivity = Date.now(); sync(); };
+  // Тап по строке состояния — «освежить сейчас»: идёт сверка — ещё раз сразу после неё (иначе тап глотался бы).
+  $('sync').onclick = function () { lastActivity = Date.now(); sync(true); };
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') { lastActivity = Date.now(); if (Date.now() - lastSyncAt > 60000) sync(); }
   });
@@ -697,7 +1672,8 @@
 
   // ── старт: сначала всё из памяти телефона, потом фоном — Google ─────────────────────────
   (async function boot() {
-    renderNum(); showHome();
+    fitInput(); renderNum(); showHome();
+    if (DESK.matches) { try { numEl.focus(); } catch (e) {} }
     var dk = lsGet('kassa_denied');
     if (dk && dk === (KEY || '-')) {
       // Этот ключ склад уже не пускал: данных не читаем, но спрашиваем склад ещё раз.
@@ -720,7 +1696,7 @@
       }
     } catch (e) { DB = null; }
     if (DENIED) return;
-    renderSync(); showHome();
+    renderSync(); if (!CUR) showHome();
     sync();
   })();
 
