@@ -99,8 +99,11 @@
   /* «Сверяю…» — не полоса, а тихая строка [владелец 28.09.2026: «не надо жёлтым, а светло-серым маленьким шрифтом, без фоновой
      подложки, и пусть просто мигает»]. «Не сверен» (сверка не удалась) — по-прежнему жёлтой полосой: это уже предупреждение. */
   .chk { color: #9aa3b2; font-size: 13px; font-weight: 600; margin: 8px 0 0; animation: chkblink 1.4s ease-in-out infinite; }
+  /* «обновляю…» в строке состояния и «Обновляю список и ищу ещё раз…» — так же мигают [владелец 28.09.2026: «обновляю
+     должно мигать»]. */
+  .blink { animation: chkblink 1.4s infinite ease-in-out; }
   @keyframes chkblink { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-  @media (prefers-reduced-motion: reduce) { .chk { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .chk, .blink { animation: none; } }
   .ban .x { float: right; border: 0; background: transparent; color: inherit; font: inherit; font-size: 24px; line-height: 1;
             padding: 0 4px; margin: -2px -4px 0 10px; cursor: pointer; }
   .sec { margin: 18px 0 8px; font-size: 15px; font-weight: 800; letter-spacing: .3px; color: var(--mute); }
@@ -333,7 +336,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.1 · 28.09.2026';
+  var VER = 'v6.2 · 28.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -380,6 +383,26 @@
     if (h) { lsSet('kassa_k', h); return h; }
     return lsGet('kassa_k');
   })();
+  // 💻 МЕТКА ЭТОГО БРАУЗЕРА [владелец 28.09.2026: «делай вариант сильнее»; касса стоит на компьютере — владелец 26.09].
+  // Ключ компьютера склад пускает только вместе с меткой браузера, к которому он прирос. Метка общая для всех страниц
+  // сайта: её придумывает лаунчер склада (sklad/index.html) или, если касса открыта первой, эта страница — тем же
+  // способом. Ключу телефона она не нужна, но и не мешает. ⛔️ Только в запросы к складу — не в адрес страницы.
+  var WH_D = (function () {
+    var d = lsGet('wh_dev');
+    if (/^[0-9a-f]{32}$/.test(d)) return d;
+    try {
+      var r = new Uint8Array(16);
+      window.crypto.getRandomValues(r);
+      d = '';
+      for (var i = 0; i < r.length; i++) d += (r[i] < 16 ? '0' : '') + r[i].toString(16);
+      localStorage.setItem('wh_dev', d);
+      var w = lsGet('wh_dev');
+      return /^[0-9a-f]{32}$/.test(w) ? w : '';
+    } catch (e) { return ''; }
+  })();
+  // 💻 Новую ссылку «Касса» вставили в ЭТУ ЖЕ вкладку [Фейбл 28.09.2026, круг 2]: меняется только хвост после «#», и
+  // страница не перезагружается — касса так и ходила бы с прежним ключом. Перезагружаемся сами (своих «#» касса не ставит).
+  window.addEventListener('hashchange', function () { try { location.reload(); } catch (e) {} });
 
   // ── память телефона (IndexedDB): список закупок и выжимки ─────────────────────────────
   var DB = null;
@@ -457,6 +480,7 @@
     var qs = 'action=' + action + '&callback=' + cb;
     for (var k in params) if (params[k] !== '' && params[k] != null) qs += '&' + k + '=' + encodeURIComponent(params[k]);
     if (KEY) qs += '&k=' + encodeURIComponent(KEY);
+    if (KEY && WH_D) qs += '&d=' + WH_D;              // 💻 метка браузера (см. WH_D)
     return EXEC + '?' + qs;
   }
   function jsonp(action, params, timeoutMs) {
@@ -725,7 +749,7 @@
   function renderSync() {
     var s = $('sync'), have = 0, t0 = selT();
     scope().forEach(function (x) { if (PACKS[x.id]) have++; });
-    var txt, cls = '';
+    var txt, cls = '', busy = '';
     if (!have) {
       txt = syncing ? 'Загружаю список заказов' + (t0 ? ' «' + t0.name + '»' : '') + '… (первый раз — до нескольких минут)'
         : (t0 ? 'Список заказов «' + t0.name + '» не загружен.' : 'Списка заказов ещё нет.');
@@ -737,12 +761,13 @@
       // Без «Клиентов: 608» [владелец 28.09.2026: «нигде не надо выводить Клиентов»].
       txt = (old ? '⚠️ Не последняя закупка · данные на ' : 'Данные на ') + hhmm(t);
       if (old) cls = 'warn';
-      if (syncing) txt += ' · обновляю…';
+      if (syncing) busy = 'обновляю…';
       else if (lastNet) { txt += ' · ' + lastNet; cls = 'warn'; }
       if (!syncing && age > 30 * 60000) cls = 'warn';
     }
-    txt += ' · ' + VER.split(' ')[0];                     // справки внизу нет — номер версии здесь
     s.textContent = txt;
+    if (busy) { s.appendChild(document.createTextNode(' · ')); s.appendChild(el('span', 'blink', busy)); }
+    s.appendChild(document.createTextNode(' · ' + VER.split(' ')[0]));   // справки внизу нет — номер версии здесь
     s.className = cls;
   }
 
@@ -993,7 +1018,7 @@
     // Не нашли, а список давно не освежали — освежаем ВСЁ и ищем ещё раз сами (только если запрос не меняли).
     if (!again && (Date.now() - lastSyncAt > 30000 || syncing || missingTables().length)) {
       pendingSearch = q.text;
-      hd.appendChild(el('div', 'hint', 'Обновляю список и ищу ещё раз…'));
+      hd.appendChild(el('div', 'hint blink', 'Обновляю список и ищу ещё раз…'));
       sync();
     }
   }
