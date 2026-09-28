@@ -330,17 +330,18 @@
     // вместе с меткой того браузера, к которому он прирос; ключу телефона метка не нужна.
     // ⛔️ Берём из памяти, а НЕ из адреса и в «← Назад» не кладём: в адресе она легла бы в адресную строку и
     // историю компьютера — туда, откуда уносят ссылку. Возит её только сам запрос (callGas).
-    // ⛔️⛔️ И ТОЛЬКО НА БОЕВОЙ АДРЕС СКЛАДА [Кодекс 28.09.2026, HIGH-1]. Адрес склада сканер берёт из своей же строки
-    // (?back=…), а её может написать кто угодно: открой на привязанном компьютере сканер с back на свой сервер — и
-    // сканер сам отдал бы туда ключ вместе с меткой этого браузера. Чужой back — метки нет (ключ телефона работает
-    // как раньше, ключ компьютера получит отказ).
-    var WH_EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
     var WH_D = '';
-    try { WH_D = String(localStorage.getItem('wh_dev') || ''); if (!/^[0-9a-f]{32}$/.test(WH_D) || qparam('back') !== WH_EXEC) WH_D = ''; } catch (e) { WH_D = ''; }
+    try { WH_D = String(localStorage.getItem('wh_dev') || ''); if (!/^[0-9a-f]{32}$/.test(WH_D)) WH_D = ''; } catch (e) { WH_D = ''; }
+    // ⛔️⛔️ ЗАПРОСЫ — ТОЛЬКО НА БОЕВОЙ АДРЕС СКЛАДА, А НЕ НА ?back= [Кодекс 28.09.2026: круг 1 HIGH-1, круг 2 HIGH-1].
+    // Строку адреса сканера может написать кто угодно, а запросы идут JSONP-ом — тегом <script>: ответ ИСПОЛНЯЕТСЯ
+    // прямо на этой странице. Открой на привязанном компьютере сканер с back на свой сервер — и его код прочитал бы
+    // из памяти сайта и ключ, и метку браузера (и ключ кассы). Поэтому ?back= только говорит «вернуться есть куда»,
+    // а адрес для запросов и для «← Назад» — всегда этот, тот же, что у лаунчера склада и у кассы.
+    var WH_EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
     (function () {
       var back = qparam('back');
       if (back) {
-        GAS = back + (WH_K ? ((back.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(WH_K)) : '');
+        GAS = WH_EXEC + (WH_K ? ('?k=' + encodeURIComponent(WH_K)) : '');
         var b = document.getElementById('back');
         b.href = GAS;                        // запасной вариант (если нет истории)
         b.style.display = '';
@@ -702,13 +703,19 @@
     // Дверь склада не пустила этот телефон: ключа нет или он отозван. Показываем один раз на весь
     // экран — работник не должен догадываться по слову «сбой».
     var _whDenied = false;
-    function whKeyDenied() {
+    function whKeyDenied(why) {
       if (_whDenied) return; _whDenied = true;
       var d = document.createElement('div');
       d.setAttribute('style', 'position:fixed;inset:0;z-index:99999;background:#fff;display:flex;'
         + 'align-items:center;justify-content:center;padding:24px;text-align:center;font:600 18px system-ui');
-      d.innerHTML = 'Этот телефон больше не пускают на склад.<br><br>'
-        + 'Откройте иконку «BERKONTI» заново. Если не пустит — попросите у владельца новую ссылку.';
+      // 💻 Причина — от двери склада [Кодекс 28.09.2026, круг 2, LOW]: у компьютера другие слова, чем у телефона.
+      d.innerHTML = why === 'nodev'
+        ? ('Страница устарела.<br><br>Закройте сканер, откройте приложение склада с закладки «BERKONTI» и обновите '
+           + 'страницу (Ctrl+F5). Не помогло — скажите владельцу.')
+        : why === 'dev'
+          ? 'Эта ссылка работает только на своём компьютере.<br><br>Если это рабочий компьютер магазина — скажите владельцу.'
+          : ('Этот телефон больше не пускают на склад.<br><br>'
+             + 'Откройте иконку «BERKONTI» заново. Если не пустит — попросите у владельца новую ссылку.');
       document.body.appendChild(d);
     }
 
@@ -732,7 +739,7 @@
         // Иначе работник читает его как «заказа нет» и перебирает номера заказов. Ответ при этом
         // ПРОПУСКАЕМ дальше как обычный отказ: подменять его на null нельзя — null у нас значит
         // «нет связи», и сканер начал бы повторять запрос по кругу.
-        if (data && data.error === 'no_key') whKeyDenied();
+        if (data && data.error === 'no_key') whKeyDenied(data.why);
         onData(data);
       }
       window[cb] = function (data) { finish(data); };
