@@ -150,6 +150,22 @@
           padding: 24px; text-align: center; font-size: 19px; font-weight: 600; line-height: 1.5; }
   #info { font-size: 13px; color: var(--mute); white-space: pre-wrap; margin-top: 18px; }
   .grp { opacity: .8; }
+  /* ⭐ РАМКИ ЗАКАЗОВ [владелец 28.09.2026, вариант A: «надо отделить заказы друг от друга»]: выбранный заказ (его выдают
+     кнопки) — зелёной рамкой, остальные — серыми с «Открыть этот заказ»; жёлтая «нет» и отмены — внутри своего заказа. */
+  .ord { background: #fff; border: 3px solid #d6dbe3; border-radius: 18px; margin: 18px 0 0; overflow: hidden; }
+  .ord:first-child { margin-top: 4px; }
+  .ord .oh { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; padding: 10px 14px; background: #eef1f5; }
+  .ord .oh .on { font-size: 23px; font-weight: 900; }
+  .ord .oh .oc { font-size: 16px; font-weight: 700; color: var(--mute); }
+  .ord .oh .sw3 { margin-left: auto; border: 2px solid var(--warnline); border-radius: 10px; background: #fff; color: #b3700f;
+                  font-weight: 800; padding: 6px 12px; font-size: 15px; cursor: pointer; }
+  .ord .ob { padding: 10px 10px 12px; }
+  .ord.cur { border-color: var(--ok); }
+  .ord.cur .oh { background: var(--ok); color: #fff; } .ord.cur .oh .oc { color: #d4f0de; }
+  .ord:not(.cur) .it { opacity: .85; }
+  .osub { margin: 14px 2px 8px; font-size: 15px; font-weight: 800; color: var(--mute); }
+  .osub:first-child { margin-top: 2px; }
+  .osub.w { color: var(--warn); } .osub.c { color: var(--bad); }
   /* Окно «Какие вещи забрала?» и «Снять «нет»?» */
   #dlg { position: fixed; inset: 0; background: rgba(17,24,39,.55); display: none; align-items: center; justify-content: center;
          z-index: 40; padding: 10px; }
@@ -216,6 +232,11 @@
        круг 1 v6.1, MED-1]: без кнопки «Новый поиск» «Забрала всё» легла ровно туда, где палец кассира ищет «⌫» и «Найти», и
        тап вслепую по карточке, открывшейся самой (отложенный поиск), писал выдачу. Над рядом «7 8 9» их держит пауза 0,7 с. */
     body.card #acts { padding-bottom: 70px; }
+    /* Тап по полю на карточке — цифры внизу, карточка остаётся на экране [владелец 28.09.2026: «ставлю курсор в окно поиска,
+       меня просто выкидывает на главную страницу! почему нельзя оставаться там же»]. Кнопки выдачи спрятаны, пока цифры
+       открыты: набирается следующий номер, а на экране ещё прежний клиент. */
+    body.card.typing #pad { display: grid; }
+    body.card.typing #acts { display: none; }
     /* шапка — посередине пустого места сверху; ответ («не найден») — по-прежнему прямо над полем */
     body.brand #brand { margin: auto 0; }
     body.brand #brand ~ #head { margin-top: 0; }
@@ -277,6 +298,15 @@
     .it .vr { font-size: 17px; margin-top: 8px; }
     .it .inv { font-size: 15px; margin-top: 6px; }
     .it .pr { font-size: 28px; }
+    /* Жёлтая — длинный чип «нет, предложить альтернативу» и «Снять «нет»»: на 1366 px в плитку 258 px не влезали, и название
+       сжималось до нуля [Фейбл «сценарий», круг 1 v6.3, MED-2] — ей высота по содержимому. */
+    .it.st-w { height: auto; min-height: 258px; }
+    .it .nm { flex-shrink: 0; }
+    /* шапка рамки — низкая: 9 вещей выбранного заказа по-прежнему целиком в экране 900 px [владелец 26.09.2026, вид B] */
+    .ord:first-child { margin-top: 0; }
+    .ord .oh { padding: 7px 18px; } .ord .oh .on { font-size: 27px; } .ord .oh .oc { font-size: 19px; }
+    .ord .oh .sw3 { font-size: 18px; padding: 6px 16px; } .ord .ob { padding: 10px 14px 14px; }
+    .osub { font-size: 18px; margin: 18px 2px 12px; }
     .it .pr.np { font-size: 18px; }
     .row { padding: 14px 18px; }
     .dlgbox { padding: 22px 26px; gap: 14px; max-height: 92vh; }
@@ -336,7 +366,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.2 · 28.09.2026';
+  var VER = 'v6.3 · 28.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -891,7 +921,11 @@
     if (!h) return '';
     var P = h.pk.p, c = P.c[h.i], used = {};
     (Array.isArray(c[2]) ? c[2] : []).forEach(function (it) { var n = String(it[0] || ''); if (n && P.m && Array.isArray(P.m[n])) used[n] = P.m[n].slice(0, 2); });
-    return h.t.id + '|' + JSON.stringify(Array.isArray(c) ? c.slice(0, 6) : c) + '|' + JSON.stringify(used);
+    // Кол. D жёлтой и отмены (x.d) — тоже: по ней рамка заказа и подсказка складу при «Снять «нет»» [Кодекс, круг 1 v6.3, MED-2:
+    // жёлтую перенесли в другой заказ, а карточка держала её в прежней рамке и слала прежний номер]. Меняется только правкой кол. D.
+    var xd = (Array.isArray(c) && c[6] && typeof c[6] === 'object' && c[6].d) ? c[6].d : null;
+    if (xd && !Object.keys(xd).length) xd = null;         // пустая после «Снять «нет»» = у склада x.d нет вовсе
+    return h.t.id + '|' + JSON.stringify(Array.isArray(c) ? c.slice(0, 6) : c) + '|' + JSON.stringify(xd) + '|' + JSON.stringify(used);
   }
   function whoOf(hits) { return hits.map(function (h) { return h.t.id + '|' + h.pk.p.c[h.i][0]; }).sort().join('\n'); }
   // ⛔️ ПРИШЛИ СВЕЖИЕ ДАННЫЕ — ЭКРАН ПЕРЕСОБИРАЕМ [Кодекс CRIT-3]: иначе открытая карточка показывала бы
@@ -935,7 +969,35 @@
   // ── экраны ───────────────────────────────────────────────────────────────────────────
   // brand — пустой экран (главный, «не найден», «наберите больше»): шапка BERKONTI; 'home' — первый экран (на компьютере
   // только на нём строка «Данные на…», внизу) [владелец 27.09.2026].
-  function setView(v, brand) { document.body.className = (v === 'card') ? 'card' : brand === 'home' ? 'brand home' : (brand ? 'brand' : ''); }
+  function setView(v, brand) {
+    if (v !== 'card') padOpen = false;
+    document.body.className = (v === 'card') ? ('card' + (padOpen ? ' typing' : '')) : brand === 'home' ? 'brand home' : (brand ? 'brand' : '');
+  }
+  // ⭐ НАБОР НА КАРТОЧКЕ [владелец 28.09.2026: «ставлю курсор в окно поиска, меня просто выкидывает на главную страницу!
+  // почему нельзя оставаться там же»]: карточка стоит, пока кассир набирает следующий номер, и уходит только по «Найти».
+  // ⛔️ Пока набран новый запрос (или открыты цифры на телефоне), кнопки выдачи и «Снять «нет»» молчат: на экране ещё
+  // прежний клиент, а кассир мыслями уже у следующего — «Забрала всё» записала бы выдачу не тому.
+  var padOpen = false;
+  function draftOn() { return !!(CUR && CUR.kind === 'card' && (padOpen || typed.trim())); }
+  function draftSync() {
+    if (!CUR || CUR.kind !== 'card') return;
+    renderActs(CUR.model);
+    document.querySelectorAll('.un').forEach(function (b) { b.disabled = BUSY || draftOn(); });
+  }
+  function openPad() {
+    if (padOpen || !CUR || CUR.kind !== 'card') return;
+    padOpen = true; lastActivity = Date.now();
+    setView('card'); draftSync();
+  }
+  // Цифры закрыли без поиска — только тапом по карточке: набранное стирается, кнопки выдачи оживают через 0,7 с.
+  // ⛔️ Кнопки выдачи встают ровно туда, где был ряд «7 8 9»: без паузы следующий тап «7» писал «Забрала всё» [Фейбл «выдача»,
+  // круг 1 v6.3, HIGH-1]. По той же причине «⌫» и «Найти» в пустом поле цифры НЕ закрывают (как на главном экране v6.2):
+  // лишний «⌫» — привычка, а не решение вернуться к кнопкам выдачи.
+  function closePad() {
+    if (!padOpen) return;
+    padOpen = false; typed = ''; pendingSearch = ''; renderNum(); lastActivity = Date.now();
+    if (CUR && CUR.kind === 'card') { CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); setView('card'); draftSync(); }
+  }
   // Итог записи, пока кассир уже на другом экране: «anna 9-711: ✅ Выдано…» полосой вверху, около минуты.
   function lastBanner(hd) {
     movedBanner(hd);
@@ -1091,6 +1153,16 @@
   // ЗАГЛАВНАЯ — уже у клиента. Номер вещи — свой (c[4]) или номер клиента c[1].
   // Жёлтая «нет» — та же форма ячейки кол. D, что у «Собрать заказ» (pickIsWaitCell в web-app.js): номер, пробел, «net».
   var WAIT_CELL_RE = /^[A-Za-zА-Яа-яЁёЀ-ӿ]{0,3}\s*\d+\s*[-\/]\s*\d+\s+net$/i;
+  // Номер заказа жёлтой «нет» и отмены — ведущий номер кол. D (x.d выжимки): «9-730 net», «9-730» при «X» в кол. B.
+  var LEAD_NO_RE = /^([A-Za-zА-Яа-яЁёЀ-ӿ]{0,3}\s*\d+\s*[-\/]\s*\d+)/;
+  function ordNoOf(code, d) {
+    if (code !== 'w' && code !== 'c') return '';
+    var mm = LEAD_NO_RE.exec(String(d == null ? '' : d).trim());
+    return mm ? mm[1].replace(/\s+/g, '') : '';
+  }
+  // Порядок заказов по номеру: серия, потом номер («9-730» раньше «9-731»).
+  function noRank(no) { var mm = /(\d+)\s*[-\/]\s*(\d+)/.exec(String(no || '')); return mm ? [parseInt(mm[1], 10), parseInt(mm[2], 10)] : [1e9, 1e9]; }
+  function noCmp(a, b) { var x = noRank(a), y = noRank(b); return (x[0] - y[0]) || (x[1] - y[1]) || (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0); }
   function cardModel(h, q, selNo) {
     var P = h.pk.p, c = P.c[h.i];
     var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
@@ -1108,6 +1180,10 @@
                 // заказ „нет“, а в кассе он был помечен как отмена»]. Снять такое «нет» касса не может (склад снимает только
                 // букву w — решение владельца стоит в кол. B), поэтому кнопки «снять» у неё нет.
                 lockedWait: code === 'c' && WAIT_CELL_RE.test(String(xd[k] == null ? '' : xd[k]).trim()) };
+      // Заказ вещи на экране [владелец 28.09.2026: «товары со статусом отмена и нет (из первого заказа) … должны выводиться в
+      // первом заказе»]: собранная — свой номер; жёлтая «нет» и отмена — номер из кол. D. Нет номера (голое «net», выжимка
+      // старого склада без x.d у жёлтой) — '' (рамки ниже кладут такую вещь в самый ранний заказ).
+      r.ordNo = r.no || ordNoOf(code, xd[k]); r.ok = r.ordNo ? nk(r.ordNo) : '';
       rows.push(r);
       if (code === 'n' && no) { if (!groups[r.key]) { groups[r.key] = { no: no, open: [], given: [] }; order.push(r.key); } groups[r.key][r.given ? 'given' : 'open'].push(r); }
     }
@@ -1135,6 +1211,20 @@
       else m.rest.push(r);
     });
     order.forEach(function (key) { if (key !== sel && groups[key].open.length) m.others.push(groups[key]); });
+    // ⭐ РАМКИ ЗАКАЗОВ [владелец 28.09.2026, вариант A]: каждый заказ клиента — своей рамкой: вещи к выдаче, жёлтая «нет»,
+    // отмены. Первой — выбранный заказ (его выдают кнопки), дальше по номеру. Вещь без номера (голое «net») — в самом раннем
+    // заказе клиента. Рамки — только показ: выдают по-прежнему m.open выбранного заказа, снимают «нет» — по вещи.
+    var fr = {}, fk = [];
+    function frame(key, no) { if (!fr[key]) { fr[key] = { key: key, no: no, open: [], wait: [], canc: [] }; fk.push(key); } return fr[key]; }
+    if (g) frame(sel, g.no).open = m.open;
+    m.others.forEach(function (o) { frame(nk(o.no), o.no).open = o.open; });
+    var loose = [];
+    m.wait.forEach(function (r) { if (r.ok) frame(r.ok, groups[r.ok] ? groups[r.ok].no : r.ordNo).wait.push(r); else loose.push(r); });
+    m.canc.forEach(function (r) { if (r.ok) frame(r.ok, groups[r.ok] ? groups[r.ok].no : r.ordNo).canc.push(r); else loose.push(r); });
+    var byNo = fk.slice().sort(function (a, b) { return noCmp(fr[a].no, fr[b].no); });
+    if (byNo.length) loose.forEach(function (r) { fr[byNo[0]][(r.code === 'w' || r.lockedWait) ? 'wait' : 'canc'].push(r); });
+    m.frames = (g ? [fr[sel]] : []).concat(byNo.filter(function (key) { return !g || key !== sel; }).map(function (key) { return fr[key]; }));
+    m.loose = byNo.length ? [] : loose;          // у клиента нет ни одного номера — жёлтые и отмены разделами, как раньше
     // Сумма — по вещам к выдаче: правило «одно число» (как полоса суммы), счёт — вещи с пометкой R6-…
     var sum = 0, inv = 0, np = 0, invs = {};
     m.open.forEach(function (r) {
@@ -1153,7 +1243,15 @@
   // карточку уже по свежей выжимке, где под номером двое, — и отложенное освежение, сравнив набор сам с собой, оставляло
   // карточку, а «Забрала всё» писала выдачу не тому [Кодекс, круг 1 v6.1, CRIT-1].
   function showCard(h, q, banner, fromList, selNo, flash, who) {
-    if (!CUR || CUR.kind !== 'card') cardAt = Date.now();
+    // Новая карточка (поиск, строка списка) — не перерисовка открытой: перерисовки передают тот же CUR.q.
+    var fresh = !(CUR && CUR.kind === 'card' && CUR.q === q);
+    // ⛔️ СВОЯ карточка — та, чей запрос стоит в поле: кассир нашёл её сам («Найти», строка списка, выбор закупки, отложенный
+    // поиск набранного). Только она стирает поле и закрывает цифры. Карточку открыл не кассир (освежение, касса сама перешла
+    // на новую закупку и нашла по ПРЕЖНЕМУ запросу другого клиента) — набранный следующий номер остаётся, кнопки выдачи молчат,
+    // пока он в поле [Кодекс, круг 1 v6.3, CRIT-1: «55» стиралось, и через 0,7 с «Забрала всё» писала carol по старому «730»].
+    var own = fresh && typed.trim() === q.text;
+    if (fresh) cardAt = Date.now();
+    if (own) padOpen = false;
     setView('card');
     var P = h.pk.p, c = P.c[h.i], o = clearOut(), hd = $('head');
     // Список не сверен с таблицей в этом сеансе (из памяти телефона) или сверен давно, а освежение идёт —
@@ -1165,13 +1263,24 @@
     // Кнопки на паузе видно серыми.
     var same = !!(CUR && CUR.kind === 'card' && CUR.sel.tid === h.t.id && CUR.sel.nick === c[0]);
     var prevNo = same ? CUR.no : null;
-    var shownAt = same ? CUR.shownAt : ((refreshSwap || !DESK.matches) ? Date.now() : 0);
-    if (shownAt && !same) pauseLater(shownAt);
+    // Новый поиск той же клиентки с её же карточки — тоже новая карточка: пауза, как у любой [Фейбл «выдача», круг 1 v6.3, LOW-1].
+    var keep = same && !fresh;
+    var shownAt = keep ? CUR.shownAt : ((refreshSwap || !DESK.matches) ? Date.now() : 0);
+    if (shownAt && !keep) pauseLater(shownAt);
+    // Идёт сверка («Сверяю…») — кнопки выдачи серые, но не дольше 5 с с показа карточки [владелец 28.09.2026: «Делать кнопки
+    // выдачи серыми, пока идёт сверка (не дольше 5 с)? ДА»]: сверка может найти второго клиента с этим номером.
+    var chkUntil = checking ? ((keep && CUR.chkUntil) ? CUR.chkUntil : Date.now() + CHECK_HOLD) : 0;
     CUR = { kind: 'card', q: q, qk: qKey(q), sel: { tid: h.t.id, nick: c[0] }, sig: sigOf(h), fromList: !!fromList, checking: checking,
-            who: who || whoOf(findHits(q)), no: selNo || null, flash: flash || null, h: h, shownAt: shownAt, banner: banner || null };
+            who: who || whoOf(findHits(q)), no: selNo || null, flash: flash || null, h: h, shownAt: shownAt, banner: banner || null,
+            chkUntil: chkUntil };
+    if (chkUntil) setTimeout(function () { if (CUR && CUR.kind === 'card' && CUR.chkUntil === chkUntil) renderActs(CUR.model); }, chkUntil - Date.now() + 30);
     // Карточка открыта — поле поиска пустое: следующий запрос набирается с чистого [владелец 28.09.2026: «это поле сразу
     // очищай»]. Запрос карточки живёт в CUR.q — по нему пересобирает освежение и ищет заново выбор закупки.
-    if (typed) { typed = ''; pendingSearch = ''; renderNum(); }
+    // Перерисовка той же карточки (освежение, итог записи, «Открыть этот заказ») набранное кассиром НЕ стирает: он уже
+    // набирает следующий номер [владелец 28.09.2026: «почему нельзя оставаться там же»]. Отложенный поиск с новой карточкой
+    // тоже гаснет: карточку открыл другой путь, и искать прежнее незачем [Фейбл, круг 2 v6.1, LOW-1].
+    if (fresh) pendingSearch = '';
+    if (own && typed) { typed = ''; renderNum(); }
     var hdr = el('div', 'hdr');
     hdr.appendChild(el('div', 'lbl', 'Заказ'));
     var noEl = el('div', 'no', '');
@@ -1255,57 +1364,49 @@
       '» — это посылка. Выдавайте, только если клиент пришёл за ней сам.'));
     hd.appendChild(bans);
 
-    // Правая половина: вещи заказа плитками, потом остальное.
-    if (m.open.length && after) {
-      o.appendChild(el('div', 'sec', 'Не забрала — ' + things(m.open.length) + ' (остались в заказе ' + m.no + ')'));
-      var g0 = el('div', 'grid grp');
-      m.open.forEach(function (r) { g0.appendChild(tile(P, r, '')); });
-      o.appendChild(g0);
-    } else if (m.open.length) {
-      var h1 = el('div', 'sec ok', 'Заказ ' + m.no + ' — ' + things(m.open.length));
-      o.appendChild(h1);
-      var g1 = el('div', 'grid');
-      m.open.forEach(function (r) { g1.appendChild(tile(P, r, 'st-n')); });
-      o.appendChild(g1);
-    } else if (!m.givenSel.length) {
+    // Правая половина — РАМКИ ЗАКАЗОВ [владелец 28.09.2026, вариант A: «надо отделить заказы друг от друга»]: выбранный заказ
+    // — зелёной рамкой (его выдают кнопки), остальные — серыми с «Открыть этот заказ». В рамке — вещи к выдаче, жёлтая «нет»
+    // («нет, предложить альтернативу») и отмены ЭТОГО заказа, а не общим разделом в самом низу.
+    if (!m.open.length && !m.givenSel.length) {
       o.appendChild(el('div', 'hint', m.canc.length && !m.rest.length && !m.others.length && !m.wait.length
         ? 'Все вещи этого заказа отменены.' : 'Под этим номером нет собранных вещей.'));
     }
-    if (m.wait.length) {
-      o.appendChild(el('div', 'sec w', 'Нет в наличии — ' + m.wait.length));
-      var gw = el('div', 'grid');
-      // Экран «после выдачи» — без «Снять «нет»» до нового поиска: снятие перерисовывало карточку в обычный вид, и
-      // отказанная вещь снова оказывалась под живой «Забрала всё» [Фейбл, перепроверка круга 3, HIGH].
-      m.wait.forEach(function (r) { gw.appendChild(tile(P, r, 'st-w', (after || r.lockedWait) ? null : r)); });
-      o.appendChild(gw);
-    }
-    m.others.forEach(function (g) {
-      o.appendChild(el('div', 'sec other', 'Другой заказ этого клиента: ' + g.no + ' — ' + g.open.length));
-      var sw = el('button', 'sw2', 'Открыть заказ ' + g.no); sw.type = 'button';
-      sw.onclick = function () { lastActivity = Date.now(); showCard(h, q, null, fromList, g.no, null, CUR && CUR.who); };
-      o.appendChild(sw);
-      var go = el('div', 'grid grp');
-      g.open.forEach(function (r) { go.appendChild(tile(P, r, '')); });
-      o.appendChild(go);
+    var grid = function (list, cls, un) { var gd = el('div', 'grid'); list.forEach(function (r) { gd.appendChild(tile(P, r, cls, un ? un(r) : null)); }); return gd; };
+    // «Снять «нет»» — у каждой жёлтой, кроме запертой отменой кол. B и экрана «после выдачи»: снятие перерисовывало карточку в
+    // обычный вид, и отказанная вещь снова оказывалась под живой «Забрала всё» [Фейбл, перепроверка круга 3, HIGH].
+    var unOf = function (r) { return (after || r.lockedWait) ? null : r; };
+    var waitSec = function (box, list) { if (!list.length) return; box.appendChild(el('div', 'osub w', 'Нет, предложить альтернативу — ' + list.length)); box.appendChild(grid(list, 'st-w', unOf)); };
+    var cancSec = function (box, list) { if (!list.length) return; box.appendChild(el('div', 'osub c', 'Отменено — ' + list.length)); box.appendChild(grid(list, 'off')); };
+    var givenShown = false;
+    m.frames.forEach(function (f) {
+      var cur = !!m.sel && f.key === m.sel;
+      var box = el('div', 'ord' + (cur ? ' cur' : '')), oh = el('div', 'oh'), ob = el('div', 'ob');
+      oh.appendChild(el('span', 'on', 'Заказ ' + f.no));
+      if (f.open.length && !(cur && after)) {
+        var fs = 0; f.open.forEach(function (r) { var cc = cents(r.price); if (cc !== null) fs += cc; });
+        oh.appendChild(document.createTextNode(' '));
+        oh.appendChild(el('span', 'oc', things(f.open.length) + ' · ' + eur(fs)));
+      }
+      if (!cur && f.open.length) {
+        var sw = el('button', 'sw3', 'Открыть этот заказ'); sw.type = 'button'; sw.setAttribute('data-no', f.no);
+        sw.onclick = function () { lastActivity = Date.now(); showCard(h, q, null, fromList, f.no, null, CUR && CUR.who); };
+        oh.appendChild(sw);
+      }
+      box.appendChild(oh);
+      if (cur && after && f.open.length) { ob.appendChild(el('div', 'osub', 'Не забрала — ' + things(f.open.length))); ob.appendChild(grid(f.open, '')); }
+      else if (f.open.length) ob.appendChild(grid(f.open, cur ? 'st-n' : ''));
+      waitSec(ob, f.wait);
+      cancSec(ob, f.canc);
+      if (cur && m.givenSel.length) { givenShown = true; ob.appendChild(el('div', 'osub', 'Уже выдано — ' + m.givenSel.length)); ob.appendChild(grid(m.givenSel, 'st-g')); }
+      if (ob.childNodes.length) box.appendChild(ob);
+      o.appendChild(box);
     });
-    if (m.givenSel.length) {
-      o.appendChild(el('div', 'sec', 'Уже выдано — ' + m.givenSel.length));
-      var gg = el('div', 'grid');
-      m.givenSel.forEach(function (r) { gg.appendChild(tile(P, r, 'st-g')); });
-      o.appendChild(gg);
-    }
-    if (m.rest.length) {
-      o.appendChild(el('div', 'sec', 'Ещё не собрано — ' + m.rest.length));
-      var gr = el('div', 'grid');
-      m.rest.forEach(function (r) { gr.appendChild(tile(P, r, '')); });
-      o.appendChild(gr);
-    }
-    if (m.canc.length) {
-      o.appendChild(el('div', 'sec', 'Отменено — ' + m.canc.length));
-      var gc = el('div', 'grid');
-      m.canc.forEach(function (r) { gc.appendChild(tile(P, r, 'off')); });
-      o.appendChild(gc);
-    }
+    // У клиента нет ни одного номера заказа — разделами, как раньше.
+    var isW = function (r) { return r.code === 'w' || r.lockedWait; };
+    waitSec(o, m.loose.filter(isW));
+    if (m.givenSel.length && !givenShown) { o.appendChild(el('div', 'sec', 'Уже выдано — ' + m.givenSel.length)); o.appendChild(grid(m.givenSel, 'st-g')); }
+    if (m.rest.length) { o.appendChild(el('div', 'sec', 'Ещё не собрано — ' + m.rest.length)); o.appendChild(grid(m.rest, '')); }
+    cancSec(o, m.loose.filter(function (r) { return !isW(r); }));
     appendInfo(o);
     renderActs(after ? null : m);
   }
@@ -1369,7 +1470,9 @@
     return f;
   }
 
-  var CODE_TXT = { s: ['куплено, не собрано', 'warn'], e: ['ещё не куплено', ''], w: ['нет в наличии', 'warn'],
+  // Жёлтая «нет» — «нет, предложить альтернативу» [владелец 28.09.2026: «ей надо давать жёлтый статус „нет, предложить
+  // альтернативу“»]: кассир предлагает клиенту замену (и снимает «нет», если клиент берёт).
+  var CODE_TXT = { s: ['куплено, не собрано', 'warn'], e: ['ещё не куплено', ''], w: ['нет, предложить альтернативу', 'warn'],
                    o: ['другая пометка — проверьте в таблице', 'warn'], c: ['отменено', 'bad'] };
   // Плитка вещи. unnet — вещь с жёлтой «нет», у которой кассир может снять «нет» (клиент берёт замену).
   function tile(P, r, cls, unnet) {
@@ -1402,7 +1505,7 @@
     tx.appendChild(el('div', 'pr' + (cc === null ? ' np' : ''), cc === null ? (r.price ? r.price + ' — без цены' : 'без цены') : eur(cc)));
     if (unnet) {
       var ub = el('button', 'un', 'Снять «нет» — клиент берёт'); ub.type = 'button';
-      ub.disabled = BUSY;
+      ub.disabled = BUSY || draftOn();
       ub.onclick = function () { askUnnet(unnet); };
       tx.appendChild(ub);
     }
@@ -1436,7 +1539,8 @@
     // Экран «после выдачи» — кнопки молчат до нового поиска, кто бы их ни перерисовал (конец чужой записи, досылка,
     // таймер паузы): иначе отказанная вещь оказывалась под живой «Забрала всё» [Фейбл, круг 3, HIGH-1].
     var after = !!(CUR && CUR.kind === 'card' && CUR.flash && CUR.flash.done);
-    var n = (m && !after && cardInScope()) ? m.open.length : 0, pause = !!m && tooFresh();
+    // Набран следующий запрос (или открыты цифры) — кнопки молчат: на экране ещё прежний клиент [владелец 28.09.2026].
+    var n = (m && !after && cardInScope() && !draftOn()) ? m.open.length : 0, pause = !!m && (tooFresh() || checkHold());
     a.disabled = BUSY || n < 1 || pause;
     b.disabled = BUSY || n < 2 || pause;
     var mine = BUSY && INFL && cardTok() === INFL.tok;
@@ -1592,7 +1696,7 @@
     else if (busyTimer) { clearInterval(busyTimer); busyTimer = null; }
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     renderActs(m);
-    document.querySelectorAll('.un').forEach(function (b) { b.disabled = BUSY; });
+    document.querySelectorAll('.un').forEach(function (b) { b.disabled = BUSY || draftOn(); });
     var ok = document.querySelector('#dlg .dlgft .ok, #dlg .dlgft .okw');
     if (ok) { ok.disabled = BUSY; if (BUSY) ok.textContent = 'Записываю…'; }
   }
@@ -1602,17 +1706,21 @@
     // если кассир ушёл, пока склад писал: увиденный на своей карточке итог к следующему клиенту не переезжает (чужое
     // «✅ Выдано» там можно принять за своё) [Фейбл, круг 2, MED-4].
     var mine = cardTok() === tok;
+    // Своя карточка, но кассир уже набирает следующий номер: итог мог пройти мимо глаз (на телефоне его закрывают цифры),
+    // а «Найти» уведёт с карточки — отказ держим полосой с «×», «Выдано» покажем на следующем экране, как ушедшему кассиру
+    // [Фейбл «сценарий», круг 1 v6.3, HIGH-1: «Таблица занята» с карточки anna пропадала с первым Enter].
+    var seen = mine && !draftOn();
     var text = (INFL && INFL.label ? INFL.label + ': ' : '') + flash.text;
     // Записали в закупку, которая сейчас не выбрана: освежение её не спросит — сверку сбросить, вернувшись, касса сверит
     // заново («сверяю»), а не откроет заказ по старой памяти [Фейбл «гонки», v6, LOW-4].
     var wtid = String(tok || '').split('|')[0];
     if (wtid && PACKS[wtid] && !scope().some(function (x) { return x.id === wtid; })) PACKS[wtid].checked = 0;
-    LAST = { text: text, cls: flash.cls, at: Date.now(), tok: tok, flash: flash, shown: mine };
+    LAST = { text: text, cls: flash.cls, at: Date.now(), tok: tok, flash: flash, shown: seen };
     // Удачная запись этого же заказа снимает его прежний отказ.
     if (flash.cls === 'ok') STICKY = STICKY.filter(function (x) { return x.tok !== tok; });
     // ⛔️ Отказ, пришедший на ЧУЖОЙ экран, держится, пока кассир его не закроет [Фейбл, круг 2, MED-5]: иначе следующая
     // выдача стирала его через минуту, а заказ так и оставался невыданным, хотя вещи ушли.
-    else if (!mine) { STICKY.push({ text: text, cls: flash.cls, tok: tok }); STICKY = STICKY.slice(-4); LAST.shown = true; }
+    else if (!seen) { STICKY.push({ text: text, cls: flash.cls, tok: tok }); STICKY = STICKY.slice(-4); LAST.shown = true; }
     if (mine) afterWrite(no, flash);
     else if (flash.cls === 'ok') { var hd = $('head'); if (hd) hd.insertBefore(el('div', 'ban ok', text), hd.firstChild); }
     else renderSticky();
@@ -1639,6 +1747,9 @@
     // Свой номер вещи — как его положит выжимка: только если он не номер клиента.
     if (!c[4] || typeof c[4] !== 'object') c[4] = {};
     if (no && nk(no) !== nk(c[1])) c[4][r.k] = no; else delete c[4][r.k];
+    // Кол. D у вещи с номером выжимка не везёт (x.d — только у жёлтой и отмены): без этого следующая выжимка отличалась бы
+    // подписью (x.d в ней с v6.3) — ложное «данные обновились» и закрытое окно «Какие вещи забрала?» [Кодекс, круг 2 v6.3, MED].
+    if (c[6] && typeof c[6] === 'object' && c[6].d && typeof c[6].d === 'object') delete c[6].d[r.k];
   }
   // Тот же ли экран после ответа склада: клиент, закупка и запрос (объект выжимки мог смениться свежим — это тот же экран).
   function cardTok() { return CUR && CUR.kind === 'card' ? CUR.sel.tid + '|' + CUR.sel.nick + '|' + CUR.qk : ''; }
@@ -1648,12 +1759,15 @@
     try { showCard(CUR.h, CUR.q, null, CUR.fromList, no, flash, CUR.who); } finally { refreshSwap = false; }
   }
   function tooFresh() { return !!(CUR && CUR.shownAt && Date.now() - CUR.shownAt < 700); }
+  // Идёт сверка открытой карточки — кнопки выдачи на паузе, но не дольше CHECK_HOLD с её показа [владелец 28.09.2026].
+  var CHECK_HOLD = 5000;
+  function checkHold() { return !!(CUR && CUR.kind === 'card' && CUR.checking && CUR.chkUntil && Date.now() < CUR.chkUntil); }
   // Конец паузы — кнопки снова живые (если карточка та же).
   function pauseLater(at) { setTimeout(function () { if (CUR && CUR.kind === 'card' && CUR.shownAt === at) renderActs(CUR.model); }, 720); }
   async function give(mode, takeIdx) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || !m.open.length || DENIED || !cardInScope()) return;
-    if (mode === 'all' && tooFresh()) return;
+    if (!m || BUSY || !m.open.length || DENIED || !cardInScope() || draftOn()) return;
+    if (mode === 'all' && (tooFresh() || checkHold())) return;
     lastActivity = Date.now();
     var h = CUR.h, rows = m.open.slice();
     var a = rows.map(function (r) { return itemOf(m.P, r); });
@@ -1702,12 +1816,13 @@
   }
   async function unnet(r) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || DENIED || !cardInScope()) return;
+    if (!m || BUSY || DENIED || !cardInScope() || draftOn()) return;
     lastActivity = Date.now();
     var h = CUR.h;
-    // № заказа жёлтой вещи выжимка не везёт — шлём подсказкой открытый заказ (иначе номер клиента); склад найдёт её
-    // заказ сам и скажет какой [Фейбл «корректность», LOW-3: из двух одинаковых жёлтых в двух заказах — та, что открыта].
-    var hint = m.no || m.main;
+    // Подсказка складу — № заказа жёлтой вещи из кол. D (x.d; выжимка старого склада его не везёт — тогда открытый заказ,
+    // иначе номер клиента); склад найдёт её заказ сам и скажет какой [Фейбл «корректность», LOW-3: из двух одинаковых
+    // жёлтых в двух заказах — та, что в подсказке].
+    var hint = r.ordNo || m.no || m.main;
     var params = { src: h.t.id, nick: m.c[0], no: hint, a: JSON.stringify(itemOf(m.P, r)) };
     var key = 'unnet|' + h.t.id + '|' + m.c[0] + '|' + hint + '|' + params.a;
     var tok = cardTok(), sig0 = CUR.sig;
@@ -1760,7 +1875,7 @@
   // «Какие вещи забрала?» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026].
   function openPart() {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || m.open.length < 2 || tooFresh() || !cardInScope()) return;
+    if (!m || BUSY || m.open.length < 2 || tooFresh() || checkHold() || !cardInScope() || draftOn()) return;
     lastActivity = Date.now();
     var rows = m.open.slice(), on = rows.map(function () { return true; });
     var d = $('dlg'); d.textContent = '';
@@ -1826,7 +1941,7 @@
   }
   function askUnnet(r) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || !cardInScope()) return;
+    if (!m || BUSY || !cardInScope() || draftOn()) return;
     lastActivity = Date.now();
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox');
@@ -1877,7 +1992,12 @@
     // откроется сама [Фейбл «сценарий», ускорение 2]. Та же сверка, что и так пошла бы по Enter, — только раньше.
     if (v && !syncing && !searchVerified() && Date.now() - lastSyncAt > 20000) sync();
     // Во время записи искать можно: код операции не даст складу записать дважды, итог придёт полосой [Фейбл, ускорение 4].
-    if (CUR) showHome();
+    // Карточка набором не закрывается [владелец 28.09.2026: «почему нельзя оставаться там же»] — молчат её кнопки выдачи,
+    // пока набран новый запрос; список и «не найден» уходят сразу, как и было.
+    // Окно («Снять «нет»?», «Какие вещи забрала?») набор закрывает, как закрывал уход карточки до v6.3: его кнопка записи
+    // относится к прежнему клиенту [Кодекс, круг 1 v6.3, MED-1 — Tab из окна в поле].
+    if (CUR && CUR.kind === 'card') { if (v && dlgOpen()) closeDlg(); draftSync(); }
+    else if (CUR) showHome();
   }
   function go() {
     if (dlgOpen()) return;                       // окно открыто — поиск за ним не запускаем [Фейбл, круг 2, LOW-2]
@@ -1926,7 +2046,9 @@
     // Кассир печатает, а курсор не в поле (кликнул плитку) — буква уходит в поиск, как и ждёт человек.
     if (DESK.matches && !dlgOpen() && document.activeElement !== numEl && e.key && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       keyFocus = true;
-      try { numEl.focus(); numEl.select(); } catch (err) {}
+      // Набран следующий номер на карточке, кассир щёлкнул по ней — клавиша дописывает, а не заменяет набранное [Фейбл
+      // «выдача», круг 1 v6.3, LOW-3: «73», щелчок, «1» давали «1», и Enter открывал 9-001 вместо 9-731].
+      try { numEl.focus(); if (draftOn()) { var L0 = numEl.value.length; numEl.setSelectionRange(L0, L0); } else numEl.select(); } catch (err) {}
       keyFocus = false;
     }
   });
@@ -1934,7 +2056,15 @@
     abcOn = !abcOn; fitInput();
     try { if (abcOn) numEl.focus(); else numEl.blur(); } catch (e) {}
   };
-  if (DESK.addEventListener) DESK.addEventListener('change', function () { abcOn = false; fitInput(); if (CUR && CUR.kind === 'card' && CUR.h) showCard(CUR.h, CUR.q, null, CUR.fromList, CUR.no, CUR.flash, CUR.who); });
+  if (DESK.addEventListener) DESK.addEventListener('change', function () {
+    var wasPad = padOpen;
+    abcOn = false; padOpen = false; fitInput();
+    if (CUR && CUR.kind === 'card' && CUR.h) {
+      // Цифры закрылись сменой ширины — кнопки выдачи с паузой, как после тапа по карточке [Кодекс, круг 2 v6.3, LOW-3].
+      if (wasPad) { CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); }
+      showCard(CUR.h, CUR.q, null, CUR.fromList, CUR.no, CUR.flash, CUR.who);
+    }
+  });
   $('pad').addEventListener('click', function (e) {
     var b = e.target.closest ? e.target.closest('button') : null;
     if (!b) return;
@@ -1948,14 +2078,21 @@
     edited(v); renderNum();
   });
   var cardAt = 0;
-  // Телефон: новый поиск — тапом по полю вверху карточки [владелец 28.09.2026: «кнопка Новый поиск не нужна. Вверху есть же
-  // поле поиска… это поле сразу очищай, дай поставить туда курсор и вбить новый запрос»]: карточка уходит, внизу — цифры.
-  // Первые 0,4 с после открытия карточки тап глух, как была глуха кнопка: двойной тап не закрывает её сразу.
+  // Телефон: тап по полю вверху карточки — внизу цифры, карточка остаётся на экране до «Найти» [владелец 28.09.2026: «кнопка
+  // Новый поиск не нужна. Вверху есть же поле поиска… дай поставить туда курсор и вбить новый запрос»; «ставлю курсор в окно
+  // поиска, меня просто выкидывает на главную страницу! почему нельзя оставаться там же»]. Кнопки выдачи, пока открыты
+  // цифры, спрятаны и молчат (draftOn). Первые 0,4 с после открытия карточки тап глух: двойной тап по «Найти» цифры не открывает.
   numEl.addEventListener('click', function () {
     if (DESK.matches || abcOn || !CUR || CUR.kind !== 'card' || Date.now() - cardAt < 400) return;
-    newSearch();
+    openPad();
     try { numEl.blur(); } catch (e) {}
   });
+  // Цифры открыты на карточке — тап по карточке закрывает их, и только: кнопка под пальцем («Открыть этот заказ», «Снять
+  // «нет»», фото) этим тапом не срабатывает — кассир сначала видит карточку с кнопками выдачи, потом действует.
+  $('main').addEventListener('click', function (e) {
+    if (!padOpen || !CUR || CUR.kind !== 'card') return;
+    e.stopPropagation(); e.preventDefault(); closePad();
+  }, true);
   $('zoom').onclick = function () { $('zoom').style.display = 'none'; $('zimg').removeAttribute('src'); };
   // Тап по строке состояния — «освежить сейчас»: идёт сверка — ещё раз сразу после неё (иначе тап глотался бы).
   $('sync').onclick = function () { lastActivity = Date.now(); sync(true); };
@@ -2013,6 +2150,9 @@
       // Этот ключ склад уже не пускал: данных не читаем, но спрашиваем склад ещё раз.
       DENIED = true; showDeny();
       var r = await (function () { DENIED = false; return jsonp('kassa_tables', {}, WAIT_TABLES); })();
+      // «404» от Google — не ответ склада: повторяем, как освежение [Фейбл соседней сессии, 28.09.2026: иначе «закройте и
+      // откройте» после отказа иногда нужно было дважды]. Настоящий отказ (no_key) повтор прерывает сам — denied().
+      for (var ra = 0; r && r.net && ra < 2 && !DENIED; ra++) { await sleep(2000); r = await jsonp('kassa_tables', {}, WAIT_TABLES); }
       if (!r || !r.ok) { DENIED = true; showDeny(); return; }
       lsSet('kassa_denied', ''); $('deny').style.display = 'none';
     }
