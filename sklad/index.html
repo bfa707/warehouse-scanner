@@ -90,13 +90,20 @@
         if (/^[0-9a-f]{32}$/.test(_w)) WH_D = _w;
       }
     } catch (e) { WH_D = ''; }
+    // 📱 ЗАМЕР [владелец 28.09.2026: «Делай замер»]: держит ли ТЕЛЕФОН метку после перезапуска ярлыка — тогда его
+    // можно привязать, как компьютер. `sa` — открыт ярлыком с экрана «Домой» (у iOS у ярлыка своя память, у Safari
+    // своя); `cs` — холодный запуск: sessionStorage живёт, пока жив процесс ярлыка, и пуст после перезапуска.
+    // Сервер по ним ничего не решает — только записывает (app-key.js, whDevSeenNote_).
+    var WH_SA = '0', WH_CS = 'x';
+    try { if (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) WH_SA = '1'; } catch (e) {}
+    try { WH_CS = sessionStorage.getItem('wh_sess') ? '0' : '1'; sessionStorage.setItem('wh_sess', '1'); } catch (e) { WH_CS = 'x'; }
     // ⏱ Когда телефон открыл ярлык — аппка печатает в «Лог действий» весь путь от иконки до окна
     // кода [владелец 15.09.2026: «10 секунд белый экран»]. Время ставит сам браузер при открытии.
     var WH_LT = 0;
     try { WH_LT = Math.round((performance.timeOrigin || performance.timing.navigationStart) || 0); } catch (e) {}
     if (!WH_LT) WH_LT = Date.now();
     document.getElementById('app').src = EXEC
-      + (WH_K ? ('?k=' + encodeURIComponent(WH_K) + '&ks=' + WH_KSRC + (WH_D ? '&d=' + WH_D : '') + '&lt=' + WH_LT)
+      + (WH_K ? ('?k=' + encodeURIComponent(WH_K) + '&ks=' + WH_KSRC + (WH_D ? '&d=' + WH_D : '') + '&lt=' + WH_LT + '&sa=' + WH_SA + '&cs=' + WH_CS)
               : ('?lt=' + WH_LT));
     // 💻 Новую ссылку вставили в адресную строку ЭТОЙ ЖЕ вкладки [Фейбл 28.09.2026 «сценарии», MED-2]: меняется
     // только хвост после «#», и браузер страницу не перезагружает — аппка так и работала бы на прежнем ключе,
