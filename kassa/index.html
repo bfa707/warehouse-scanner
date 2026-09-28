@@ -379,7 +379,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.4 · 28.09.2026';
+  var VER = 'v6.5 · 28.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -531,32 +531,74 @@
   var PTQ = [];
   function ptAdd(s) { PTQ.push(s); if (PTQ.length > 6) PTQ = PTQ.slice(-6); }
   function ptSec(ms) { return (ms / 1000).toFixed(1); }
+  // ⚡ ВТОРОЙ ЗАПРОС ВМЕСТО ОЖИДАНИЯ [живой журнал 28.09.2026, v6.5]: склад отдал выжимку за 0,3 с, а Google ответ до кассы
+  // не довёз — касса ждала до своего потолка 150 с («висело 2 минуты»). Теперь молчание дольше HEDGE_AT[0] — тот же запрос
+  // ещё раз, параллельно (прежний не бросаем: вдруг он просто медленный), дольше HEDGE_AT[1] — третий; какой ответ пришёл
+  // первым, тот и берём. Чтение от этого не меняется; запись идёт ТЕМ ЖЕ кодом операции n, и склад узнаёт повтор (ответ из
+  // памяти или последняя сверка под замком — разбор у kassaGive_), как узнавал повтор после «404». Цена: лишний запрос
+  // только у ответа, который и так опаздывает; обычный путь — ни одного.
+  var HEDGE_AT = [30000, 75000];
+  // Ответ записи «склад не смог даже посмотреть» (занят, не прочитал, не открыл, упал) — исход ДРУГОГО запроса того же кода он не
+  // знает. Пока тот жив — ждём его [Фейбл «деньги», круг 1 v6.5, HIGH-1: второй запрос в день тормозов отвечал «busy» раньше
+  // первого, первый потом не смог проверить свою запись, его ответ выбрасывался — досылки нет, строки «Лога кассы» нет].
+  var KEEP_RE = /^(busy|read_failed|exception|src_open_failed|no_orders_sheet)$/;
+  // ⛔️ ЗАПИСЬ, УШЕДШАЯ ДВУМЯ И БОЛЕЕ ЗАПРОСАМИ, БЕЗ ЯСНОГО ОТВЕТА — ИСХОД НЕИЗВЕСТЕН [Кодекс HIGH-2, круг 2 v6.5]: любой из них мог
+  // записать. «Не доставлено» и «склад не смог посмотреть» тогда — не итог, а null: касса досылает запрос тем же кодом сама
+  // (pendFate → add), и склад дописывает журнал. Ждать остальных после такого ответа — не дольше WEAK_WAIT [Фейбл «деньги», круг 2
+  // v6.5, MED-1: первый потерян, второй «занят» — касса стояла до потолка 150 с].
+  var WEAK_WAIT = 24000;
   function jsonp(action, params, timeoutMs) {
     if (PTQ.length && /^kassa_(give|unnet|pack)$/.test(action)) {
       var pt = PTQ.join('; ').slice(0, 300);
       if (jsonpUrl(action, params, 'kcb000_xxxxxxxx').length + pt.length * 3 < URL_MAX) { params = Object.assign({}, params, { pt: pt }); PTQ = []; }
     }
     return new Promise(function (resolve) {
-      var cb = 'kcb' + (++jp) + '_' + Date.now().toString(36);
-      var s = document.createElement('script'), done = false;
-      var timer = setTimeout(function () { finish(null); }, timeoutMs || WAIT_TABLES);
+      var done = false, legs = [], alive = 0, weak = null, timers = [], weakT = null;
+      var wr = /^kassa_(give|unnet)$/.test(action);
+      var total = timeoutMs || WAIT_TABLES;
+      timers.push(setTimeout(function () { finish(null); }, total));
       function finish(d) {
         if (done) return; done = true;
-        clearTimeout(timer);
-        window[cb] = function () {};                       // поздний ответ после таймаута — молча
-        if (s.parentNode) s.parentNode.removeChild(s);
+        timers.forEach(clearTimeout);
+        legs.forEach(function (L) {
+          window[L.cb] = function () {};                   // поздний ответ после таймаута или другого запроса — молча
+          if (L.s.parentNode) L.s.parentNode.removeChild(L.s);
+        });
         if (d && d.error === 'no_key') denied();
         resolve(d || null);
       }
-      window[cb] = function (d) { finish(d); };
-      // ⚠️ ОШИБКА ДОСТАВКИ ≠ МОЛЧАНИЕ [живая проверка 26.09.2026]: Google отдавал на каждый 2–3-й ответ склада «404»
-      // (сам склад отвечал за 0,3 с). Отличаем её от таймаута — такой запрос имеет смысл сразу повторить.
-      s.onerror = function () { finish({ ok: false, net: 1 }); };
-      // Скрипт загрузился, а ответа в нём нет (Google отдал страницу вместо JSONP: старый адрес, сбой) — это тоже «не
-      // доставлено», и ждать 150 с незачем [Фейбл «сценарий», HIGH-3]. JSONP зовёт callback ДО onload.
-      s.onload = function () { setTimeout(function () { finish({ ok: false, net: 1 }); }, 0); };
-      s.src = jsonpUrl(action, params, cb);
-      document.head.appendChild(s);
+      function leg(i, prm) {
+        if (done) return;
+        var cb = 'kcb' + (++jp) + '_' + Date.now().toString(36);
+        var s = document.createElement('script'), over = false;
+        legs.push({ cb: cb, s: s }); alive++;
+        // Ответ — берём сразу. «Не доставлено» — ждём, пока ответят остальные запросы; их нет — отдаём его (как раньше:
+        // звавший повторит через 2 с), а ещё не отправленные повторы отменяем.
+        function end(d, bad) {
+          if (over || done) return; over = true; alive--;
+          if (!bad && wr && legs.length > 1 && d && KEEP_RE.test(String(d.error || ''))) bad = true;
+          if (!bad) { if (d && typeof d === 'object') d.leg = i; finish(d); return; }
+          if (!weak || weak.net) weak = d;                 // «склад занят» говорит больше, чем «не доставлено»
+          if (!alive) { finish(wr && legs.length > 1 ? null : weak); return; }
+          if (wr && !weakT) { weakT = setTimeout(function () { finish(null); }, WEAK_WAIT); timers.push(weakT); }
+        }
+        window[cb] = function (d) { end(d, false); };
+        // ⚠️ ОШИБКА ДОСТАВКИ ≠ МОЛЧАНИЕ [живая проверка 26.09.2026]: Google отдавал на каждый 2–3-й ответ склада «404»
+        // (сам склад отвечал за 0,3 с). Отличаем её от таймаута — такой запрос имеет смысл сразу повторить.
+        s.onerror = function () { end({ ok: false, net: 1 }, true); };
+        // Скрипт загрузился, а ответа в нём нет (Google отдал страницу вместо JSONP: старый адрес, сбой) — это тоже «не
+        // доставлено», и ждать 150 с незачем [Фейбл «сценарий», HIGH-3]. JSONP зовёт callback ДО onload.
+        s.onload = function () { setTimeout(function () { end({ ok: false, net: 1 }, true); }, 0); };
+        s.src = jsonpUrl(action, prm, cb);
+        document.head.appendChild(s);
+      }
+      leg(0, params);
+      // Повтор — без строки замера pt: её уже везёт первый запрос, склад записал бы её в журнал дважды.
+      var again = params.pt ? Object.assign({}, params) : params;
+      if (again !== params) delete again.pt;
+      HEDGE_AT.forEach(function (ms, j) {
+        if (ms < total) timers.push(setTimeout(function () { if (!done && alive) leg(j + 1, again); }, ms));
+      });
     });
   }
   // ⛔️ ОТКАЗ ПО КЛЮЧУ — СТИРАЕМ СПИСОК КЛИЕНТОВ ИЗ ТЕЛЕФОНА [Кодекс HIGH-6, Фейбл MED-1, круг 1].
@@ -586,13 +628,30 @@
 
   // ── фоновое освежение списка ──────────────────────────────────────────────────────────
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // ⚡ СЖАТАЯ ВЫЖИМКА [живой журнал 28.09.2026, v6.5]: разжатая выжимка большой закупки — около 2 МБ, и Google вёз её до кассы
+  // 15–46 с; сжатая (как она и лежит в кэше склада) — около 270 КБ. Разжимает браузер (DecompressionStream: Chrome 80+,
+  // Safari 16.4+). Не умеет или разжать не вышло — до конца сеанса просим как прежде, разжатой.
+  var ZIP_OK = typeof DecompressionStream === 'function' && typeof Response === 'function' && typeof Blob === 'function' &&
+               typeof Blob.prototype.stream === 'function' && typeof atob === 'function';
+  async function unzipB64(b64) {
+    var bin = atob(String(b64 || '')), u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
   async function syncPack(t, attempt) {
     var cur = PACKS[t.id], tp = Date.now();
-    var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1' }, WAIT_PACK);
-    // Долгое освежение (дольше 5 с) — в замер: «обновление длилось около минуты» (п.6).
-    if (Date.now() - tp > 5000) ptAdd('pack ' + ptSec(Date.now() - tp) + 's try=' + ((attempt || 0) + 1) + (r ? (r.net ? ' 404' : r.same ? ' same' : r.building ? ' building' : r.ok ? ' new' : ' ' + String(r.error || 'err')) : ' x'));
+    var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1', z: ZIP_OK ? '1' : '' }, WAIT_PACK);
+    // Долгое освежение (дольше 5 с) — в замер: «обновление длилось около минуты» (п.6). h1/h2 — ответ пришёл на повтор.
+    if (Date.now() - tp > 5000) ptAdd('pack ' + ptSec(Date.now() - tp) + 's try=' + ((attempt || 0) + 1) + (r ? (r.net ? ' 404' : r.same ? ' same' : r.building ? ' building' : r.ok ? ' new' : ' ' + String(r.error || 'err')) : ' x') + (r && r.leg ? ' h' + r.leg : '') + (r && typeof r.packz === 'string' ? ' z' + Math.round(r.packz.length / 1024) + 'k' : ''));
     if (DENIED) return false;
     if (!r) return null;
+    if (r.ok && typeof r.packz === 'string') {
+      var txt = null;
+      try { txt = await unzipB64(r.packz); } catch (e) { txt = null; }
+      // Не разжалось — сразу спросим разжатой (склад на пути z=1 куски распаковкой не проверяет) [Фейбл, круг 1 v6.5, LOW-2].
+      if (typeof txt !== 'string' || !txt) { ZIP_OK = false; return DENIED ? false : syncPack(t, attempt); }
+      r.pack = txt; delete r.packz;
+    }
     // Google не доставил ответ («404») — повторяем через 2 с, до двух раз; не вышло — как молчание.
     if (r.net) { if ((attempt || 0) < 2) { await sleep(2000); return DENIED ? false : syncPack(t, (attempt || 0) + 1); } return null; }
     if (r.ok && r.same && cur) {
@@ -1226,6 +1285,8 @@
     var xd = (c[6] && typeof c[6] === 'object' && c[6].d && typeof c[6].d === 'object') ? c[6].d : {};
     // Заказ соседних строк листа у отмены без номера (x.q склада v532) — туда её и кладём.
     var xq = (c[6] && typeof c[6] === 'object' && c[6].q && typeof c[6].q === 'object') ? c[6].q : {};
+    // ✋ Касса сняла у вещи «нет» — клиент взял предложенную альтернативу (x.u склада v533) [владелец 28.09.2026].
+    var xu = (c[6] && typeof c[6] === 'object' && c[6].u && typeof c[6].u === 'object') ? c[6].u : {};
     var prices = String(c[5] == null ? '' : c[5]).split('|');
     var main = String(c[1] || '');
     var rows = [], groups = {}, order = [];
@@ -1244,6 +1305,7 @@
       // кнопки, «net») — заказ ближайшей строки клиента по листу (x.q) [владелец 28.09.2026: «„отмена“ уехала в совсем другой
       // заказ»]. Нет и его (выжимка старого склада) — '' (рамки ниже кладут такую вещь в самый ранний заказ).
       r.ordNo = r.no || ordNoOf(code, xd[k]) || ((code === 'c' || code === 'w') && typeof xq[k] === 'string' ? xq[k] : '');
+      r.alt = code === 'n' && !!xu[k];
       r.ok = r.ordNo ? nk(r.ordNo) : '';
       rows.push(r);
       if (code === 'n' && no) { if (!groups[r.key]) { groups[r.key] = { no: no, open: [], given: [] }; order.push(r.key); } groups[r.key][r.given ? 'given' : 'open'].push(r); }
@@ -1556,9 +1618,12 @@
     var gOther = uniq(m.givenOther.map(function (r) { return r.no; }).filter(Boolean));
     if (gOther.length) hd.appendChild(el('div', 'note', 'Раньше выдан заказ ' + gOther.join(', ')));
     var justOk = !!(flash && (flash.cls === 'ok' || flash.done));   // и «выдано» с предупреждением [Фейбл, круг 2, LOW-4]
+    // Выданный заказ, где касса снимала «нет», — видно и в строке про выдачу [владелец 28.09.2026].
+    var altN = m.givenSel.filter(function (r) { return r.alt; }).length;
+    var altTail = altN ? ' · ' + ALT_TXT + ': ' + things(altN) : '';
     if (m.givenSel.length && !m.open.length && !justOk) bans.appendChild(el('div', 'ban bad', '⚠️ Заказ уже выдан: ' +
-      uniq(m.givenSel.map(function (r) { return r.mark || 'выдано'; })).join(', ')));
-    else if (m.givenSel.length && !justOk) bans.appendChild(el('div', 'ban bad', '⚠️ Часть заказа уже выдана: ' + things(m.givenSel.length)));
+      uniq(m.givenSel.map(function (r) { return r.mark || 'выдано'; })).join(', ') + altTail));
+    else if (m.givenSel.length && !justOk) bans.appendChild(el('div', 'ban bad', '⚠️ Часть заказа уже выдана: ' + things(m.givenSel.length) + altTail));
     var parcel = uniq(m.open.map(function (r) { return r.mark; }).filter(function (x) { return PARCEL_RE.test(x); }));
     if (parcel.length) bans.appendChild(el('div', 'ban warn', '⚠️ В заказе пометка «' + parcel.join(', ') +
       '» — это посылка. Выдавайте, только если клиент пришёл за ней сам.'));
@@ -1675,6 +1740,7 @@
   var CODE_TXT = { s: ['куплено, не собрано', 'warn'], e: ['ещё не куплено', ''], w: ['нет, предложить альтернативу', 'warn'],
                    o: ['другая пометка — проверьте в таблице', 'warn'], c: ['отменено', 'bad'] };
   // Плитка вещи. unnet — вещь с жёлтой «нет», у которой кассир может снять «нет» (клиент берёт замену).
+  var ALT_TXT = 'сняли «нет» — альтернатива';
   function tile(P, r, cls, unnet) {
     var it = r.it, num = String(it[0] || ''), mm = P.m && P.m[num];
     var name = itemName(P, it);
@@ -1700,6 +1766,7 @@
     if (r.given) chips.appendChild(el('span', 'chip bad', 'выдано'));
     else if (ct) chips.appendChild(el('span', 'chip ' + ct[1], ct[0]));
     if (r.mark && !invOf(r.mark) && !(r.given && GIVEN_RE.test(r.mark) && r.mark.length < 12)) chips.appendChild(el('span', 'chip' + (GIVEN_RE.test(r.mark) ? ' bad' : ''), r.mark));
+    if (r.alt) chips.appendChild(el('span', 'chip warn', ALT_TXT));
     if (chips.childNodes.length) tx.appendChild(chips);
     // Цена: число — крупно; не число или пусто — «без цены» оранжевым (в сумме её нет) [Фейбл «сценарий», L1].
     var cc = cents(r.price);
@@ -1768,7 +1835,10 @@
       if (!r || !r.net) break;
       await sleep(2000);
     }
-    ptAdd(action.replace('kassa_', '') + ' ' + ptSec(Date.now() - t0) + 's legs=' + legs.join('+') + (r && r.ms ? ' srv=' + ptSec(Number(r.ms.all) || 0) : '') + (r && r.repeat ? ' rep' : ''));
+    // Прошлая попытка кончилась «404» (склад мог записать), а эта — «не смог посмотреть»: исход неизвестен, итог — не «занято», а
+    // досылка тем же кодом [Фейбл, перепроверка v6.5, HIGH-1 — та же дыра, что у двух запросов одного jsonp, но между попытками].
+    if (r && !r.net && legs.length > 1 && KEEP_RE.test(String(r.error || ''))) r = null;
+    ptAdd(action.replace('kassa_', '') + ' ' + ptSec(Date.now() - t0) + 's legs=' + legs.join('+') + (r && r.ms ? ' srv=' + ptSec(Number(r.ms.all) || 0) : '') + (r && r.repeat ? ' rep' : '') + (r && r.leg ? ' h' + r.leg : ''));
     // Исход известен (записано — и частично, «изменился», отказ по делу) — следующее нажатие пойдёт новым кодом. Не
     // известен (нет ответа, «404» подряд, сбой записи на складе) — код остаётся: повтор узнают и не запишут дважды.
     if (r && !r.net && (r.ok || r.changed || Number(r.wrote) > 0 || /^(bad_args|efir|src_denied|no_src|too_big|ambiguous)$/.test(String(r.error || '')))) WOP = null;
@@ -1787,7 +1857,7 @@
   // 'forget' — исход известен.
   function pendFate(r) {
     if (unknownOut(r)) return 'add';
-    return /^(busy|read_failed|exception|src_open_failed|no_orders_sheet)$/.test(String(r.error || '')) ? 'keep' : 'forget';
+    return KEEP_RE.test(String(r.error || '')) ? 'keep' : 'forget';
   }
   function pendAdd(action, params, key, label, no, tok, what) {
     if (PENDS.some(function (x) { return x.params.n === params.n; })) return;
@@ -1955,6 +2025,10 @@
     // Кол. D у вещи с номером выжимка не везёт (x.d — только у жёлтой и отмены): без этого следующая выжимка отличалась бы
     // подписью (x.d в ней с v6.3) — ложное «данные обновились» и закрытое окно «Какие вещи забрала?» [Кодекс, круг 2 v6.3, MED].
     if (c[6] && typeof c[6] === 'object' && c[6].d && typeof c[6].d === 'object') delete c[6].d[r.k];
+    // Ярлык «сняли «нет»» — сразу, как его положит свежая выжимка (x.u), а не через её пересборку.
+    if (!c[6] || typeof c[6] !== 'object') c[6] = {};
+    if (!c[6].u || typeof c[6].u !== 'object') c[6].u = {};
+    c[6].u[r.k] = 1;
   }
   // Тот же ли экран после ответа склада: клиент, закупка и запрос (объект выжимки мог смениться свежим — это тот же экран).
   function cardTok() { return CUR && CUR.kind === 'card' ? CUR.sel.tid + '|' + CUR.sel.nick + '|' + CUR.qk : ''; }
