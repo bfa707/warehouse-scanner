@@ -325,6 +325,13 @@
       return m ? decodeURIComponent(m[1]) : '';
     }
     var WH_K = whKeyFromHash();
+    // 💻 МЕТКА ЭТОГО БРАУЗЕРА [владелец 28.09.2026]. Её придумывает и хранит лаунчер склада (sklad/index.html)
+    // в памяти браузера — она общая для всех страниц этого сайта. Ключ компьютера дверь склада пускает только
+    // вместе с меткой того браузера, к которому он прирос; ключу телефона метка не нужна.
+    // ⛔️ Берём из памяти, а НЕ из адреса и в «← Назад» не кладём: в адресе она легла бы в адресную строку и
+    // историю компьютера — туда, откуда уносят ссылку. Возит её только сам запрос (callGas).
+    var WH_D = '';
+    try { WH_D = String(localStorage.getItem('wh_dev') || ''); if (!/^[0-9a-f]{32}$/.test(WH_D)) WH_D = ''; } catch (e) { WH_D = ''; }
     (function () {
       var back = qparam('back');
       if (back) {
@@ -729,6 +736,7 @@
       var qs = 'action=' + action + '&uid=' + encodeURIComponent(uid) + '&callback=' + cb;
       if (extra) for (var k in extra) qs += '&' + k + '=' + encodeURIComponent(extra[k]);   // no/src/nick/nums
       if (WORKER) qs += '&w=' + encodeURIComponent(WORKER);                                  // кто сканирует
+      if (WH_D) qs += '&d=' + WH_D;                                                           // 💻 метка браузера (см. WH_D)
       s.src = GAS + sep + qs;
       document.body.appendChild(s);
     }
