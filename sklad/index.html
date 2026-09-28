@@ -97,13 +97,18 @@
     var WH_SA = '0', WH_CS = 'x';
     try { if (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) WH_SA = '1'; } catch (e) {}
     try { WH_CS = sessionStorage.getItem('wh_sess') ? '0' : '1'; sessionStorage.setItem('wh_sess', '1'); } catch (e) { WH_CS = 'x'; }
+    // Платформа [Фейбл 28.09.2026, LOW-5]: вопрос владельца — про iPhone. iPad с iPadOS 13+ называет себя «Macintosh»,
+    // но у него есть касания.
+    var WH_PL = 'o';
+    try { var _ua = String((window.navigator && window.navigator.userAgent) || '');
+      WH_PL = (/iPhone|iPad|iPod/.test(_ua) || (/Macintosh/.test(_ua) && window.navigator.maxTouchPoints > 1)) ? 'i' : /Android/.test(_ua) ? 'a' : 'o'; } catch (e) {}
     // ⏱ Когда телефон открыл ярлык — аппка печатает в «Лог действий» весь путь от иконки до окна
     // кода [владелец 15.09.2026: «10 секунд белый экран»]. Время ставит сам браузер при открытии.
     var WH_LT = 0;
     try { WH_LT = Math.round((performance.timeOrigin || performance.timing.navigationStart) || 0); } catch (e) {}
     if (!WH_LT) WH_LT = Date.now();
     document.getElementById('app').src = EXEC
-      + (WH_K ? ('?k=' + encodeURIComponent(WH_K) + '&ks=' + WH_KSRC + (WH_D ? '&d=' + WH_D : '') + '&lt=' + WH_LT + '&sa=' + WH_SA + '&cs=' + WH_CS)
+      + (WH_K ? ('?k=' + encodeURIComponent(WH_K) + '&ks=' + WH_KSRC + (WH_D ? '&d=' + WH_D : '') + '&lt=' + WH_LT + '&sa=' + WH_SA + '&cs=' + WH_CS + '&pl=' + WH_PL)
               : ('?lt=' + WH_LT));
     // 💻 Новую ссылку вставили в адресную строку ЭТОЙ ЖЕ вкладки [Фейбл 28.09.2026 «сценарии», MED-2]: меняется
     // только хвост после «#», и браузер страницу не перезагружает — аппка так и работала бы на прежнем ключе,
