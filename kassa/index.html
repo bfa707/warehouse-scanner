@@ -18,6 +18,9 @@
      на экране шире 900 px — слева поиск, заказ, сумма и две кнопки (всегда на месте), справа вещи плитками 3×3
      (больше 9 — прокручивается только правая часть). Уже 900 px — одна колонка, как было, с кнопками-цифрами.
      ⛔️ Слова «пакет» на экране НЕТ [владелец: «Всегда речь только о „заказе“»].
+     ⭐ ВЫБОР ЗАКУПКИ ВВЕРХУ [владелец 27.09.2026: «показывай вверху наш выбор закупочной таблицы (дроп-даун, последние
+     3 закупки (в тч Эфир и Скидки)), но по умолчанию показывай и ищи ТОЛЬКО в самой свежей. Во всех таблицах искать не
+     надо»]: касса грузит, сверяет и ищет только выбранную закупку; при каждом открытии выбрана самая свежая.
      ⛔️ Данные клиентов в разметку попадают ТОЛЬКО через textContent — никакого innerHTML с данными. -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -40,6 +43,12 @@
          padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; }
   button { font: inherit; }
   #top { flex: none; background: var(--card); padding: 10px 16px 6px; border-bottom: 1px solid var(--line); }
+  #tblbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #tblbar .l { flex: none; color: var(--mute); font-size: 15px; font-weight: 700; }
+  #tbl { flex: 1; min-width: 0; height: 40px; font: inherit; font-size: 17px; font-weight: 800; color: var(--ink); padding: 0 8px;
+         border: 2px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; }
+  /* Выбрана не последняя закупка — видно издалека, чтобы не забыть вернуть [владелец: «по умолчанию — самая свежая»] */
+  #tblbar.old #tbl { border-color: var(--warnline); background: var(--warnbg); color: var(--warn); }
   #disp { display: flex; align-items: center; gap: 8px; }
   #num { flex: 1; min-width: 0; width: 100%; font: inherit; font-size: 32px; font-weight: 800; letter-spacing: .5px;
          height: 56px; padding: 0 14px; border: 3px solid var(--blue); background: var(--bluebg); border-radius: 14px;
@@ -159,6 +168,56 @@
   .dlgft .ok { background: var(--ok); color: #fff; } .dlgft .no { background: #fff; color: var(--mute); border: 3px solid #d6dbe3; }
   .dlgft .okw { background: #b3700f; color: #fff; }
 
+  /* ── ШАПКА BERKONTI НА ПУСТОМ ЭКРАНЕ [владелец 27.09.2026: «поставь в верхнюю часть лого беркоти и допиши там ниже
+     BERKONTI выдача заказов»; «Выбираю вариант Б — блик, только процентов на 15 уменьши лого»]: знак крупно, под ним
+     BERKONTI и «выдача заказов»; по логотипу раз в 7 с проходит мягкий блик. Логотип — logo.png (тот же, что на экране
+     загрузки склада), знак и надпись вырезаны из него маской; «краска» под маской и двигается. Только CSS — на скорость
+     кассы не влияет; «Уменьшение движения» на телефоне — стоит спокойно. Видна только на пустом экране (главный, «не
+     найден»): список и карточка — во весь экран, как были. */
+  #brand { display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 18px 16px;
+           pointer-events: none; }
+  body.brand #brand { display: flex; }
+  #brand .mk { --h: 82px; height: var(--h); width: calc(var(--h) * 202 / 162);
+               -webkit-mask: url("logo.png") 0 0 / auto 100% no-repeat; mask: url("logo.png") 0 0 / auto 100% no-repeat; }
+  #brand .wm { --h: 18px; height: var(--h); width: calc(var(--h) * 922 / 67);
+               -webkit-mask: url("logo.png") calc(var(--h) * -256 / 67) calc(var(--h) * -52 / 67) / calc(var(--h) * 1178 / 67) calc(var(--h) * 162 / 67) no-repeat;
+               mask: url("logo.png") calc(var(--h) * -256 / 67) calc(var(--h) * -52 / 67) / calc(var(--h) * 1178 / 67) calc(var(--h) * 162 / 67) no-repeat; }
+  #brand .tx { margin-top: -3px; font-size: 13px; font-weight: 600; letter-spacing: .34em; padding-left: .34em; text-transform: uppercase;
+               color: #4b5563; }
+  #brand .gl { background: linear-gradient(110deg, #18202c 0%, #18202c 42%, #6f7b8f 47%, #e9edf3 50%, #6f7b8f 53%, #18202c 58%, #18202c 100%);
+               background-size: 320% 100%; animation: glint 7s cubic-bezier(.45, .05, .35, 1) infinite; }
+  #brand .gl.d2 { animation-delay: .35s; }
+  @keyframes glint { 0% { background-position: 100% 0; } 64%, 100% { background-position: 0% 0; } }
+  @media (prefers-reduced-motion: reduce) { #brand .gl { animation: none; } }
+
+  /* ── ТЕЛЕФОН [владелец 27.09.2026: «берём 1-ый. убери все поясняющие тексты. Сам выбор таблицы и поле ввода расположи
+     ближе к середине экрана. Поле ввода сделай чуть больше»]: вне карточки выбор закупки и поле стоят прямо над кнопками-
+     цифрами, ответ (полосы, «не найден», список) — прямо над ними; карточка — как была: поле сверху, заказ под ним. */
+  @media (max-width: 899px) {
+    #tblbar .l { display: none; }
+    #tbl { height: 46px; font-size: 19px; }
+    #num { height: 78px; font-size: 44px; }   /* [владелец 27.09.2026: «увеличь ещё поле ввода по высоте немного»] */
+    #num::placeholder { font-size: 24px; }
+    #abc { height: 78px; min-width: 72px; font-size: 23px; }
+    body:not(.card) #main { order: 1; display: flex; flex-direction: column; }
+    body:not(.card) #head { margin-top: auto; }
+    body:not(.card) #head:empty + #out { margin-top: auto; }
+    body:not(.card) #top { order: 2; border-bottom: 0; border-top: 1px solid var(--line); padding-top: 12px; }
+    body:not(.card) #pad { order: 3; }
+    /* шапка — посередине пустого места сверху; ответ («не найден») — по-прежнему прямо над полем */
+    body.brand #brand { margin: auto 0; }
+    body.brand #brand ~ #head { margin-top: 0; }
+    body.brand #brand ~ #head:empty + #out { margin-top: 0; }
+  }
+  /* Низкий телефон (iPhone SE/8, Safari с панелями, маленький Android): на экране есть ответ («не найден», «не загрузился»,
+     отказ, «Ключ…») — логотип уступает ему место, ответ снова прямо над полем: иначе полоса уходила под логотип и кассир
+     жал «Найти» ещё раз [Фейбл «сценарий», круг 2 v6, MED-1]. Пустой главный — с логотипом, как был. */
+  @media (max-width: 899px) and (max-height: 760px) {
+    body.brand #main:has(> #head:not(:empty), > #out:not(:empty)) > #brand { display: none; }
+    body.brand #main:has(> #head:not(:empty), > #out:not(:empty)) > #head { margin-top: auto; }
+    body.brand #main:has(> #head:not(:empty), > #out:not(:empty)) > #head:empty + #out { margin-top: auto; }
+  }
+
   /* ── КОМПЬЮТЕР: две половины [вид B] ─────────────────────────────────────────────────────── */
   @media (min-width: 900px) {
     body { display: grid; grid-template-columns: 440px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
@@ -171,6 +230,15 @@
     #acts, body.card #acts { grid-column: 1; grid-row: 3; grid-template-columns: 1fr; gap: 12px; padding: 12px 22px 20px;
                              background: var(--card); border-top: 0; border-right: 1px solid var(--line); }
     #pad, #abc, #again, body.card #again { display: none; }
+    #tbl { height: 48px; font-size: 20px; }
+    #tblbar .l { font-size: 17px; }
+    /* строка «Клиентов… данные на…» — только на первом экране и внизу слева [владелец 27.09.2026: «на компе оставь только на
+       первом экране и опусти это вниз экрана»] */
+    #sync { display: none; }
+    body.home #sync { display: block; position: fixed; left: 22px; bottom: 16px; width: 396px; margin: 0; }
+    /* шапка — посередине правой половины, крупнее: там пусто, пока заказ не найден */
+    #brand { grid-column: 2; grid-row: 1 / span 3; align-self: center; justify-self: center; gap: 20px; }
+    #brand .mk { --h: 124px; } #brand .wm { --h: 27px; } #brand .tx { font-size: 17px; margin-top: -4px; }
     #num { height: 74px; font-size: 42px; }
     #num::placeholder { font-size: 24px; }
     #sync { font-size: 15px; }
@@ -209,16 +277,35 @@
     .dlgft .s { font-size: 22px; } .dlgft .s b { font-size: 44px; }
     .dlgft .btn { height: 80px; padding: 0 34px; font-size: 28px; }
   }
+  /* Низкое окно кассы (1366×768 без масштаба, 1920×1080 со 150 % — окно ~650 px): левая половина плотнее, иначе сумма к оплате
+     уходила под кнопки [Фейбл «сценарий», круг 1 v6, MED-2]. До 860 px — и 1366×768 во весь экран, 1440×900 / 1600×900 с
+     панелями браузера: там «это посылка» уходила под кнопки наполовину [Фейбл «сценарий», круг 2 v6, LOW-3]. */
+  @media (min-width: 900px) and (max-height: 860px) {
+    #top { padding-top: 12px; }
+    #tblbar { margin-bottom: 6px; }
+    #tbl { height: 40px; font-size: 18px; }
+    #num { height: 60px; font-size: 34px; }
+    #num::placeholder { font-size: 21px; }
+    .btn { height: 64px; font-size: 25px; }
+    #acts, body.card #acts { gap: 8px; padding: 8px 22px 12px; }
+    .hdr .lbl { font-size: 15px; }
+    .hdr .no { font-size: 44px; }
+    .hdr .nick { font-size: 26px; margin-top: 2px; }
+    .sumb { padding: 10px 16px; margin-top: 10px; }
+    .sumb .l { font-size: 17px; }
+    .sumb .r { font-size: 48px; }
+  }
 </style>
 </head>
 <body>
 
 <div id="top">
+  <div id="tblbar"><span class="l">Закупка</span><select id="tbl" title="В какой закупке ищет касса"><option>список закупок загружается…</option></select></div>
   <div id="disp"><input id="num" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
        enterkeyhint="search" placeholder="№ заказа или ник"><button id="abc" type="button" title="Набрать ник">Аа</button></div>
   <div id="sync">Открываю список…</div>
 </div>
-<div id="main"><div id="head"></div><div id="out"></div></div>
+<div id="main"><div id="brand" aria-hidden="true"><div class="mk gl"></div><div class="wm gl d2"></div><div class="tx">выдача заказов</div></div><div id="head"></div><div id="out"></div></div>
 <div id="acts">
   <button id="giveAll" class="btn" type="button" disabled>✅ Забрала всё</button>
   <button id="givePart" class="btn" type="button" disabled>Не забрала всё…</button>
@@ -237,7 +324,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v5 · 27.09.2026';
+  var VER = 'v6 · 27.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -250,13 +337,12 @@
   // Не хватает какой-то закупки — освежаем чаще: первый запуск не должен ждать по 2 мин между попытками.
   // 25 с при таймере раз в 30 с — это каждый его тик, то есть на деле раз в 30 с [Фейбл v4, LOW-2].
   var MISSING_EVERY = 25000;
-  // ⚠️ Старые закупки освежаются ВМЕСТЕ со свежей [Кодекс, круг 2, CRIT-1 и MED-5]: сверенным считается
-  // только поиск по ВСЕМ спискам — чужой номер может сидеть в любой закупке. Цена: сервер собирает выжимку
-  // закупки не чаще раза в 5 мин (≤12 чтений в час на документ), остальное — ответы «та же».
+  // ⚠️ Касса ищет ТОЛЬКО в выбранной закупке [владелец 27.09.2026] — её выжимку и освежаем; остальные закупки
+  // списка не спрашиваем вовсе, пока кассир их не выберет. Цена: сервер собирает выжимку закупки не чаще раза
+  // в 5 мин (≤12 чтений в час на документ), остальное — ответы «та же».
   // ⛔️ САМА КАРТОЧКА ОТКРЫВАЕТСЯ ТОЛЬКО ПО СВЕРЕННОМУ ПОИСКУ [Фейбл HIGH-1 обеих линз, круг 1; Кодекс CRIT-1,
-  // круг 2]: не раньше 5 мин назад сверены И список закупок (не появилась ли новая), И выжимки ВСЕХ закупок
-  // (выжимка на сервере сама живёт 5 мин — свежее не бывает). Свежесть одной найденной ничего не говорит о
-  // соседней, где мог появиться второй такой номер. Первый поиск
+  // круг 2]: не раньше 5 мин назад сверены И список закупок (не появилась ли новая — тогда ищем в ней), И выжимка
+  // выбранной закупки (выжимка на сервере сама живёт 5 мин — свежее не бывает). Первый поиск
   // после простоя идёт по памяти телефона, где свежего заказа 9-905 ещё нет, — и «905» сама открыла бы
   // 8-905 чужой клиентки из прошлой закупки. Несверенное — строкой списка с «сверяю…»; сверилось — карточка
   // открывается сама. Пока кассир работает, освежение каждые 2 мин держит список сверенным — ждать не приходится.
@@ -318,6 +404,8 @@
   // ── состояние ─────────────────────────────────────────────────────────────────────────
   var TABLES = null;          // { at, list: [{id, name}] }
   var PACKS = {};             // srcId → { id, t, p (разобранная выжимка), checked }
+  var SEL = '';               // закупка, выбранная кассиром вверху (id); '' — самая свежая, первая в списке
+  var MOVED = null;           // { text, at } — касса сама перешла на другую закупку: полосой на любом экране ~1 мин
   var syncing = false, lastSyncAt = 0, lastNet = '';   // lastNet: '' | 'нет связи' | 'не пускают'
   var typed = '', pendingSearch = '', lastActivity = Date.now();
   // Что на экране: { kind: 'card'|'list'|'nf', qk (ключ запроса), q, sel?, sig, fromList?, no? (выбранный заказ) }
@@ -400,7 +488,7 @@
     DENIED = true; lastNet = 'не пускают';
     lsSet('kassa_denied', KEY || '-');
     lsSet('kassa_k', '');
-    PACKS = {}; TABLES = null;
+    PACKS = {}; TABLES = null; SEL = '';
     try { if (DB) DB.close(); } catch (e) {}
     DB = null;
     try { indexedDB.deleteDatabase('kassa'); } catch (e) {}
@@ -417,7 +505,16 @@
     if (!r) return null;
     // Google не доставил ответ («404») — повторяем через 2 с, до двух раз; не вышло — как молчание.
     if (r.net) { if ((attempt || 0) < 2) { await sleep(2000); return DENIED ? false : syncPack(t, (attempt || 0) + 1); } return null; }
-    if (r.ok && r.same && cur) { cur.checked = Date.now(); return false; }
+    if (r.ok && r.same && cur) {
+      cur.checked = Date.now();
+      // Выбранная сверена — «сверяю» снять и сверенное открыть сразу, а не когда ответит долгий соседний запрос
+      // освежения [Кодекс, круг 1, MED-3]. Запросов не прибавляет. Открытую карточку «та же» не трогает: список закупок
+      // старше 5 мин ещё летит, и она мигала списком с ложным «Заказ изменился» [Фейбл «гонки», круг 2 v6, LOW-1].
+      // И «сверяю» — только при свежем списке закупок: иначе сверить нечем, экран лишь падал в список, и заказ, открытый
+      // кассиром (9-720), подменялся найденным (9-721) [Фейбл, перепроверка круга 2 v6]. Список придёт — пересоберёт сам.
+      if (scope().some(function (x) { return x.id === t.id; }) && CUR && (CUR.checking || CUR.kind === 'list') && fresh(TABLES.checked)) refreshView();
+      return false;
+    }
     if (r.ok && typeof r.pack === 'string') {
       var p = null;
       try { p = JSON.parse(r.pack); } catch (e) { p = null; }
@@ -439,39 +536,53 @@
   }
   // force — «освежить обязательно»: идёт освежение — ещё раз сразу после него [Фейбл «гонки», MED-4: «заказ
   // изменился» иначе ждал бы следующего круга до 2 мин, и заказ нельзя было выдать].
-  async function sync(force) {
+  var JOBS = null;            // идущее освежение: сюда докладывается выжимка закупки, выбранной, пока оно шло
+  // packOnly — список закупок сверен недавно: спросить только выжимку выбранной (выбор закупки кассиром) [Фейбл «гонки», v6, LOW-3].
+  async function sync(force, packOnly) {
     if (DENIED) return;
-    if (syncing) { if (force) resync = true; return; }
+    if (syncing) { if (force) resync = true; wantSel(); return; }
     syncing = true; lastNet = ''; renderSync();
     var changed = false, answered = 0;
     var done = {};
     var runPack = function (t) { done[t.id] = 1; return syncPack(t, 0).then(function (r) { if (r) changed = true; if (r !== null) answered++; }); };
+    var jobs = JOBS = { run: runPack, done: done, list: [] };
     try {
-      // Выжимки знакомых закупок спрашиваем сразу, не дожидаясь списка: он бывает долгим, а свежий заказ нужен сейчас.
-      var known = TABLES ? TABLES.list.slice() : [];
-      var packsNow = Promise.all(known.map(runPack));
-      var tr = await jsonp('kassa_tables', {}, WAIT_TABLES);
+      // Выжимку выбранной закупки спрашиваем сразу, не дожидаясь списка: он бывает долгим, а свежий заказ нужен сейчас.
+      jobs.list.push(Promise.all(scope().map(runPack)));
+      var tr = packOnly ? null : await jsonp('kassa_tables', {}, WAIT_TABLES);
       for (var ta = 0; tr && tr.net && ta < 2 && !DENIED; ta++) { await sleep(2000); tr = await jsonp('kassa_tables', {}, WAIT_TABLES); }
       if (tr && tr.net) tr = null;                           // Google так и не доставил — как молчание
       if (DENIED) return;
-      if (tr) answered++;
+      if (tr || packOnly) answered++;
       if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
         var ids = tr.list.map(function (t) { return t.id; });
         var old = TABLES ? TABLES.list.map(function (t) { return t.id; }).join(',') : '';
+        var was = selT();
         TABLES = { at: tr.at, list: tr.list, checked: Date.now() };
+        if (SEL && ids.indexOf(SEL) < 0) SEL = '';           // выбранная ушла из списка — снова самая свежая
+        var now = selT(), moved = !!(was && now && was.id !== now.id);
+        renderTbl();
+        // Касса ищет теперь в другой закупке (новая стала свежей, выбранная ушла из списка) — экран с полосой почему,
+        // СРАЗУ, до любых ожиданий [Кодекс, круг 1, CRIT-1]; её выжимка из памяти телефона — следом.
+        if (moved) rescope(now);
         await idbPut('tables', { at: tr.at, list: tr.list });
         if (ids.join(',') !== old) {                         // закупка ушла из списка — её выжимку не храним
           changed = true;
-          for (var src in PACKS) if (ids.indexOf(src) < 0) { delete PACKS[src]; await idbPut('pack_' + src, undefined); }
+          // Стираем и те, что в этом сеансе не открывали (память телефона знает весь прежний список) [Фейбл «гонки», v6, LOW-5].
+          var gone = old ? old.split(',') : [];
+          for (var src in PACKS) if (gone.indexOf(src) < 0) gone.push(src);
+          for (var gi = 0; gi < gone.length; gi++) if (ids.indexOf(gone[gi]) < 0) { delete PACKS[gone[gi]]; await idbPut('pack_' + gone[gi], undefined); }
+          if (moved) await loadPack(now);
           refreshView();
-        }
+        } else if (CUR && (CUR.checking || CUR.kind === 'list')) refreshView();   // список сверен — «сверяю» снять сразу
       }
-      var added = TABLES ? TABLES.list.filter(function (t) { return !done[t.id]; }) : [];
-      await Promise.all([packsNow, Promise.all(added.map(runPack))]);
+      scope().forEach(function (t) { if (!done[t.id]) jobs.list.push(runPack(t)); });
+      while (jobs.list.length) await Promise.all(jobs.list.splice(0));
       if (!answered) lastNet = 'нет связи';
     } catch (e) {
       lastNet = lastNet || 'сбой';
     } finally {
+      JOBS = null;
       syncing = false; lastSyncAt = Date.now(); renderSync();
       if (!DENIED) {
         if (pendingSearch && pendingSearch === typed.trim() && (!CUR || CUR.kind !== 'card')) { var q = pendingSearch; pendingSearch = ''; search(q, true); }
@@ -485,31 +596,131 @@
   // Не пришло ничего (нет связи, Google лежит) — как обычно, раз в 2 мин: частить некуда [Фейбл v4, LOW-2/LOW-3].
   function syncDue() { return Date.now() - lastSyncAt > ((!lastNet && (!TABLES || missingTables().length)) ? MISSING_EVERY : SYNC_EVERY); }
   function missingTables() {
-    if (!TABLES) return [];
-    return TABLES.list.filter(function (t) { return !PACKS[t.id]; });
+    return scope().filter(function (t) { return !PACKS[t.id]; });
   }
   function oldestT() {
     var t = 0;
-    if (!TABLES) return 0;
-    TABLES.list.forEach(function (x) { var pk = PACKS[x.id]; if (pk && pk.t && (!t || pk.t < t)) t = pk.t; });
+    scope().forEach(function (x) { var pk = PACKS[x.id]; if (pk && pk.t && (!t || pk.t < t)) t = pk.t; });
     return t;
   }
+
+  // ── закупка, в которой ищет касса ──────────────────────────────────────────────────────
+  // [владелец 27.09.2026: «Все же показывай вверху наш выбор закупочной таблицы (дроп-даун, последние 3 закупки (в тч
+  // Эфир и Скидки)), но по умолчанию показывай и ищи ТОЛЬКО в самой свежей. Во всех таблицах искать не надо»]
+  // Список — тот же, что у «Собрать заказ» (kassa_tables: три закупки по дате в названии, первая — самая свежая).
+  // Касса грузит, сверяет и ищет ТОЛЬКО выбранную: одна выжимка вместо трёх — открытие и освежение быстрее.
+  // Выбор живёт, пока страница открыта; при каждом открытии — самая свежая. Выбранная ушла из списка — тоже самая свежая.
+  // 10 мин без действий кассира — тоже самая свежая (idleBack).
+  function selT() {
+    if (!TABLES || !TABLES.list.length) return null;
+    for (var i = 0; SEL && i < TABLES.list.length; i++) if (TABLES.list[i].id === SEL) return TABLES.list[i];
+    return TABLES.list[0];
+  }
+  function scope() { var t = selT(); return t ? [t] : []; }
+  function renderTbl() {
+    var s = $('tbl'), list = TABLES ? TABLES.list : [], cur = selT();
+    var k = list.map(function (t) { return t.id + '\n' + t.name; }).join('\n\n');
+    if (s.getAttribute('data-k') !== k) {                 // пересобираем пункты, только когда сменился сам список
+      s.textContent = '';
+      list.forEach(function (t) {
+        var o = el('option', null, t.name);
+        o.value = t.id;
+        s.appendChild(o);
+      });
+      if (!list.length) s.appendChild(el('option', null, 'список закупок загружается…'));
+      s.setAttribute('data-k', k);
+    }
+    if (cur) s.value = cur.id;
+    s.disabled = !list.length;
+    $('tblbar').className = (cur && cur !== list[0]) ? 'old' : '';
+  }
+  // Выжимка закупки из памяти телефона — не сверена в этом сеансе; свежая, пришедшая раньше, главнее.
+  async function loadPack(t) {
+    if (!t || PACKS[t.id] || !DB) return;
+    var rec = await idbGet('pack_' + t.id);
+    if (DENIED || PACKS[t.id] || !TABLES || !TABLES.list.some(function (x) { return x.id === t.id; })) return;
+    if (!rec || typeof rec.json !== 'string') return;
+    try { var p = JSON.parse(rec.json); if (p && p.v === 1 && p.c && p.n) PACKS[t.id] = { id: rec.id, t: rec.t, p: p, checked: 0 }; } catch (e) {}
+  }
+  // Кассир выбрал закупку, пока идёт освежение, — её выжимку спрашиваем сразу, в том же освежении: оно бывает долгим
+  // (Google до 150 с), и ждать его конца, чтобы только начать грузить выбранную, незачем.
+  function wantSel() {
+    var t = selT();
+    if (JOBS && t && !JOBS.done[t.id]) JOBS.list.push(JOBS.run(t));
+  }
+  // Выбор кассира: набранный запрос — заново в выбранной закупке; её выжимка — из памяти телефона сразу, сверка следом.
+  function pickTable(id) {
+    if (!TABLES || DENIED) return;
+    var i = -1;
+    TABLES.list.forEach(function (t, k) { if (t.id === id) i = k; });
+    if (i < 0) { renderTbl(); return; }
+    var sel = i === 0 ? '' : id;
+    lastActivity = Date.now();
+    if (sel === SEL) { renderTbl(); return; }
+    SEL = sel; MOVED = null;
+    renderTbl();
+    // ⛔️ Экран прежней закупки уходит СРАЗУ, до чтения памяти телефона [Кодекс, круг 1, CRIT-1]: иначе её карточка с
+    // живой «Забрала всё» стояла бы, пока читается память, и щелчок выдал бы заказ не той закупки, что выбрана вверху.
+    var again = !!(CUR && typed.trim()), q0 = typed, t = selT();
+    showHome();
+    if (again && t) $('head').insertBefore(el('div', 'ban info', '⏳ Ищу «' + q0.trim() + '» в закупке «' + t.name + '»…'), $('head').querySelector('.hint'));
+    loadPack(t).then(function () {
+      if (SEL !== sel || DENIED) return;               // пока читали память телефона, кассир выбрал другую
+      // Сверка — раньше поиска: экран честно скажет «сверяю». Сверено меньше 5 мин назад — в Google не ходим вовсе,
+      // список закупок сверен — спрашиваем только выжимку [Фейбл «гонки», v6, LOW-3].
+      var pk = t && PACKS[t.id];
+      if (!(pk && fresh(pk.checked) && fresh(TABLES.checked))) { if (syncing) wantSel(); else sync(false, fresh(TABLES.checked)); }
+      renderSync();
+      if (CUR) return;                                  // кассир уже ищет сам — его экран не трогаем
+      pendingSearch = '';
+      if (again && typed === q0) search(typed, false); else showHome();
+    });
+  }
+  // Карточка — из выбранной вверху закупки. Нет — кнопки записи молчат, что бы их ни перерисовало: смена закупки
+  // и перерисовка экрана не бывают одним движением [Кодекс, круг 1, CRIT-1].
+  function cardInScope() { var t = selT(); return !!(CUR && CUR.kind === 'card' && CUR.h && t && CUR.h.t.id === t.id); }
+  // Список закупок сменился, и касса ищет теперь в другой (появилась новая закупка, выбранная ушла из списка): экран —
+  // заново по набранному, с полосой почему. Пока пишется выдача этой карточки — после её ответа, как у освежения.
+  function rescope(t) {
+    MOVED = { text: '⚠️ Касса ищет теперь в закупке «' + t.name + '». Заказ из другой закупки — выберите её вверху.', at: Date.now() };
+    if (!CUR) { showHome(); return; }
+    if (BUSY && INFL && cardTok() === INFL.tok) { refreshLater = true; return; }
+    if (dlgOpen()) closeDlg();
+    keepFail();
+    // Экран меняет не кассир — карточка на паузе 0,7 с, как у освежения [Кодекс, круг 1, CRIT-2].
+    refreshSwap = true;
+    try { renderResults(findHits(CUR.q), CUR.q, false, null); } finally { refreshSwap = false; }
+  }
+  // Экран с отказом записи уходит не по воле кассира (освежение, другая закупка) — отказ остаётся полосой с «×»: иначе
+  // кассир не узнал бы, что выданное не отмечено [Кодекс, круг 1, MED-4].
+  // «Выдано» — полосой на следующем экране ~1 мин, как у ушедшего кассира [Фейбл «сценарий», круг 1 v6, L1].
+  // Отказ — сколько бы ни простояла карточка: через 2 мин пропадало напоминание о незаписанных деньгах [Кодекс, круг 2 v6, MED-1].
+  function keepFail() {
+    var tok = cardTok();
+    if (!tok || !LAST || LAST.tok !== tok) return;
+    if (LAST.cls === 'ok') { if (Date.now() - LAST.at <= 60000) LAST.shown = false; return; }
+    if (!STICKY.some(function (x) { return x.text === LAST.text; })) { STICKY.push({ text: LAST.text, cls: LAST.cls, tok: tok }); STICKY = STICKY.slice(-4); }
+  }
+  function movedBanner(hd) { if (MOVED && Date.now() - MOVED.at < 60000) hd.appendChild(el('div', 'ban warn', MOVED.text)); }
   function renderSync() {
-    var s = $('sync'), n = 0, have = 0;
-    if (TABLES) TABLES.list.forEach(function (x) { var pk = PACKS[x.id]; if (pk) { have++; n += pk.p.c.length; } });
+    var s = $('sync'), n = 0, have = 0, t0 = selT();
+    scope().forEach(function (x) { var pk = PACKS[x.id]; if (pk) { have++; n += pk.p.c.length; } });
     var txt, cls = '';
-    if (!TABLES || !have) {
-      txt = syncing ? 'Загружаю список заказов… (первый раз — до нескольких минут)' : 'Списка заказов ещё нет.';
+    if (!have) {
+      txt = syncing ? 'Загружаю список заказов' + (t0 ? ' «' + t0.name + '»' : '') + '… (первый раз — до нескольких минут)'
+        : (t0 ? 'Список заказов «' + t0.name + '» не загружен.' : 'Списка заказов ещё нет.');
+      if (t0 && !syncing) cls = 'warn';
       if (!syncing && lastNet) { txt += ' ' + lastNet + '.'; cls = 'bad'; }
     } else {
-      var t = oldestT(), age = Date.now() - t;
-      txt = 'Клиентов: ' + n + ' · данные на ' + hhmm(t);
-      var miss = missingTables();
-      if (miss.length) { txt += ' · не загружено: ' + miss.map(function (x) { return x.name; }).join(', '); cls = 'warn'; }
+      var t = oldestT(), age = Date.now() - t, old = t0 !== TABLES.list[0];
+      // Выбрана не последняя закупка — словами в строке состояния (список вверху при этом оранжевый).
+      txt = (old ? '⚠️ Не последняя закупка · ' : '') + 'Клиентов: ' + n + ' · данные на ' + hhmm(t);
+      if (old) cls = 'warn';
       if (syncing) txt += ' · обновляю…';
       else if (lastNet) { txt += ' · ' + lastNet; cls = 'warn'; }
       if (!syncing && age > 30 * 60000) cls = 'warn';
     }
+    txt += ' · ' + VER.split(' ')[0];                     // справки внизу нет — номер версии здесь
     s.textContent = txt;
     s.className = cls;
   }
@@ -559,7 +770,7 @@
   function findHits(q) {
     var out = [];
     if (!TABLES || !q) return out;
-    TABLES.list.forEach(function (t) {
+    scope().forEach(function (t) {                        // только выбранная закупка [владелец 27.09.2026]
       var pk = PACKS[t.id]; if (!pk) return;
       var P = pk.p, seen = {};
       var add = function (via) { return function (i) { if (!P.c[i]) return; if (seen[i]) { seen[i].via += via; return; } seen[i] = { t: t, pk: pk, i: i, via: via }; out.push(seen[i]); }; };
@@ -608,7 +819,8 @@
   // С дефисом («9-971») серия набрана явно — такой номер открывается сам. Ник — только ТОЧНЫЙ и единственный.
   function fresh(at) { return !!at && Date.now() - at < VERIFIED_FOR; }
   function searchVerified() {
-    return !!(TABLES && fresh(TABLES.checked) && TABLES.list.every(function (t) { return PACKS[t.id] && fresh(PACKS[t.id].checked); }));
+    var sc = scope();
+    return !!(TABLES && fresh(TABLES.checked) && sc.length && sc.every(function (t) { return PACKS[t.id] && fresh(PACKS[t.id].checked); }));
   }
   function canAutoOpen(hits, q) {
     if (hits.length !== 1 || missingTables().length || !searchVerified()) return false;
@@ -653,12 +865,16 @@
       var okAlone = same.length === 1 && (CUR.fromList ? whoOf(hits) === CUR.who : canAutoOpen(hits, CUR.q));
       if (okAlone) {
         if (sigOf(same[0]) !== CUR.sig) { if (!BUSY && dlgOpen()) closeDlg(); showCard(same[0], CUR.q, 'Данные заказа обновились — проверьте ещё раз.', CUR.fromList, CUR.no, CUR.flash); }
-        else if (CUR.checking) showCard(same[0], CUR.q, null, CUR.fromList, CUR.no, CUR.flash);   // сверено — полосу «сверяю» снимаем
+        // сверено — полосу «сверяю» снимаем, а «данные обновились» оставляем [Фейбл «корректность», v6, LOW-2]
+        else if (CUR.checking) showCard(same[0], CUR.q, CUR.banner || null, CUR.fromList, CUR.no, CUR.flash);
         else { CUR.h = same[0]; if (CUR.model) CUR.model = cardModel(same[0], CUR.q, CUR.no); }   // те же данные — дальше работаем со свежей выжимкой
         return;
       }
       if (dlgOpen()) closeDlg();
-      return renderResults(hits, CUR.q, true, '⚠️ Заказ изменился в таблице — проверьте номер и клиента заново.');
+      keepFail();
+      // Карточка ушла, потому что касса ищет теперь в другой закупке, — не «заказ изменился»: почему, скажет полоса MOVED.
+      var gone = !scope().some(function (t) { return t.id === CUR.sel.tid; });
+      return renderResults(hits, CUR.q, true, gone ? null : '⚠️ Заказ изменился в таблице — проверьте номер и клиента заново.');
     }
     var sig = hits.map(sigOf).join('\n') + '|' + missingTables().length;
     if (sig !== CUR.sig) renderResults(hits, CUR.q, true, CUR.kind === 'list' ? '⚠️ Список обновился — проверьте номер и клиента.' : null);
@@ -667,9 +883,12 @@
   }
 
   // ── экраны ───────────────────────────────────────────────────────────────────────────
-  function setView(v) { document.body.className = (v === 'card') ? 'card' : ''; }
+  // brand — пустой экран (главный, «не найден», «наберите больше»): шапка BERKONTI; 'home' — первый экран (на компьютере
+  // только на нём строка «Клиентов… данные на…», внизу) [владелец 27.09.2026].
+  function setView(v, brand) { document.body.className = (v === 'card') ? 'card' : brand === 'home' ? 'brand home' : (brand ? 'brand' : ''); }
   // Итог записи, пока кассир уже на другом экране: «anna 9-711: ✅ Выдано…» полосой вверху, около минуты.
   function lastBanner(hd) {
+    movedBanner(hd);
     if (LAST && !LAST.shown && Date.now() - LAST.at < 60000) hd.appendChild(el('div', 'ban ' + LAST.cls, LAST.text));
   }
   // Отказы записей, пришедшие на чужой экран, — полосой с «×» на любом экране, пока кассир не закроет.
@@ -696,12 +915,10 @@
   }
   function renderNum() { var n = $('num'); if (n.value !== typed) n.value = typed; }
   function showHome() {
-    setView('pad'); CUR = null; closeDlg();
+    setView('pad', 'home'); CUR = null; closeDlg();
     var o = clearOut();
     lastBanner($('head'));
-    $('head').appendChild(el('div', 'hint', DESK.matches
-      ? 'Наберите номер заказа или ник и нажмите Enter. «711» найдёт 9-711; Esc — новый поиск.'
-      : 'Наберите номер заказа — можно без серии: «711» найдёт 9-711. Ник — кнопка «Аа».'));
+    // Без поясняющих текстов [владелец 27.09.2026: «убери все поясняющие тексты»]: поле и кнопки говорят сами.
     appendInfo(o);
     renderActs(null);
   }
@@ -711,7 +928,7 @@
       '. Там может быть другой клиент с этим номером — проверьте номер заказа и ник.'));
   }
   function showShort(q) {
-    setView('pad');
+    setView('pad', true);
     var o = clearOut();
     CUR = null;
     $('head').appendChild(el('div', 'ban warn', 'Наберите номер заказа или хотя бы две буквы ника.'));
@@ -719,19 +936,24 @@
     renderActs(null);
   }
   function showNotFound(q, again, banner) {
-    setView('pad');
+    setView('pad', true);
     var o = clearOut(), hd = $('head');
     CUR = { kind: 'nf', q: q, qk: qKey(q), sig: '|' + missingTables().length };
     renderActs(null);
     lastBanner(hd);
     if (banner) hd.appendChild(el('div', 'ban bad', banner));
-    var anyPack = TABLES && TABLES.list.some(function (x) { return !!PACKS[x.id]; });
+    var anyPack = scope().some(function (x) { return !!PACKS[x.id]; });
     if (!anyPack) {
       // Идёт освежение — «загружается», а не «не загрузился» [Фейбл, 26.09.2026, LOW-1]: список закупок пришёл
       // раньше выжимок и пересобрал экран, а загрузка ещё идёт. Кончилось — отложенный поиск повторит сам.
       if (again && !syncing) {                              // освежение прошло, а списка всё нет — не по кругу
-        hd.appendChild(el('div', 'ban bad', 'Список заказов не загрузился' + (lastNet ? ' (' + lastNet + ')' : '') +
-          '. Нажмите на строку сверху, чтобы попробовать ещё раз, или ищите в приложении склада.'));
+        // Повтор — кнопкой в самой полосе: строка состояния на компьютере видна только на первом экране [Кодекс, круг 2 v6, MED-2].
+        var nb = el('div', 'ban bad', 'Список заказов не загрузился' + (lastNet ? ' (' + lastNet + ')' : '') +
+          ': попробуйте ещё раз, выберите другую закупку вверху или ищите в приложении склада. ');
+        var rb = el('button', 'sw2 retry', 'Загрузить ещё раз'); rb.type = 'button';
+        rb.onclick = function () { lastActivity = Date.now(); sync(true); showNotFound(q, false); };
+        nb.appendChild(rb);
+        hd.appendChild(nb);
         return;
       }
       hd.appendChild(el('div', 'ban warn', '⏳ Список заказов ещё загружается — найду «' + q.text + '», как только придёт.'));
@@ -741,12 +963,7 @@
     }
     hd.appendChild(el('div', 'ban warn', (q.kind === 'nick' ? 'Ник «' : 'Заказ «') + q.text + '» не найден'));
     missBanner(hd);
-    var h = el('div', 'hint');
-    h.appendChild(el('div', null, 'Список заказов на ' + hhmm(oldestT()) + '. Проверьте ' + (q.kind === 'nick' ? 'ник.' : 'номер.')));
-    h.appendChild(el('div', null, 'Заказ собран только что? Он появится в течение 5 минут — ищите ещё раз.'));
-    h.appendChild(el('div', null, 'Касса ищет в закупках: ' + (TABLES ? TABLES.list.map(function (x) { return x.name; }).join(', ') : '—') +
-      '. Более старый заказ ищите в приложении склада.'));
-    hd.appendChild(h);
+    // Пояснений нет [владелец 27.09.2026: «убери все поясняющие тексты»] — только «не найден»; закупка видна вверху.
     appendInfo(o);
     // Не нашли, а список давно не освежали — освежаем ВСЁ и ищем ещё раз сами (только если запрос не меняли).
     if (!again && (Date.now() - lastSyncAt > 30000 || syncing || missingTables().length)) {
@@ -822,9 +1039,12 @@
   // Модель карточки: вещи клиента по разделам ВЫБРАННОГО заказа. Буквы выжимки (сервер, pickSpackBuild_): n — № стоит
   // (собрано), s — куплено, ждёт сборки, e — ещё не куплено, w — жёлтая «нет», c — отменено, o — прочая пометка;
   // ЗАГЛАВНАЯ — уже у клиента. Номер вещи — свой (c[4]) или номер клиента c[1].
+  // Жёлтая «нет» — та же форма ячейки кол. D, что у «Собрать заказ» (pickIsWaitCell в web-app.js): номер, пробел, «net».
+  var WAIT_CELL_RE = /^[A-Za-zА-Яа-яЁёЀ-ӿ]{0,3}\s*\d+\s*[-\/]\s*\d+\s+net$/i;
   function cardModel(h, q, selNo) {
     var P = h.pk.p, c = P.c[h.i];
     var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {};
+    var xd = (c[6] && typeof c[6] === 'object' && c[6].d && typeof c[6].d === 'object') ? c[6].d : {};
     var prices = String(c[5] == null ? '' : c[5]).split('|');
     var main = String(c[1] || '');
     var rows = [], groups = {}, order = [];
@@ -832,7 +1052,12 @@
       var it = items[k], L = st.charAt(k) || '?', code = L.toLowerCase();
       var no = code === 'n' ? String(own[k] || main) : '';
       var r = { k: k, it: it, code: code, given: L !== code, mark: markOf(it), no: no, key: no ? nk(no) : '',
-                price: prices[k] == null ? '' : String(prices[k]) };
+                price: prices[k] == null ? '' : String(prices[k]),
+                // ⭐ Отмена кол. B («X») при жёлтой кол. D («9-055 net») — «Собрать заказ» рисует такую вещь ЖЁЛТОЙ «нет»
+                // (renderBadgeState: по самой ячейке кол. D), и касса — так же [владелец 27.09.2026: «у клиента был жёлтый
+                // заказ „нет“, а в кассе он был помечен как отмена»]. Снять такое «нет» касса не может (склад снимает только
+                // букву w — решение владельца стоит в кол. B), поэтому кнопки «снять» у неё нет.
+                lockedWait: code === 'c' && WAIT_CELL_RE.test(String(xd[k] == null ? '' : xd[k]).trim()) };
       rows.push(r);
       if (code === 'n' && no) { if (!groups[r.key]) { groups[r.key] = { no: no, open: [], given: [] }; order.push(r.key); } groups[r.key][r.given ? 'given' : 'open'].push(r); }
     }
@@ -855,7 +1080,7 @@
       if (r.given) {
         if ((r.code === 'n' && r.key === sel && sel) || (!r.no && (sel || !order.length))) m.givenSel.push(r); else m.givenOther.push(r);
       } else if (r.code === 'n') { /* в группах */ }
-      else if (r.code === 'w') m.wait.push(r);
+      else if (r.code === 'w' || r.lockedWait) m.wait.push(r);
       else if (r.it[3] === 'c' || r.code === 'c') m.canc.push(r);
       else m.rest.push(r);
     });
@@ -889,15 +1114,16 @@
     var shownAt = same ? CUR.shownAt : ((refreshSwap || !DESK.matches) ? Date.now() : 0);
     if (shownAt && !same) pauseLater(shownAt);
     CUR = { kind: 'card', q: q, qk: qKey(q), sel: { tid: h.t.id, nick: c[0] }, sig: sigOf(h), fromList: !!fromList, checking: checking,
-            who: whoOf(findHits(q)), no: selNo || null, flash: flash || null, h: h, shownAt: shownAt };
+            who: whoOf(findHits(q)), no: selNo || null, flash: flash || null, h: h, shownAt: shownAt, banner: banner || null };
     var hdr = el('div', 'hdr');
     hdr.appendChild(el('div', 'lbl', 'Заказ'));
     var noEl = el('div', 'no', '');
     hdr.appendChild(noEl);
     hdr.appendChild(el('div', 'nick', c[0]));
-    hdr.appendChild(el('div', 'tbl', h.t.name + ' · данные на ' + hhmm(h.pk.t)));
+    // Под ником — ничего [владелец 27.09.2026: «под ником не надо писать название таблицы и время»]: закупка видна вверху.
     hd.appendChild(hdr);
     var bans = el('div');
+    movedBanner(bans);
     // Итог записи ДРУГОГО заказа (кассир ушёл искать дальше, пока склад писал) — полосой и здесь, ~1 мин: карточку
     // может пересобрать освежение, и вставленная раньше полоса пропала бы вместе со старым экраном.
     if (LAST && !LAST.shown && LAST.tok !== (h.t.id + '|' + c[0] + '|' + qKey(q)) && Date.now() - LAST.at < 60000) bans.appendChild(el('div', 'ban ' + LAST.cls, LAST.text));
@@ -980,7 +1206,6 @@
       o.appendChild(g0);
     } else if (m.open.length) {
       var h1 = el('div', 'sec ok', 'Заказ ' + m.no + ' — ' + things(m.open.length));
-      if (DESK.matches) h1.appendChild(el('small', null, 'Esc — новый поиск'));
       o.appendChild(h1);
       var g1 = el('div', 'grid');
       m.open.forEach(function (r) { g1.appendChild(tile(P, r, 'st-n')); });
@@ -994,7 +1219,7 @@
       var gw = el('div', 'grid');
       // Экран «после выдачи» — без «Снять «нет»» до нового поиска: снятие перерисовывало карточку в обычный вид, и
       // отказанная вещь снова оказывалась под живой «Забрала всё» [Фейбл, перепроверка круга 3, HIGH].
-      m.wait.forEach(function (r) { gw.appendChild(tile(P, r, 'st-w', after ? null : r)); });
+      m.wait.forEach(function (r) { gw.appendChild(tile(P, r, 'st-w', (after || r.lockedWait) ? null : r)); });
       o.appendChild(gw);
     }
     m.others.forEach(function (g) {
@@ -1110,8 +1335,9 @@
     if (String(it[2] || '').trim()) { var vs = el('div', 'vr', 'размер: '); vs.appendChild(el('b', null, String(it[2]).replace(/\s*\n\s*/g, ' / '))); tx.appendChild(vs); }
     if (invOf(r.mark)) tx.appendChild(el('div', 'inv', 'счёт ' + r.mark));
     var chips = el('div', 'chips');
+    var ct = r.lockedWait ? CODE_TXT.w : CODE_TXT[r.code];
     if (r.given) chips.appendChild(el('span', 'chip bad', 'выдано'));
-    else if (CODE_TXT[r.code]) chips.appendChild(el('span', 'chip ' + CODE_TXT[r.code][1], CODE_TXT[r.code][0]));
+    else if (ct) chips.appendChild(el('span', 'chip ' + ct[1], ct[0]));
     if (r.mark && !invOf(r.mark) && !(r.given && GIVEN_RE.test(r.mark) && r.mark.length < 12)) chips.appendChild(el('span', 'chip' + (GIVEN_RE.test(r.mark) ? ' bad' : ''), r.mark));
     if (chips.childNodes.length) tx.appendChild(chips);
     // Цена: число — крупно; не число или пусто — «без цены» оранжевым (в сумме её нет) [Фейбл «сценарий», L1].
@@ -1127,8 +1353,11 @@
     return box;
   }
   function appendInfo(o) {
+    // Без справки внизу [владелец 27.09.2026: «убери все поясняющие тексты»]; номер версии — в строке состояния.
+    if (!KEY) o.appendChild(el('div', 'ban warn', 'Ключ телефона не найден — откройте ссылку «Касса» из таблицы.'));
+    return;
     var lines = ['Касса ' + VER];
-    if (TABLES) TABLES.list.forEach(function (t) {
+    scope().forEach(function (t) {
       var pk = PACKS[t.id];
       lines.push('• ' + t.name + ': ' + (pk ? ('клиентов ' + pk.p.c.length + ', данные на ' + hhmm(pk.t)) : 'списка нет'));
     });
@@ -1150,7 +1379,7 @@
     // Экран «после выдачи» — кнопки молчат до нового поиска, кто бы их ни перерисовал (конец чужой записи, досылка,
     // таймер паузы): иначе отказанная вещь оказывалась под живой «Забрала всё» [Фейбл, круг 3, HIGH-1].
     var after = !!(CUR && CUR.kind === 'card' && CUR.flash && CUR.flash.done);
-    var n = (m && !after) ? m.open.length : 0, pause = !!m && tooFresh();
+    var n = (m && !after && cardInScope()) ? m.open.length : 0, pause = !!m && tooFresh();
     a.disabled = BUSY || n < 1 || pause;
     b.disabled = BUSY || n < 2 || pause;
     var mine = BUSY && INFL && cardTok() === INFL.tok;
@@ -1317,6 +1546,10 @@
     // «✅ Выдано» там можно принять за своё) [Фейбл, круг 2, MED-4].
     var mine = cardTok() === tok;
     var text = (INFL && INFL.label ? INFL.label + ': ' : '') + flash.text;
+    // Записали в закупку, которая сейчас не выбрана: освежение её не спросит — сверку сбросить, вернувшись, касса сверит
+    // заново («сверяю»), а не откроет заказ по старой памяти [Фейбл «гонки», v6, LOW-4].
+    var wtid = String(tok || '').split('|')[0];
+    if (wtid && PACKS[wtid] && !scope().some(function (x) { return x.id === wtid; })) PACKS[wtid].checked = 0;
     LAST = { text: text, cls: flash.cls, at: Date.now(), tok: tok, flash: flash, shown: mine };
     // Удачная запись этого же заказа снимает его прежний отказ.
     if (flash.cls === 'ok') STICKY = STICKY.filter(function (x) { return x.tok !== tok; });
@@ -1362,7 +1595,7 @@
   function pauseLater(at) { setTimeout(function () { if (CUR && CUR.kind === 'card' && CUR.shownAt === at) renderActs(CUR.model); }, 720); }
   async function give(mode, takeIdx) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || !m.open.length || DENIED) return;
+    if (!m || BUSY || !m.open.length || DENIED || !cardInScope()) return;
     if (mode === 'all' && tooFresh()) return;
     lastActivity = Date.now();
     var h = CUR.h, rows = m.open.slice();
@@ -1399,7 +1632,12 @@
       // Отмечаем у себя, только если данные за время записи не менялись: иначе номера вещей в памяти уже другие,
       // и правду принесёт свежая выжимка (склад её сбросил).
       if (cardTok() === tok && CUR.sig === sig0 && CUR.model) applyGiven(CUR.model, done);
-      else sync(true);                           // кассир ушёл — отметить у себя нечего, правду принесёт освежение [Фейбл, круг 2, LOW-3]
+      else {
+        // Кассир ушёл (другой заказ, другая закупка): выжимка та же — отмечаем выданное в ней, иначе, вернувшись, он увидел бы
+        // заказ снова живым к выдаче [Фейбл «гонки», v6, LOW-4]; правду принесёт освежение [Фейбл, круг 2, LOW-3].
+        if (PACKS[h.t.id] && PACKS[h.t.id].p === m.P) applyGiven(m, done);
+        sync(true);
+      }
       return finishWrite(tok, m.no, giveFlash(r, m.no, r.wrote || done.length));
     }
     finishWrite(tok, m.no, giveFlash(r, m.no, 0));
@@ -1407,7 +1645,7 @@
   }
   async function unnet(r) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || DENIED) return;
+    if (!m || BUSY || DENIED || !cardInScope()) return;
     lastActivity = Date.now();
     var h = CUR.h;
     // № заказа жёлтой вещи выжимка не везёт — шлём подсказкой открытый заказ (иначе номер клиента); склад найдёт её
@@ -1465,13 +1703,13 @@
   // «Какие вещи забрала?» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026].
   function openPart() {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY || m.open.length < 2 || tooFresh()) return;
+    if (!m || BUSY || m.open.length < 2 || tooFresh() || !cardInScope()) return;
     lastActivity = Date.now();
     var rows = m.open.slice(), on = rows.map(function () { return true; });
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox');
     box.appendChild(el('h3', null, 'Какие вещи забрала?'));
-    box.appendChild(el('div', 'sub', 'Снимите галочки с вещей, которые клиент НЕ забрал. «zabrala» получат только отмеченные. Заказ ' + m.no + ' · ' + m.c[0]));
+    box.appendChild(el('div', 'sub', 'Заказ ' + m.no + ' · ' + m.c[0]));
     var lst = el('div', 'lst');
     var ft = el('div', 'dlgft'), s = el('div', 's'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
     no.type = 'button'; ok.type = 'button';
@@ -1531,15 +1769,14 @@
   }
   function askUnnet(r) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || BUSY) return;
+    if (!m || BUSY || !cardInScope()) return;
     lastActivity = Date.now();
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox');
     box.style.maxWidth = '640px';
     box.appendChild(el('h3', null, 'Снять «нет»?'));
     var name = (r.it[0] ? r.it[0] + ' | ' : '') + (itemName(m.P, r.it) || '—');
-    box.appendChild(el('div', 'sub', name + ' — клиент берёт эту вещь (или замену). В таблице «нет» снимется — вещь станет ' +
-      'зелёной, войдёт в свой заказ и в сумму.'));
+    box.appendChild(el('div', 'sub', name));
     var ft = el('div', 'dlgft'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn okw', 'Снять «нет»');
     no.type = 'button'; ok.type = 'button';
     ft.appendChild(el('div', 's')); ft.appendChild(no); ft.appendChild(ok);
@@ -1661,11 +1898,46 @@
   $('zoom').onclick = function () { $('zoom').style.display = 'none'; $('zimg').removeAttribute('src'); };
   // Тап по строке состояния — «освежить сейчас»: идёт сверка — ещё раз сразу после неё (иначе тап глотался бы).
   $('sync').onclick = function () { lastActivity = Date.now(); sync(true); };
+  // Выбрал закупку — курсор снова в поле поиска (компьютер): иначе стрелки тихо меняли бы закупку, пока фокус на списке.
+  $('tbl').addEventListener('change', function () {
+    var id = $('tbl').value;
+    if (DESK.matches) {
+      // Поиска ещё не было — курсор в конец набранного, без выделения: «71», выбор закупки, «1» = «711», а не «1»
+      // [Фейбл «сценарий», круг 1 v6, L2]. Был — набранное выделено, как после поиска.
+      var searched = !!CUR;
+      keyFocus = !searched;
+      try { numEl.focus(); if (!searched) { var L = numEl.value.length; numEl.setSelectionRange(L, L); } } catch (e) {}
+      keyFocus = false;
+    } else { try { $('tbl').blur(); } catch (e) {} }
+    pickTable(id);
+  });
+  // Enter на списке закупок (открыл и закрыл без выбора) — поиск набранного, как Enter в поле [Фейбл «сценарий», круг 1 v6, L3].
+  $('tbl').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    try { numEl.focus(); } catch (err) {}
+    go();
+  });
+  // Выбрана прошлая закупка, а 10 мин никто ничего не делает — касса сама на самой свежей, поле пустое [владелец
+  // 27.09.2026: «с утра пришёл клиент по старой закупке, работник её открыл, и потом старая закупка до конца дня будет
+  // висеть»]. Набранное заново не ищем: тот же номер в свежей — чужой заказ. Пока пишется выдача, ждёт досылка или открыто
+  // окно — не трогаем. Телефон спал — проверка по пробуждению, раньше, чем оно засчитается за действие кассира.
+  var IDLE_BACK = 10 * 60000;
+  function idleBack() {
+    if (!SEL || DENIED || !TABLES || !TABLES.list.length || BUSY || PENDS.length || dlgOpen()) return false;
+    if (Date.now() - lastActivity < IDLE_BACK) return false;
+    keepFail();
+    typed = ''; pendingSearch = ''; renderNum();
+    pickTable(TABLES.list[0].id);
+    return true;
+  }
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') { lastActivity = Date.now(); if (Date.now() - lastSyncAt > 60000) sync(); }
+    if (document.visibilityState !== 'visible' || idleBack()) return;
+    lastActivity = Date.now(); if (Date.now() - lastSyncAt > 60000) sync();
   });
   setInterval(function () {
     if (DENIED) return;
+    idleBack();
     renderSync();
     if (document.visibilityState === 'visible' && Date.now() - lastActivity < ACTIVE_FOR && syncDue()) sync();
   }, 30000);
@@ -1687,16 +1959,11 @@
       var tb = await idbGet('tables');
       if (tb && tb.list && tb.list.length) {
         TABLES = { at: tb.at, list: tb.list, checked: 0 };     // из памяти — не сверен в этом сеансе
-        for (var i = 0; i < tb.list.length; i++) {
-          var rec = await idbGet('pack_' + tb.list[i].id);
-          if (rec && typeof rec.json === 'string') {
-            try { var p = JSON.parse(rec.json); if (p && p.v === 1 && p.c && p.n) PACKS[tb.list[i].id] = { id: rec.id, t: rec.t, p: p, checked: 0 }; } catch (e) {}
-          }
-        }
+        await loadPack(selT());                                // только самая свежая: остальные — когда кассир выберет
       }
     } catch (e) { DB = null; }
     if (DENIED) return;
-    renderSync(); if (!CUR) showHome();
+    renderTbl(); renderSync(); if (!CUR) showHome();
     sync();
   })();
 

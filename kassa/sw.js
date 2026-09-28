@@ -3,7 +3,7 @@
 // Порядок: сразу отдаём сохранённую копию, а свежую тянем с GitHub в фоне — она откроется в следующий раз.
 // ⚠️ Чужие адреса (Google: данные и фото) сторож не трогает вовсе — они идут мимо него, как обычно.
 const CACHE = 'kassa-v1';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './logo.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
