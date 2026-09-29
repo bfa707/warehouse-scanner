@@ -72,6 +72,7 @@
   #abc { flex: none; height: 56px; min-width: 60px; border: 0; border-radius: 14px; background: var(--soft);
          font-size: 20px; font-weight: 800; color: var(--ink); cursor: pointer; }
   #abc.on { background: var(--blue); color: #fff; }
+  #find { display: none; }
   #sync { margin-top: 6px; font-size: 13px; color: var(--mute); min-height: 18px; cursor: pointer; }
   #sync.bad { color: var(--bad); } #sync.warn { color: var(--warn); }
   #main { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -295,8 +296,17 @@
     /* шапка — посередине правой половины, крупнее: там пусто, пока заказ не найден */
     #brand { grid-column: 2; grid-row: 1 / span 3; align-self: center; justify-self: center; gap: 20px; }
     #brand .mk { --h: 124px; } #brand .wm { --h: 27px; } #brand .tx { font-size: 17px; margin-top: -4px; }
-    #num { height: 74px; font-size: 42px; }
+    #num { height: 74px; font-size: 42px; padding-right: 76px; }
     #num::placeholder { font-size: 24px; }
+    /* Подсказка «№ заказа или ник» — по центру поля [владелец 29.09.2026, п.1 v6.7]: мелкий шрифт подсказки стоял на строке крупных
+       цифр и уезжал вниз. Пока поле пустое, шрифт самого поля — шрифт подсказки; первая цифра — снова крупно. */
+    #num:placeholder-shown { font-size: 24px; letter-spacing: 0; }
+    /* 🔍 Лупа в конце поля [владелец 29.09.2026, п.2 v6.7: «чтобы в веб версии аппки можно было мышкой нажать а не только на клавиатуре
+       Ентером»] — то же, что Enter. На телефоне её нет: там «Найти» на цифрах. */
+    #find { display: flex; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); width: 56px; height: 56px; border: 0;
+            border-radius: 10px; background: var(--blue); color: #fff; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+    #find:hover { background: #1558b0; }
+    #find svg { width: 30px; height: 30px; }
     #sync { font-size: 15px; }
     .btn { height: 86px; font-size: 30px; border-radius: 16px; }
     .hdr .lbl { font-size: 17px; }
@@ -349,8 +359,11 @@
     #top { padding-top: 12px; }
     #tblbar { margin-bottom: 6px; }
     #tbl { height: 40px; font-size: 18px; }
-    #num { height: 60px; font-size: 34px; }
+    #num { height: 60px; font-size: 34px; padding-right: 62px; }
     #num::placeholder { font-size: 21px; }
+    #num:placeholder-shown { font-size: 21px; }
+    #find { width: 44px; height: 44px; right: 8px; }
+    #find svg { width: 24px; height: 24px; }
     .btn { height: 64px; font-size: 25px; }
     #acts, body.card #acts { gap: 8px; padding: 8px 22px 12px; }
     .hdr .lbl { font-size: 15px; }
@@ -367,7 +380,7 @@
 <div id="top">
   <div id="tblbar"><span class="l">Закупка</span><select id="tbl" title="В какой закупке ищет касса"><option>список закупок загружается…</option></select><span id="wq" hidden></span></div>
   <div id="disp"><input id="num" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-       enterkeyhint="search" placeholder="№ заказа или ник"><button id="abc" type="button" title="Набрать ник">Аа</button><span id="caret" aria-hidden="true"></span></div>
+       enterkeyhint="search" placeholder="№ заказа или ник"><button id="find" type="button" title="Найти" aria-label="Найти"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 21 21"/></svg></button><button id="abc" type="button" title="Набрать ник">Аа</button><span id="caret" aria-hidden="true"></span></div>
   <div id="sync">Открываю список…</div>
 </div>
 <div id="main"><div id="brand" aria-hidden="true"><div class="mk gl"></div><div class="wm gl d2"></div><div class="tx">выдача заказов</div></div><div id="head"></div><div id="out"></div></div>
@@ -388,7 +401,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.6 · 29.09.2026';
+  var VER = 'v6.7 · 29.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -1727,10 +1740,22 @@
         oh.appendChild(sw);
       }
       box.appendChild(oh);
-      if (cur && after && f.open.length) { ob.appendChild(el('div', 'osub', 'Не забрала — ' + things(f.open.length))); ob.appendChild(grid(f.open, '')); }
-      else if (f.open.length) ob.appendChild(grid(f.open, cur ? 'st-n' : ''));
-      waitSec(ob, f.wait);
-      cancSec(ob, f.canc);
+      // ⭐ КОМПЬЮТЕР: жёлтые и отмены — в той же сетке, сразу за вещами к выдаче [владелец 29.09.2026, п.4 v6.7: «желтая и красные товары
+      // должны идти сразу же после окончания зеленых (а то можно не заметить)»]: отдельным разделом они начинались ниже края экрана, хотя
+      // последний ряд зелёных стоял наполовину пустой. Что это за вещь, говорит её чип («нет, предложить альтернативу», «отменено»).
+      // Телефон (одна колонка) и экран «после выдачи» (там заголовок «Не забрала — N» считает только вещи заказа) — разделами, как было.
+      if (DESK.matches && !(cur && after)) {
+        var one = el('div', 'grid');
+        f.open.forEach(function (r) { one.appendChild(tile(P, r, cur ? 'st-n' : '', null)); });
+        f.wait.forEach(function (r) { one.appendChild(tile(P, r, 'st-w', unOf(r))); });
+        f.canc.forEach(function (r) { one.appendChild(tile(P, r, 'off', null)); });
+        if (one.childNodes.length) ob.appendChild(one);
+      } else {
+        if (cur && after && f.open.length) { ob.appendChild(el('div', 'osub', 'Не забрала — ' + things(f.open.length))); ob.appendChild(grid(f.open, '')); }
+        else if (f.open.length) ob.appendChild(grid(f.open, cur ? 'st-n' : ''));
+        waitSec(ob, f.wait);
+        cancSec(ob, f.canc);
+      }
       if (cur && m.givenSel.length) { givenShown = true; ob.appendChild(el('div', 'osub', 'Уже выдано — ' + m.givenSel.length)); ob.appendChild(grid(m.givenSel, 'st-g')); }
       if (ob.childNodes.length) box.appendChild(ob);
       o.appendChild(box);
@@ -2178,9 +2203,20 @@
   // «Логе кассы»). Освежение списка, счёт и список закупок — только долгие (от 5 с) и сорвавшиеся. Не дошла строка — полежит до
   // следующего раза (до 60 в памяти вкладки): это замер, не деньги.
   var SPQ = [], spBusy = false, spTimer = null, SP_SLOW = 5000, SP_MAX = 60;
+  // ⛔️ У строки свой код (13-й элемент) [владелец 29.09.2026, п.7 v6.7: одна строка лога 2–7 раз]: склад строку записал, а ответ
+  // потерялся — касса шлёт пачку ещё раз, и склад по коду пропускает уже записанное (kassaSpeed_). В лист код не идёт.
+  function spId() {
+    var s = 'r' + Date.now().toString(36).slice(-5);
+    try { var a = new Uint8Array(10); crypto.getRandomValues(a); for (var i = 0; i < a.length; i++) s += (a[i] % 36).toString(36); }
+    catch (e) { s += Math.random().toString(36).slice(2, 12); }
+    return s.replace(/[^a-z0-9]/g, '').slice(0, 20);
+  }
   function spAdd(row) {
     if (DENIED) return;
-    SPQ.push(row.map(function (v) { return typeof v === 'string' ? v.slice(0, 200) : v; }));
+    // Ровно 12 полей, код — тринадцатым: лишнее поле у какой-то строки иначе увело бы код в колонку «Код операции» [Фейбл LOW-4].
+    var r = row.slice(0, 12);
+    while (r.length < 12) r.push('');
+    SPQ.push(r.map(function (v) { return typeof v === 'string' ? v.slice(0, 200) : v; }).concat([spId()]));
     if (SPQ.length > SP_MAX) SPQ = SPQ.slice(-SP_MAX);
     if (!spTimer && !spBusy) spTimer = setTimeout(spFlush, 2000);
   }
@@ -2518,7 +2554,8 @@
     var mm = P.m && P.m[String(r.it[0] || '')];
     return photoUrl(P, mm ? mm[1] : '', 240);
   }
-  // «Какие вещи забрала?» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026].
+  // Окно «Не забрала всё…» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026]; заголовок —
+  // «Снимите галочку с вещей, которые НЕ забрала:» [владелец 29.09.2026, п.5 v6.7; до v6.7 — «Какие вещи забрала?»].
   function openPart() {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || BUSY || m.open.length < 2 || tooFresh() || checkHold() || invHold() || !cardInScope() || draftOn()) return;
@@ -2527,7 +2564,7 @@
     var rows = m.open.slice(), on = rows.map(function () { return true; });
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox');
-    box.appendChild(el('h3', null, 'Какие вещи забрала?'));
+    box.appendChild(el('h3', null, 'Снимите галочку с вещей, которые НЕ забрала:'));   // [владелец 29.09.2026, п.5 v6.7]
     box.appendChild(el('div', 'sub', 'Заказ ' + m.no + ' · ' + m.c[0]));
     var lst = el('div', 'lst');
     var ft = el('div', 'dlgft'), s = el('div', 's'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
@@ -2720,6 +2757,10 @@
     abcOn = !abcOn; fitInput();
     try { if (abcOn) numEl.focus(); else numEl.blur(); } catch (e) {}
   };
+  // 🔍 Лупа (компьютер) — то же, что Enter [п.2 v6.7]. Щелчок не забирает курсор из поля: набранное остаётся выделенным после поиска.
+  $('find').addEventListener('mousedown', function (e) { e.preventDefault(); });
+  // Пустое поле (на карточке оно всегда пустое) — щелчок ставит курсор в поле: кассир начнёт набор [Фейбл «страница», круг 1 v6.7, LOW-4].
+  $('find').onclick = function () { lastActivity = Date.now(); if (!typed.trim() && !dlgOpen()) { try { numEl.focus(); } catch (e) {} return; } go(); };
   if (DESK.addEventListener) DESK.addEventListener('change', function () {
     var wasPad = padOpen;
     abcOn = false; padOpen = false; fitInput();
