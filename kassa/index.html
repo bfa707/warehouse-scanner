@@ -49,6 +49,15 @@
          border: 2px solid var(--line); border-radius: 10px; background: var(--card); cursor: pointer; }
   /* Выбрана не последняя закупка — видно издалека, чтобы не забыть вернуть [владелец: «по умолчанию — самая свежая»] */
   #tblbar.old #tbl { border-color: var(--warnline); background: var(--warnbg); color: var(--warn); }
+  /* ⏳ Очередь записей (v6.6): выдачи, которые склад ещё не подтвердил, — видно на любом экране. Не подтверждает дольше 10 мин —
+     красным [владелец 29.09.2026: «сохранять заказ на фоне, чтобы работник мог дальше работать»]. */
+  #wq { flex: none; font-size: 14px; font-weight: 800; border-radius: 10px; padding: 6px 10px; background: var(--warnbg); color: var(--warn);
+        white-space: nowrap; }
+  #wq.bad { background: var(--badbg); color: var(--bad); }
+  #wq[hidden] { display: none; }
+  #wq { cursor: pointer; }
+  /* Удачная фоновая запись прошлого клиента — тихой строкой, без суммы (не путать с деньгами текущего) [v6.6] */
+  .wqok { color: var(--oktx); font-size: 14px; font-weight: 700; margin: 8px 0 0; }
   #disp { display: flex; align-items: center; gap: 8px; position: relative; }
   /* Мигающий курсор на телефоне [владелец 28.09.2026: «Если ставлю курсор в поле поиска — курсор должен там мигать»]: поле
      там только показывает набранное кнопками-цифрами (своя клавиатура, системная не выезжает), и родного курсора у него нет —
@@ -356,7 +365,7 @@
 <body>
 
 <div id="top">
-  <div id="tblbar"><span class="l">Закупка</span><select id="tbl" title="В какой закупке ищет касса"><option>список закупок загружается…</option></select></div>
+  <div id="tblbar"><span class="l">Закупка</span><select id="tbl" title="В какой закупке ищет касса"><option>список закупок загружается…</option></select><span id="wq" hidden></span></div>
   <div id="disp"><input id="num" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
        enterkeyhint="search" placeholder="№ заказа или ник"><button id="abc" type="button" title="Набрать ник">Аа</button><span id="caret" aria-hidden="true"></span></div>
   <div id="sync">Открываю список…</div>
@@ -379,7 +388,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.5 · 28.09.2026';
+  var VER = 'v6.6 · 29.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -469,14 +478,24 @@
       q.onerror = function () { rej(q.error); };
     }), 5000).catch(function () { return null; });
   }
+  // true — легло; false — памяти нет, отказ или не дождались (очередь записей по этому поднимает тревогу — см. wqSave).
   function idbPut(k, v) {
-    if (!DB || DENIED) return Promise.resolve();
+    if (!DB || DENIED) return Promise.resolve(false);
     return withTimeout(new Promise(function (res, rej) {
       var tx = DB.transaction('kv', 'readwrite');
       if (v === undefined) tx.objectStore('kv').delete(k); else tx.objectStore('kv').put(v, k);
-      tx.oncomplete = function () { res(); };
+      tx.oncomplete = function () { res(true); };
       tx.onerror = tx.onabort = function () { rej(tx.error); };
-    }), 10000).catch(function () {});
+    }), 10000).catch(function () { return false; });
+  }
+  // Все записи с ключом на prefix (очередь записей «wq_…») — одним проходом курсора.
+  function idbList(prefix) {
+    if (!DB) return Promise.resolve([]);
+    return withTimeout(new Promise(function (res, rej) {
+      var out = [], q = DB.transaction('kv', 'readonly').objectStore('kv').openCursor(IDBKeyRange.bound(prefix, prefix + String.fromCharCode(0xffff)));
+      q.onsuccess = function () { var c = q.result; if (c) { out.push(c.value); c.continue(); } else res(out); };
+      q.onerror = function () { rej(q.error); };
+    }), 5000).catch(function () { return []; });
   }
 
   // ── состояние ─────────────────────────────────────────────────────────────────────────
@@ -496,6 +515,7 @@
   var resync = false;         // «заказ изменился»: освежить сразу после идущего освежения, а не через 2 мин
   var refreshSwap = false;    // экран пересобирает освежение (а не кассир) — см. паузу кнопок в showCard
   var WOP = null;             // { key, n } — код операции записи: повтор того же нажатия идёт тем же кодом
+  var WQ = [];                // ⏳ очередь записей (v6.6): выдачи и досылки, которые склад ещё не подтвердил — см. «ОЧЕРЕДЬ ЗАПИСЕЙ»
 
   function isEfirName(n) { return /эфир|efir/i.test(String(n || '')); }
   function hhmm(t) {
@@ -607,23 +627,43 @@
   // читает, но склад всё равно спрашиваем — пустил (защиту выключили) → работаем дальше. Уже летящие
   // ответы после отказа в память не пишутся (DENIED). Остаток честный: телефон, который вообще не
   // выходит в сеть, про отзыв не узнает — как и любой офлайн-список.
-  function showDeny() {
+  function showDeny(pend) {
     var d = $('deny');
     d.textContent = 'Этот телефон не пускают в кассу.\n\nПопросите у владельца ссылку «Касса» для этого телефона ' +
-                    '(в таблице: меню → «🧾 Ссылка «Касса» для телефона»).';
+                    '(в таблице: меню → «🧾 Ссылка «Касса» для телефона»).' +
+                    // [v6.6] незаписанные выдачи — словами: вещи уже у клиентов, касса дошлёт их, когда её снова пустят
+                    (pend && pend.length ? '\n\n⚠️ Не записаны в таблицу (' + pend.length + '): ' + pend.join(', ') +
+                     '. Скажите владельцу — касса дошлёт их сама, когда её снова пустят.' : '');
     d.style.whiteSpace = 'pre-line';
     d.style.display = 'flex';
+  }
+  // Выжимки и список закупок — вон из памяти браузера; очередь записей и отказы остаются. База не открыта — откроем для этого сами.
+  function idbWipeClients(db) {
+    var go = function (d) {
+      try {
+        var tx = d.transaction('kv', 'readwrite'), st = tx.objectStore('kv');
+        st.delete('tables');
+        var cq = st.openCursor(IDBKeyRange.bound('pack_', 'pack_' + String.fromCharCode(0xffff)));
+        cq.onsuccess = function () { var c = cq.result; if (c) { c.delete(); c.continue(); } };
+        tx.oncomplete = tx.onerror = tx.onabort = function () { try { d.close(); } catch (e) {} };
+      } catch (e) { try { d.close(); } catch (e2) {} }
+    };
+    if (db) { go(db); return; }
+    try { idbOpen().then(go).catch(function () {}); } catch (e) {}
   }
   function denied() {
     DENIED = true; lastNet = 'не пускают'; renderCaret();
     lsSet('kassa_denied', KEY || '-');
     lsSet('kassa_k', '');
     PACKS = {}; TABLES = null; SEL = '';
-    try { if (DB) DB.close(); } catch (e) {}
-    DB = null;
-    try { indexedDB.deleteDatabase('kassa'); } catch (e) {}
+    var pend = WQ.map(function (j) { return j.label; });
+    SPQ = []; renderWq();
+    // [v6.6] Стираем список клиентов (выжимки и список закупок), а НЕ записанные выдачи (wq_…) и отказы — нет [Кодекс, круг 1 v6.6,
+    // HIGH-5]: вещи уже у клиентов. Вернут доступ (новая ссылка «Касса») — касса дошлёт их сама тем же кодом. Очередь в памяти стоит.
+    var db = DB; DB = null;
+    idbWipeClients(db);
     closeDlg();
-    showDeny();
+    showDeny(pend);
   }
 
   // ── фоновое освежение списка ──────────────────────────────────────────────────────────
@@ -643,6 +683,10 @@
     var r = await jsonp('kassa_pack', { src: t.id, have: cur ? cur.id : '', ph: isEfirName(t.name) ? '' : '1', z: ZIP_OK ? '1' : '' }, WAIT_PACK);
     // Долгое освежение (дольше 5 с) — в замер: «обновление длилось около минуты» (п.6). h1/h2 — ответ пришёл на повтор.
     if (Date.now() - tp > 5000) ptAdd('pack ' + ptSec(Date.now() - tp) + 's try=' + ((attempt || 0) + 1) + (r ? (r.net ? ' 404' : r.same ? ' same' : r.building ? ' building' : r.ok ? ' new' : ' ' + String(r.error || 'err')) : ' x') + (r && r.leg ? ' h' + r.leg : '') + (r && typeof r.packz === 'string' ? ' z' + Math.round(r.packz.length / 1024) + 'k' : ''));
+    // «Лог кассы — скорость»: освежение дольше 5 с или сорвалось («висело 2 минуты»).
+    if (Date.now() - tp > SP_SLOW || !r || r.net || (!r.ok && !r.building)) spAdd([tp, 'обновление списка', t.name, '', '', Date.now() - tp, '', '', '',
+      'попытка ' + ((attempt || 0) + 1) + (r && r.leg ? ', ответ на ' + (r.leg + 1) + '-й запрос' : '') + (r && typeof r.packz === 'string' ? ', сжатый ' + Math.round(r.packz.length / 1024) + ' КБ' : ''),
+      r ? (r.net ? 'не дошёл (сбой Google)' : r.same ? 'без изменений' : r.building ? 'склад ещё собирает' : r.ok ? 'новый список' : r.sick ? 'документ болен (склад не читает)' : r.slow ? 'склад тормозит (метка «медленно»)' : 'ошибка: ' + String(r.error || '?')) : 'нет ответа', '']);
     if (DENIED) return false;
     if (!r) return null;
     if (r.ok && typeof r.packz === 'string') {
@@ -656,6 +700,7 @@
     if (r.net) { if ((attempt || 0) < 2) { await sleep(2000); return DENIED ? false : syncPack(t, (attempt || 0) + 1); } return null; }
     if (r.ok && r.same && cur) {
       cur.checked = Date.now();
+      unnetClean(t.id, tp);
       // Выбранная сверена — «сверяю» снять и сверенное открыть сразу, а не когда ответит долгий соседний запрос
       // освежения [Кодекс, круг 1, MED-3]. Запросов не прибавляет. Открытую карточку «та же» не трогает: список закупок
       // старше 5 мин ещё летит, и она мигала списком с ложным «Заказ изменился» [Фейбл «гонки», круг 2 v6, LOW-1].
@@ -669,7 +714,9 @@
       try { p = JSON.parse(r.pack); } catch (e) { p = null; }
       if (!p || p.v !== 1 || !p.c || !p.n) return false;
       if (!TABLES || !TABLES.list.some(function (x) { return x.id === t.id; })) return false;   // закупка ушла из списка, пока ждали
-      PACKS[t.id] = { id: String(r.id || ''), t: Number(r.t) || Number(p.t) || 0, p: p, checked: Date.now() };
+      overlayPack(t.id, p);                                 // выдачи, которые склад ещё не подтвердил, — выданными и здесь
+      unnetClean(t.id, tp);
+      PACKS[t.id] = { id: String(r.id || ''), t: Number(r.t) || Number(p.t) || 0, p: p, checked: Date.now(), raw: r.pack };
       // ⛔️ Экран — СРАЗУ, не дожидаясь соседних закупок [Кодекс, круг 2, CRIT-3]: молчание одной закупки
       // держало бы на экране прежнего клиента до 45 с, хотя телефон уже знает нового.
       refreshView();
@@ -698,8 +745,10 @@
     try {
       // Выжимку выбранной закупки спрашиваем сразу, не дожидаясь списка: он бывает долгим, а свежий заказ нужен сейчас.
       jobs.list.push(Promise.all(scope().map(runPack)));
-      var tr = packOnly ? null : await jsonp('kassa_tables', {}, WAIT_TABLES);
+      var tt0 = Date.now(), tr = packOnly ? null : await jsonp('kassa_tables', {}, WAIT_TABLES);
       for (var ta = 0; tr && tr.net && ta < 2 && !DENIED; ta++) { await sleep(2000); tr = await jsonp('kassa_tables', {}, WAIT_TABLES); }
+      if (!packOnly && !DENIED && (Date.now() - tt0 > SP_SLOW || !tr || tr.net || !tr.ok)) spAdd([tt0, 'список закупок', '', '', '', Date.now() - tt0, '', '', '', '',
+        tr ? (tr.net ? 'не дошёл (сбой Google)' : tr.ok ? 'пришёл' : 'ошибка: ' + String(tr.error || '?')) : 'нет ответа', '']);
       if (tr && tr.net) tr = null;                           // Google так и не доставил — как молчание
       if (DENIED) return;
       if (tr || packOnly) answered++;
@@ -792,7 +841,7 @@
     var rec = await idbGet('pack_' + t.id);
     if (DENIED || PACKS[t.id] || !TABLES || !TABLES.list.some(function (x) { return x.id === t.id; })) return;
     if (!rec || typeof rec.json !== 'string') return;
-    try { var p = JSON.parse(rec.json); if (p && p.v === 1 && p.c && p.n) PACKS[t.id] = { id: rec.id, t: rec.t, p: p, checked: 0 }; } catch (e) {}
+    try { var p = JSON.parse(rec.json); if (p && p.v === 1 && p.c && p.n) { overlayPack(t.id, p); PACKS[t.id] = { id: rec.id, t: rec.t, p: p, checked: 0, raw: rec.json }; } } catch (e) {}
   }
   // Кассир выбрал закупку, пока идёт освежение, — её выжимку спрашиваем сразу, в том же освежении: оно бывает долгим
   // (Google до 150 с), и ждать его конца, чтобы только начать грузить выбранную, незачем.
@@ -854,9 +903,9 @@
   // Отказ — сколько бы ни простояла карточка: через 2 мин пропадало напоминание о незаписанных деньгах [Кодекс, круг 2 v6, MED-1].
   function keepFail() {
     var tok = cardTok();
-    if (!tok || !LAST || LAST.tok !== tok) return;
+    if (!tok || !LAST || LAST.tok !== tok || LAST.acked) return;     // кассир уже закрыл этот отказ «×» [круг 2 v6.6]
     if (LAST.cls === 'ok') { if (Date.now() - LAST.at <= 60000) LAST.shown = false; return; }
-    if (!STICKY.some(function (x) { return x.text === LAST.text; })) { STICKY.push({ text: LAST.text, cls: LAST.cls, tok: tok }); STICKY = STICKY.slice(-4); }
+    if (!STICKY.some(function (x) { return x.text === LAST.text; })) stickySet(STICKY.concat([{ text: LAST.text, cls: LAST.cls, tok: tok, ord: LAST.ord }]));
   }
   function movedBanner(hd) { if (MOVED && Date.now() - MOVED.at < 60000) hd.appendChild(el('div', 'ban warn', MOVED.text)); }
   function renderSync() {
@@ -1088,7 +1137,22 @@
     if (LAST && !LAST.shown && Date.now() - LAST.at < 60000) hd.appendChild(el('div', 'ban ' + LAST.cls, LAST.text));
   }
   // Отказы записей, пришедшие на чужой экран, — полосой с «×» на любом экране, пока кассир не закроет.
-  var STICKY = [];
+  // [v6.6] Отказы живут и в памяти браузера (перезапуск кассы их не стирает) и считаются в значке вверху: «⛔️ Не записано: N» — пока
+  // кассир не закроет их «×» [владелец 29.09.2026, страховка 3: «счётчик не гаснет, пока работник не разберётся»]. После перезапуска — до 50.
+  var STICKY = [], STICKY_MAX = 50;
+  // ⛔️ Полосы не легли в память браузера (её нет, отказ) — закрытая вкладка потеряла бы отказ, а задание уже удалено: значок кричит
+  // «не сохранено в браузере», пока есть полосы [Кодекс, круг 2 v6.6, HIGH-2].
+  var STICKY_NOSAVE = false;
+  // Полосы итогов записи не выбрасываются никогда — только «×» кассира [Кодекс HIGH-4, Фейбл «очередь» HIGH-2, круг 1 v6.6]; потолок 5 —
+  // лишь у временных предупреждений («склад не подтверждает…», tmp): их снимает сам итог задания. Ключ полосы — заказ (закупка|ник|№)
+  // и код задания очереди, а не экран: у двух заказов клиента экран один.
+  function stickySet(list) {
+    var tmp = list.filter(function (x) { return x.tmp; }).slice(-5);
+    STICKY = list.filter(function (x) { return !x.tmp || tmp.indexOf(x) >= 0; });
+    idbPut('sticky', STICKY).then(function (ok) { var bad = !ok && !DENIED && STICKY.length > 0; if (bad !== STICKY_NOSAVE) { STICKY_NOSAVE = bad; renderWq(); } });
+    renderWq();
+  }
+  function ordOf(tid, nick, no) { return String(tid || '') + '|' + String(nick || '') + '|' + nk(no || ''); }
   function renderSticky() {
     var hd = $('head'), box = $('sticky');
     if (!STICKY || !STICKY.length) { if (box && box.parentNode) box.parentNode.removeChild(box); return; }
@@ -1097,7 +1161,7 @@
     STICKY.forEach(function (x) {
       var b = el('div', 'ban ' + x.cls, x.text + ' ');
       var cl = el('button', 'x', '×'); cl.type = 'button'; cl.title = 'Закрыть';
-      cl.onclick = function () { STICKY = STICKY.filter(function (y) { return y !== x; }); renderSticky(); };
+      cl.onclick = function () { if (LAST && LAST.text === x.text) LAST.acked = 1; stickySet(STICKY.filter(function (y) { return y !== x; })); renderSticky(); };
       b.appendChild(cl);
       box.appendChild(b);
     });
@@ -1417,6 +1481,8 @@
       var t0 = Date.now(), r = await jsonp('kassa_inv', { src: tid, nick: nick, no: no }, WAIT_INV);
       if (r && r.net && !DENIED) { await sleep(2000); r = await jsonp('kassa_inv', { src: tid, nick: nick, no: no }, WAIT_INV); }
       ptAdd('inv ' + ptSec(Date.now() - t0) + 's' + (r ? (r.ok ? ' ok' : ' ' + String(r.error || 'err')) : ' x') + (r && r.ms ? ' srv=' + ptSec(Number(r.ms.all) || 0) : ''));
+      if (!DENIED && (Date.now() - t0 > SP_SLOW || !r || r.net || !r.ok)) spAdd([t0, 'счёт заказа', tName(tid), nick, no, Date.now() - t0, '', r && r.ms && isFinite(Number(r.ms.all)) ? Number(r.ms.all) : '',
+        r && r.ms ? phText(r.ms) : '', '', r ? (r.net ? 'не дошёл (сбой Google)' : r.ok ? 'прочитан' : 'ошибка: ' + String(r.error || '?')) : 'нет ответа', '']);
       if (INVF[key] === sig) delete INVF[key];
       if (DENIED) return;
       var d = (r && r.ok) ? { found: r.found || [], maybe: r.maybe || [], fail: r.fail || [] } : { error: (r && r.error) || 'net' };
@@ -1538,6 +1604,9 @@
     }
     var m = cardModel(h, q, selNo);
     CUR.model = m; CUR.no = m.no || null;
+    // Выдача этого заказа ещё в очереди записей — видно и на заново открытой карточке [v6.6].
+    var wqj = m.no ? wqOrder(h.t.id, c[0], m.no) : null;
+    if (wqj && !(flash && flash.q)) bans.appendChild(el('div', 'chk', '⏳ Выдача этого заказа ' + (wqj.fly ? 'записывается' : wqj.tries ? 'ждёт повтора' : 'ждёт записи') + ' в таблицу…'));
     // Счёт заказа (п.3): ответ склада живёт с карточкой — перерисовка того же заказа берёт прежний, новая карточка — из памяти
     // кассы (2 мин; отказ — 30 с) или спрашивает склад.
     // Годен только ответ к ТЕМ ЖЕ данным карточки (подпись sig): после выдачи, правки таблицы, нового поиска — вопрос заново.
@@ -1822,6 +1891,7 @@
     return s.slice(0, 40);
   }
   // Запрос записи с повтором после «404». Код операции живёт, пока исход не известен точно.
+  var LASTW = { legs: '' };   // попытки последнего writeCall — в строку «Лога кассы — скорость»
   async function writeCall(action, params, key) {
     if (!WOP || WOP.key !== key) WOP = { key: key, n: newOp() };
     params.n = WOP.n;
@@ -1839,73 +1909,330 @@
     // досылка тем же кодом [Фейбл, перепроверка v6.5, HIGH-1 — та же дыра, что у двух запросов одного jsonp, но между попытками].
     if (r && !r.net && legs.length > 1 && KEEP_RE.test(String(r.error || ''))) r = null;
     ptAdd(action.replace('kassa_', '') + ' ' + ptSec(Date.now() - t0) + 's legs=' + legs.join('+') + (r && r.ms ? ' srv=' + ptSec(Number(r.ms.all) || 0) : '') + (r && r.repeat ? ' rep' : '') + (r && r.leg ? ' h' + r.leg : ''));
+    LASTW = { legs: legs.map(function (x) { return x.replace(':404', ' с (404)').replace(':x', ' с (нет ответа)').replace(/^([\d.]+)$/, '$1 с'); }).join(' + ') + (r && r.leg ? ' (ответ на ' + (r.leg + 1) + '-й запрос)' : '') };
     // Исход известен (записано — и частично, «изменился», отказ по делу) — следующее нажатие пойдёт новым кодом. Не
     // известен (нет ответа, «404» подряд, сбой записи на складе) — код остаётся: повтор узнают и не запишут дважды.
     if (r && !r.net && (r.ok || r.changed || Number(r.wrote) > 0 || /^(bad_args|efir|src_denied|no_src|too_big|ambiguous)$/.test(String(r.error || '')))) WOP = null;
     return r;
   }
-  // ⛔️ ИСХОД НЕИЗВЕСТЕН — КАССА ДОСЫЛАЕТ ЗАПРОС САМА [Кодекс, круг 2, HIGH-2; Фейбл, круг 2, MED-1]. Ответ не пришёл или
-  // склад не смог проверить свою запись: он помнит операцию по коду и при повторе ТЕМ ЖЕ кодом перепроверит лист и
-  // допишет журнал (деньги «Статистики»). Ждать повтора от кассира нельзя: он уже у другого клиента (код сменился), а
-  // освежение показывает заказ выданным — кнопки нет. Поэтому запрос с его кодом касса хранит сама и досылает в фоне,
-  // пока исход не станет известен (до 10 мин). Обычная выдача ничего лишнего не делает.
-  var PENDS = [], pendTimer = null;
-  var PEND_STEPS = [10, 20, 40, 60, 90, 120], PEND_FOR = 600000, WAIT_RESEND = 20000;   // досылка держит кассу не дольше 20 с
+  // ── ⏳ ОЧЕРЕДЬ ЗАПИСЕЙ — ВЫДАЧА НА ФОНЕ (v6.6, 29.09.2026) ────────────────────────────────────────────────────────────────
+  // [владелец 29.09.2026: «Нужно сохранять заказ (Забрала все, Не забрала все) на фоне, чтобы работник мог дальше работать»; минусы
+  // ему названы заранее — сбой виден позже, закрытая вкладка теряла бы запись, сама запись быстрее не станет; ответ: «И все делай»].
+  // Нажатие «Забрала всё» / «Записать: забрала N» больше не ждёт склад: вещи выданы на экране сразу (как их покажет свежая выжимка —
+  // applyGiven), кассир ищет следующего клиента, а запрос уходит из очереди. Три страховки:
+  //   1) очередь лежит в памяти браузера (IndexedDB, «wq_<код>»): закрыли вкладку, перезапустили компьютер — открылась касса и
+  //      дослала тем же кодом (склад узнаёт повтор и дважды не пишет); закрыть вкладку с очередью браузер переспросит;
+  //   2) записи уходят СТРОГО ПО ОДНОЙ — склад пишет их под общим замком, пачка разом дала бы «занято» и тормоза бригаде;
+  //      у одного клиента — по порядку нажатий (вторая выдача клиента не обгонит первую);
+  //   3) плохой исход — красная полоса с «×», не гаснет, пока кассир её не закроет; склад молчит дольше 10 мин — значок вверху
+  //      красный и полоса «не закрывайте кассу»; через 6 ч (столько склад помнит код операции) — «так и не подтвердил».
+  // Досылка неизвестного исхода (до v6.6 — PENDS) — та же очередь: задание просто остаётся в ней и уходит ещё раз тем же кодом.
+  // «Снять «нет»» по-прежнему ждёт ответа (от него зависит, что выдавать): в очередь уходит только его досылка.
+  // ⚠️ Выданное из очереди держим выданным в ЛЮБОЙ пришедшей выжимке (overlayPack): склад мог собрать её до нашей записи, и без этого
+  // заказ «воскресал» бы к выдаче. Запись не удалась — выжимку берём заново, без её отметок (packReset), правду несёт сверка.
+  // Цена на складе — ноль: те же запросы, что и раньше, ни одного лишнего чтения или записи.
+  var wqBusy = false, wqTimer = null, WQ_DONE = [], FGC = '';   // FGC — клиент, у которого сейчас пишется «снять нет» (tid|ник)
+  var WQ_TXT = '⏳ Записываю в таблицу — можно искать следующего клиента.';
+  var WQ_WARN = 600000, WQ_GIVEUP = 6 * 3600000, WQ_DONE_FOR = 1800000, WAIT_RETRY = 60000;
+  var PEND_STEPS = [10, 20, 40, 60, 90, 120, 300];
   function unknownOut(r) { return !r || !!r.net || !!r.uncertain; }
-  // Что ответ значит для досылки: 'add' — исход неизвестен; 'keep' — склад не смог даже посмотреть (занят, не прочитал,
-  // не открыл закупку, упал): прежний неизвестный исход так и не узнан, досылку не трогаем [Кодекс, круг 3, CRIT-1];
-  // 'forget' — исход известен.
+  // Что ответ «снять нет» значит для досылки: 'add' — исход неизвестен; 'keep' — склад не смог даже посмотреть (занят, не прочитал,
+  // не открыл закупку, упал): прежний неизвестный исход так и не узнан [Кодекс, круг 3, CRIT-1]; 'forget' — исход известен.
   function pendFate(r) {
     if (unknownOut(r)) return 'add';
     return KEEP_RE.test(String(r.error || '')) ? 'keep' : 'forget';
   }
-  function pendAdd(action, params, key, label, no, tok, what) {
-    if (PENDS.some(function (x) { return x.params.n === params.n; })) return;
-    PENDS.push({ action: action, params: Object.assign({}, params), key: key, label: label, no: no, tok: tok, what: what || '', t0: Date.now(), tries: 0 });
-    if (!pendTimer) pendTimer = setTimeout(pendRun, PEND_STEPS[0] * 1000);
+  // Итог задания известен: записано (или частично), «изменился», отказ по делу. Иначе склад не записал или не проверил — ещё раз
+  // тем же кодом (как кассир жал «ещё раз» до v6.6: та же логика, что у WOP в writeCall).
+  var RETRY_RE = /^(busy|read_failed|src_open_failed|no_orders_sheet|exception|flush_failed|write_failed)$/;
+  function wqFinal(r) {
+    if (!r || r.net || r.uncertain) return false;
+    if (r.ok || r.changed || Number(r.wrote) > 0) return true;
+    return !RETRY_RE.test(String(r.error || ''));
   }
-  // Исход известен и без досылки (кассир нажал ещё раз тем же кодом) — досылать нечего.
-  function pendForget(n) { PENDS = PENDS.filter(function (x) { return x.params.n !== n; }); }
-  function pendNext(sec) { if (pendTimer) clearTimeout(pendTimer); pendTimer = PENDS.length ? setTimeout(pendRun, sec * 1000) : null; }
-  async function pendRun() {
-    pendTimer = null;
-    if (!PENDS.length || DENIED) return;
-    if (BUSY || dlgOpen()) { pendNext(5); return; }    // кассир как раз пишет или отмечает вещи в окне — досылка следом
-    var p = PENDS[0];
-    p.tries++;
-    setBusy(true, p.label, p.tok);
-    var r = null;
-    try {
-      for (var at = 0; at < 3; at++) {
-        r = await jsonp(p.action, p.params, WAIT_RESEND);
-        if (DENIED || !r || !r.net) break;
-        await sleep(2000);
-      }
-    } finally { setBusy(false); }
+  function wqRec(j) { var o = {}; for (var k in j) if (k !== 'fly') o[k] = j[k]; return o; }
+  // ⛔️ Задание не легло в память браузера (её нет, отказ) — закрытая вкладка потеряла бы его: значок об этом кричит, пока очередь не
+  // опустеет [Кодекс, круг 1 v6.6, HIGH-2]. Запросов к складу это не добавляет.
+  var WQ_NOSAVE = false;
+  function wqSave(j) { idbPut('wq_' + j.n, wqRec(j)).then(function (ok) { if (!ok && !DENIED && WQ.indexOf(j) >= 0) { WQ_NOSAVE = true; renderWq(); } }); }
+  function wqAdd(j) { if (WQ.some(function (x) { return x.n === j.n; })) return; WQ.push(j); wqSave(j); renderWq(); wqKick(0); }
+  function wqDrop(j) { WQ = WQ.filter(function (x) { return x !== j; }); idbPut('wq_' + j.n, undefined); renderWq(); }
+  function wqKick(ms) { if (wqTimer) clearTimeout(wqTimer); wqTimer = setTimeout(wqRun, Math.max(0, ms || 0)); }
+  // Задание выдачи этого заказа ещё не подтверждено складом; у клиента есть хоть одно задание.
+  function wqOrder(tid, nick, no) {
+    for (var i = 0; i < WQ.length; i++) { var j = WQ[i]; if (j.action === 'kassa_give' && j.tid === tid && j.nick === nick && nk(j.no) === nk(no)) return j; }
+    return null;
+  }
+  function wqClient(tid, nick) { return WQ.some(function (j) { return j.tid === tid && j.nick === nick; }); }
+  // Следующее задание: по порядку нажатий; у клиента — сначала его раннее; пока у клиента пишется «снять нет» — после него.
+  function wqPick() {
+    var now = Date.now(), seen = {}, next = 0;
+    for (var i = 0; i < WQ.length; i++) {
+      var j = WQ[i], ck = j.tid + '|' + j.nick;
+      if (seen[ck]) continue;
+      seen[ck] = 1;
+      if (FGC === ck) continue;
+      if (j.due > now) { if (!next || j.due < next) next = j.due; continue; }
+      return { j: j, next: 0 };
+    }
+    return { j: null, next: next };
+  }
+  async function wqRun() {
+    wqTimer = null;
+    if (wqBusy || DENIED || !WQ.length) { renderWq(); return; }
+    var pk = wqPick();
+    if (!pk.j) { wqKick(pk.next ? pk.next - Date.now() + 50 : 2000); renderWq(); return; }
+    var j = pk.j, res = null;
+    wqBusy = true; j.fly = 1;
+    if (!j.sent0) j.sent0 = Date.now();
+    renderWq();
+    try { res = await wqSend(j); } catch (e) { res = { r: null, legs: ['сбой кассы'] }; } finally { wqBusy = false; j.fly = 0; }
     if (DENIED) return;
-    if (PENDS.indexOf(p) < 0) { pendNext(1); return; }  // пока летела, исход узнал сам кассир
-    if (pendFate(r) !== 'forget') {
-      if (refreshLater) { refreshLater = false; setTimeout(refreshView, 0); }   // пришедшие за это время данные [Фейбл, круг 3]
-      if (Date.now() - p.t0 < PEND_FOR) { pendNext(PEND_STEPS[Math.min(p.tries, PEND_STEPS.length - 1)]); return; }
-      pendForget(p.params.n);
-      finishWrite(p.tok, p.no, { text: '⛔️ Склад так и не подтвердил запись. Проверьте заказ в приложении склада и скажите владельцу.', cls: 'bad' });
-      pendNext(1);
+    wqDone(j, res.r, res.legs);
+    wqKick(0);
+  }
+  // Один заход задания — как writeCall: «404» — ещё раз через 2 с (до трёх), второй запрос после 30 с молчания (jsonp).
+  async function wqSend(j) {
+    var legs = [], pl = [], r = null, wait = j.tries ? WAIT_RETRY : WAIT_WRITE, t0 = Date.now();
+    for (var at = 0; at < 3; at++) {
+      var ta = Date.now();
+      r = await jsonp(j.action, j.params, wait);
+      pl.push(ptSec(Date.now() - ta) + (r ? (r.net ? ':404' : '') : ':x'));
+      legs.push(ptSec(Date.now() - ta) + ' с' + (r ? (r.net ? ' (404)' : '') : ' (нет ответа)') + (r && r.leg ? ' (ответ на ' + (r.leg + 1) + '-й запрос)' : ''));
+      if (DENIED) return { r: { ok: false, error: 'no_key' }, legs: legs };
+      if (!r || !r.net) break;
+      await sleep(2000);
+    }
+    // «404», а потом «не смог посмотреть» — исход неизвестен: первая попытка могла записать [Фейбл, перепроверка v6.5, HIGH-1].
+    if (r && !r.net && pl.length > 1 && KEEP_RE.test(String(r.error || ''))) r = null;
+    ptAdd(j.action.replace('kassa_', '') + ' ' + ptSec(Date.now() - t0) + 's legs=' + pl.join('+') + (r && r.ms ? ' srv=' + ptSec(Number(r.ms.all) || 0) : '') + (r && r.repeat ? ' rep' : '') + (r && r.leg ? ' h' + r.leg : '') + ' q');
+    return { r: r, legs: legs };
+  }
+  // Задание ответило. Итог не известен — ещё раз позже тем же кодом; известен — из очереди вон, строка «Лога кассы — скорость», итог.
+  function wqDone(j, r, legs) {
+    j.tries = (j.tries || 0) + 1;
+    j.legs = (j.legs || []).concat([legs.join(' + ')]);
+    if (!wqFinal(r)) {
+      var age = Date.now() - j.t0;
+      if (age >= WQ_GIVEUP) {
+        wqDrop(j);
+        if (j.action === 'kassa_give') packReset(j.tid);
+        spRow(j, r, 'склад так и не подтвердил');
+        finishWrite(j.tok, j.no, { text: '⛔️ Склад так и не подтвердил запись. Проверьте заказ в приложении склада и скажите владельцу.' +
+          (j.action === 'kassa_give' ? ' Клиент унёс: ' + keysText(j.keys) + '.' : ''), cls: 'bad' }, j.label, ordOf(j.tid, j.nick, j.no), j.n);
+        wqSameCard(j);
+        sync(true);
+        return;
+      }
+      j.due = Date.now() + PEND_STEPS[Math.min(j.tries - 1, PEND_STEPS.length - 1)] * 1000;
+      if (age >= WQ_WARN && !j.warned) {
+        j.warned = 1;
+        stickySet(STICKY.concat([{ text: j.label + ': ⏳ склад не подтверждает запись уже ' + Math.round(age / 60000) + ' мин — касса пробует сама. Не закрывайте кассу.', cls: 'warn', tok: j.tok, ord: ordOf(j.tid, j.nick, j.no), n: j.n, tmp: 1 }]));
+        renderSticky();
+      }
+      wqSave(j);
+      // Первая неудача, а кассир ещё на этой карточке — словами, что касса дошлёт сама.
+      if (j.tries === 1 && j.action === 'kassa_give' && cardTok() === j.tok && CUR.flash && CUR.flash.q && CUR.flash.n === j.n) {
+        afterWrite(j.no, { text: wqFailText(r), cls: 'warn', done: CUR.flash.done, q: 1, n: j.n });
+      }
       return;
     }
-    pendForget(p.params.n);
-    if (WOP && WOP.n === p.params.n) WOP = null;
-    var f;
-    if (p.action === 'kassa_give') f = giveFlash(r, p.no, r.wrote || 0);
-    else if (r.ok) f = { text: '✅ «нет» снято: ' + p.what + ' — вещь в заказе ' + String(r.no || p.no || 'клиента') + ', в сумме.', cls: 'ok' };
-    else if (r.changed) f = { text: '⚠️ Вещь в таблице изменилась — «нет» не снято. Проверьте ещё раз.', cls: 'bad' };
-    else f = { text: '⛔️ «нет» не снято. ' + failText(r), cls: 'bad' };
-    // Удачная выдача — и тут экран «после выдачи» (кнопки молчат, отказанное — серым) [Фейбл, круг 3, HIGH-1]; вещи в
-    // памяти кассы не отмечены — правду принесёт освежение ниже.
-    f.text = 'Проверка: ' + f.text;
-    if (!(p.action === 'kassa_give' && r.ok)) delete f.done;
-    finishWrite(p.tok, (r.ok && r.no) || p.no, f);
+    wqDrop(j);
+    spRow(j, r, outcomeText(r));
+    if (WOP && WOP.n === j.n) WOP = null;
+    var pre = j.tries > 1 ? 'Проверка: ' : '';
+    if (j.action === 'kassa_give' && r.ok) {
+      WQ_DONE = WQ_DONE.filter(function (d) { return Date.now() - d.at < WQ_DONE_FOR; });
+      WQ_DONE.push({ action: j.action, tid: j.tid, nick: j.nick, no: j.no, keys: j.keys, g0: j.g0, cnt: j.cnt, t0: j.t0, at: Date.now() });
+      var f = giveFlash(r, j.no, Number(r.wrote) || j.cnt);
+      f.text = pre + f.text;
+      finishWrite(j.tok, j.no, f, j.label, ordOf(j.tid, j.nick, j.no), j.n);
+      wqSameCard(j);
+      return;
+    }
+    var fb;
+    if (j.action === 'kassa_give') {
+      packReset(j.tid);                               // «выданное» этой записи с экрана — правду принесёт сверка ниже
+      fb = giveFlash(r, j.no, 0);
+      // Клиент, скорее всего, уже ушёл: не «нажмите ещё раз» (в заказ могли добавить вещь, которую он не брал), а отметить выданным
+      // только унесённое [Фейбл «сценарий», круг 2 v6.6, MED-2].
+      if (r.changed && !(r.total === 0 && r.given)) fb.text = '⚠️ Заказ изменился в таблице — ничего не записано. Клиент унёс: ' + keysText(j.keys) +
+        '. Проверьте заказ и отметьте выданным только это («Не забрала всё…»).';
+      else fb.text += ' Клиент унёс: ' + keysText(j.keys) + '.';
+    } else if (r.ok) {
+      UNNET_DIRTY[j.tid + '|' + j.nick] = Date.now();      // до свежей выжимки выдача этого клиента ждёт (сверка — ниже, sync)
+      fb = { text: '✅ «нет» снято: ' + j.what + ' — вещь в заказе ' + String(r.no || j.no || 'клиента') + ', в сумме.', cls: 'ok' };
+    }
+    else if (r.changed) fb = { text: '⚠️ Вещь в таблице изменилась — «нет» не снято. Проверьте ещё раз.', cls: 'bad' };
+    else fb = { text: '⛔️ «нет» не снято. ' + failText(r), cls: 'bad' };
+    fb.text = (j.action === 'kassa_unnet' ? 'Проверка: ' : pre) + fb.text;
+    finishWrite(j.tok, (j.action === 'kassa_unnet' && r.ok && r.no) || j.no, fb, j.label, ordOf(j.tid, j.nick, j.no), j.n);
+    wqSameCard(j);
     sync(true);
-    pendNext(1);
+  }
+  // Вещи задания словами — «101 платье zils S, 102 …»: по ним кассир отметит выдачу заново, когда клиента уже нет.
+  function keysText(keys) {
+    var t = (keys || []).map(function (k) {
+      var x = null; try { x = JSON.parse(k); } catch (e) { x = null; }
+      if (!Array.isArray(x)) return '';
+      return [x[0], x[5], x[1], x[2]].map(function (v) { return String(v == null ? '' : v).replace(/\s*\n\s*/g, ' / ').trim(); }).filter(Boolean).join(' ');
+    }).filter(Boolean).join(', ');
+    return t.length > 1000 ? t.slice(0, 999) + '…' : (t || 'вещи заказа');     // полный состав: по нему кассир отметит заново [Кодекс MED-6, круг 2]
+  }
+  // Неудача, которую очередь повторит сама, — словами очереди: кассиру нажимать нечего [Фейбл «деньги», LOW-6].
+  function wqFailText(r) {
+    // Склад записал, но не проверил — так и сказать (а не «ответ не пришёл»): ответ был [круг 2 v6.6, гейт раздела 25].
+    if (r && r.uncertain && !r.net) return '⏳ Склад не смог проверить свою запись — касса проверит сама, можно работать дальше.';
+    if (!r || r.net || r.uncertain) return '⏳ Ответ склада не пришёл — касса дошлёт сама, можно работать дальше.';
+    if (String(r.error || '') === 'busy') return '⏳ Склад занят (' + (r.sick ? 'Google не отвечает' : 'идёт другая запись') + ') — касса повторит сама.';
+    return '⏳ Склад не записал с первого раза — касса повторит сама, можно работать дальше.';
+  }
+  // Карточка этого же клиента открыта заново (другой запрос — не «своя»): пересобрать, чтобы строка «ждёт записи» ушла.
+  function wqSameCard(j) {
+    if (CUR && CUR.kind === 'card' && CUR.h && CUR.h.t.id === j.tid && CUR.sel.nick === j.nick && cardTok() !== j.tok && !dlgOpen()) invShow(true);
+    refreshView();
+  }
+  // Деньги выданного — как окно «Какие вещи забрала?» (redraw): по счёту — пометка R6-… или вещь, найденная складом в самом счёте.
+  function localSums(m, rows) {
+    var ik = {}, used = {}, sum = 0, inv = 0, np = 0;
+    m.open.forEach(function (r) { if (r.invX) { var k = itemKey(m.P, r); ik[k] = (ik[k] || 0) + 1; } });
+    rows.forEach(function (r) {
+      var cc = cents(r.price);
+      if (cc === null) { np++; return; }
+      sum += cc;
+      if (invOf(r.mark)) inv += cc;
+      else { var k = itemKey(m.P, r); if ((used[k] || 0) < (ik[k] || 0)) { used[k] = (used[k] || 0) + 1; inv += cc; } }
+    });
+    return { n: rows.length, sum: sum, inv: inv, store: sum - inv, np: np };
+  }
+  // Выданное из очереди (и выданное за последние 5 мин: выжимку склад мог собрать до нашей записи) — выданным и в этой выжимке.
+  // ⛔️ Только если выжимка записи ещё НЕ видит: выданных в заказе меньше, чем было до нажатия + выдано [иначе из двух одинаковых
+  // вещей «Не забрала всё» вторая, оставшаяся у кассы, пряталась бы как выданная]. Вещи — как их выберет склад (первые из одинаковых).
+  var OVQ = { kind: 'full', text: '', digits: '' };
+  function overlayPack(tid, P) {
+    if (!P || P.efir || !Array.isArray(P.c)) return;
+    var now = Date.now();
+    // По порядку нажатий — подтверждённые и очередь вперемешку по времени: счёт «уже видно в выжимке» у каждой следующей выдачи включает
+    // отметки предыдущих [Кодекс, круг 1 v6.6, HIGH-3: очередь раньше подтверждённых — отметка первой выдачи терялась].
+    var list = WQ_DONE.filter(function (d) { return d.tid === tid && now - d.at < WQ_DONE_FOR; })
+      .concat(WQ.filter(function (j) { return j.action === 'kassa_give' && j.tid === tid; }))
+      .sort(function (a, b) { return (Number(a.t0) || 0) - (Number(b.t0) || 0); });
+    list.forEach(function (j) {
+      for (var i = 0; i < P.c.length; i++) {
+        if (!P.c[i] || P.c[i][0] !== j.nick) continue;
+        var m = cardModel({ t: { id: tid }, pk: { p: P }, i: i }, OVQ, j.no);
+        // Сколько вещей этой выдачи выжимка ещё НЕ видит — только их и отмечаем [Кодекс, круг 1 v6.6, MED-7: запись видна частично —
+        // из трёх одинаковых, двух выбранных, прятались все три].
+        var left = (Number(j.g0) || 0) + (Number(j.cnt) || 0) - m.givenSel.length;
+        if (!m.open.length || left <= 0) continue;
+        var need = {};
+        (j.keys || []).forEach(function (k) { need[k] = (need[k] || 0) + 1; });
+        var done = m.open.filter(function (x) { if (left <= 0) return false; var k = itemKey(P, x); if (need[k] > 0) { need[k]--; left--; return true; } return false; });
+        if (done.length) applyGiven(m, done);
+      }
+    });
+  }
+  // Запись не удалась — выжимку этой закупки берём заново из того, что прислал склад (сырая копия), без её «выданных» отметок
+  // (отметки остальных заданий очереди — на месте), и открытая карточка смотрит уже в неё. Сырой нет — склад пришлёт выжимку целиком.
+  function packReset(tid) {
+    var pk = PACKS[tid];
+    if (!pk) return;
+    var p = null;
+    try { p = typeof pk.raw === 'string' ? JSON.parse(pk.raw) : null; } catch (e) { p = null; }
+    if (!p || p.v !== 1 || !p.c || !p.n) { pk.id = ''; pk.checked = 0; return; }
+    overlayPack(tid, p);
+    PACKS[tid] = { id: pk.id, t: pk.t, p: p, checked: pk.checked, raw: pk.raw };
+    if (CUR && CUR.kind === 'card' && CUR.h && CUR.h.t.id === tid) {
+      var nh = findHits(CUR.q).filter(function (x) { return x.t.id === tid && x.pk.p.c[x.i][0] === CUR.sel.nick; })[0];
+      if (nh) CUR.h = nh;
+    }
+  }
+  // Значок вверху: сколько выдач склад ещё не подтвердил (дольше 10 мин — красный) и сколько отказов записи кассир ещё не закрыл
+  // («⛔️ Не записано: N», красный, не гаснет до «×» на полосе). Подсказка — кто и что с ним; щелчок — к полосам.
+  function renderWq() {
+    var b = $('wq');
+    document.querySelectorAll('.un').forEach(function (x) { x.disabled = BUSY || draftOn(); });
+    if (!b) return;
+    // Полосы, которые ждут кассира: отказы и жёлтые итоги («записано только N из M», «журнал не лёг — скажите владельцу») — всё, кроме
+    // временных «склад не подтверждает…» (их снимает сам итог) [Кодекс MED-4, Фейбл LOW, круг 2 v6.6].
+    var nb = STICKY.filter(function (x) { return !x.tmp; }).length;
+    if (!WQ.length) WQ_NOSAVE = false;       // очередь опустела — и тревога про её память [Кодекс LOW-8, Фейбл LOW, круг 2 v6.6]
+    if ((!WQ.length && !nb) || DENIED) { b.hidden = true; b.textContent = ''; b.title = ''; return; }
+    var old = Date.now(), parts = [];
+    WQ.forEach(function (j) { if (j.t0 < old) old = j.t0; });
+    var age = Date.now() - old;
+    if (WQ.length) parts.push('⏳ Записываю: ' + WQ.length + (age >= 60000 ? ' · ' + Math.round(age / 60000) + ' мин' : '') +
+      (WQ_NOSAVE ? ' · ⚠️ не сохранено в браузере — не закрывайте кассу' : ''));
+    if (nb) parts.push('⛔️ Не записано: ' + nb + (STICKY_NOSAVE ? ' · ⚠️ не сохранено в браузере — не закрывайте кассу' : ''));
+    b.hidden = false;
+    b.className = (nb || (WQ.length && (age >= WQ_WARN || WQ_NOSAVE))) ? 'bad' : '';
+    b.textContent = parts.join(' · ');
+    b.title = WQ.map(function (j) { return j.label + (j.fly ? ' — пишется' : j.tries ? ' — повторю сама' : ' — в очереди'); })
+      .concat(STICKY.filter(function (x) { return !x.tmp; }).map(function (x) { return x.text; })).join('\n');
+  }
+
+  // ── ⏱ «ЛОГ КАССЫ — СКОРОСТЬ» (v6.6, 29.09.2026) ───────────────────────────────────────────────────────────────────────────
+  // [владелец 29.09.2026: «Нужен подробный лог кассы (в Складе)»; «насколько сильно нагрузит?» — работник ждёт 0 с, общий замок
+  // склад на это не берёт, короткий вызов на нажатие]. После итога записи касса шлёт строку сама, фоном (kassa_speed → лист Склада
+  // «Лог кассы — скорость», kassa.js): всего от нажатия до итога, в очереди, склад и его этапы, попытки, итог, код операции (он же в
+  // «Логе кассы»). Освежение списка, счёт и список закупок — только долгие (от 5 с) и сорвавшиеся. Не дошла строка — полежит до
+  // следующего раза (до 60 в памяти вкладки): это замер, не деньги.
+  var SPQ = [], spBusy = false, spTimer = null, SP_SLOW = 5000, SP_MAX = 60;
+  function spAdd(row) {
+    if (DENIED) return;
+    SPQ.push(row.map(function (v) { return typeof v === 'string' ? v.slice(0, 200) : v; }));
+    if (SPQ.length > SP_MAX) SPQ = SPQ.slice(-SP_MAX);
+    if (!spTimer && !spBusy) spTimer = setTimeout(spFlush, 2000);
+  }
+  async function spFlush() {
+    spTimer = null;
+    if (spBusy || !SPQ.length || DENIED) return;
+    var batch = [];
+    for (var i = 0; i < SPQ.length && batch.length < 8; i++) {
+      var nx = batch.concat([SPQ[i]]);
+      if (jsonpUrl('kassa_speed', { r: JSON.stringify(nx) }, 'kcb000_xxxxxxxx').length > URL_MAX) break;
+      batch = nx;
+    }
+    if (!batch.length) { SPQ.shift(); return; }       // строка длиннее адреса (не бывает — поля обрезаны), но и не застревать
+    spBusy = true;
+    var r = null;
+    try { r = await jsonp('kassa_speed', { r: JSON.stringify(batch) }, 30000); } catch (e) { r = null; } finally { spBusy = false; }
+    if (DENIED) return;
+    // Легла — убираем; склад сказал «не приму» (bad_args) — тоже: повтор не поможет. Не дошла — полежит до следующего раза.
+    if (r && !r.net && (r.ok || r.error === 'bad_args')) {
+      SPQ = SPQ.filter(function (x) { return batch.indexOf(x) < 0; });
+      if (SPQ.length && !spTimer) spTimer = setTimeout(spFlush, 1000);
+    }
+  }
+  // «замок» — ожидание общего замка склада (не путать с колонкой «В очереди» — это очередь самой кассы).
+  var PH_NAME = { open: 'открыть', rows: 'чтение', lock: 'замок', check: 'сверка', write: 'запись', flush: 'сохранение',
+                  reread: 'проверка', log: 'журнал', tail: 'хвост', notes: 'примечания', invoices: 'счета' };
+  function phText(ms) {
+    if (!ms || typeof ms !== 'object') return '';
+    var o = [];
+    for (var k in ms) if (k !== 'all' && isFinite(Number(ms[k]))) o.push((PH_NAME[k] || k) + ' ' + ptSec(Number(ms[k])));
+    return o.join(' · ');
+  }
+  function outcomeText(r) {
+    if (!r) return 'нет ответа';
+    if (r.net) return 'не дошёл (сбой Google)';
+    if (r.ok) return 'записано' + (r.repeat ? ' (повтор — склад узнал)' : '') + (r.already ? ' (уже было)' : '') + (r.moved ? ' · строки сдвинулись' : '') +
+      (r.log === false ? ' · журнал не лёг' : r.log === 'later' ? ' · журнал позже' : '');
+    if (Number(r.wrote) > 0) return 'записано только ' + r.wrote + ' из ' + (Number(r.wrote) + (Number(r.failed) || 0));
+    if (r.changed) return (r.total === 0 && r.given) ? 'уже выдан — не записано' : 'заказ изменился — не записано';
+    if (r.uncertain) return 'склад не проверил запись';
+    return 'ошибка: ' + String(r.error || '?');
+  }
+  function tName(tid) { var t = TABLES && TABLES.list.filter(function (x) { return x.id === tid; })[0]; return t ? t.name : ''; }
+  // Строка итога записи: [нажатие, что, закупка, клиент, №, всего, в очереди, склад, этапы, попытки, итог, код операции].
+  function spRow(j, r, outcome) {
+    var what = j.action === 'kassa_unnet' ? 'снять «нет»' + (j.what ? ': ' + j.what : '')
+      : (j.mode === 'part' ? 'выдача: часть ' + j.cnt + ' из ' + j.tot : 'выдача: всё' + (j.cnt ? ' (' + j.cnt + ')' : ''));
+    // Попытки — последние (у долгого задания главное — чем кончилось), если не влезают в 200 знаков.
+    var lg = (j.legs || []).join(' | ');
+    if (lg.length > 200) lg = '…' + lg.slice(-199);
+    spAdd([j.t0, what, j.tname || tName(j.tid), j.nick, j.no || '', Date.now() - j.t0, j.sent0 ? j.sent0 - j.t0 : '',
+           r && r.ms && isFinite(Number(r.ms.all)) ? Number(r.ms.all) : '', r && r.ms ? phText(r.ms) : '', lg, outcome, j.n]);
   }
   // Итог выдачи словами — и для ответа на нажатие, и для досылки. Деньги — по ответу склада.
   function giveFlash(r, no, n) {
@@ -1975,28 +2302,53 @@
     if (ok) { ok.disabled = BUSY; if (BUSY) ok.textContent = 'Записываю…'; }
   }
   // Ответ записи пришёл: своя карточка на экране — итог в ней; кассир уже на другом экране — итог полосой там.
-  function finishWrite(tok, no, flash) {
+  // n — код задания очереди (фоновая выдача, досылка): у него «своя» карточка уже, см. ниже.
+  function finishWrite(tok, no, flash, label, ord, n) {
     // Итог живёт минуту: и на этой карточке (её может пересобрать свежая выжимка), и на любом другом экране — но только
     // если кассир ушёл, пока склад писал: увиденный на своей карточке итог к следующему клиенту не переезжает (чужое
     // «✅ Выдано» там можно принять за своё) [Фейбл, круг 2, MED-4].
     var mine = cardTok() === tok;
+    // ⛔️ Итог задания очереди — на карточку, только если на ней ЭТОТ заказ и не экран «после выдачи» другого задания [Фейбл «деньги»,
+    // круг 1 v6.6, HIGH-1]: у двух заказов клиента один экран (закупка|ник|запрос), и итог 9-711 перекидывал кассира с 9-712 — на
+    // экране «после выдачи» стояла сумма чужого заказа. Иначе — как чужому экрану: отказ полосой с «×».
+    // Заказ задания — по ord (закупка|ник|№ на момент нажатия), а не по no ответа: «снять нет» отвечает заказом, куда встала вещь,
+    // и итог досылки из рамки 9-731 на карточке 9-730 иначе уходил серой строкой «записано» [Фейбл «деньги», круг 2 v6.6, MED-1].
+    if (n && mine) mine = !!(CUR && CUR.model && ord && ord === ordOf(CUR.sel.tid, CUR.sel.nick, CUR.model.no) && !(CUR.flash && CUR.flash.q && CUR.flash.n && CUR.flash.n !== n));
+    // Удачная фоновая запись, а кассир уже у другого: большой зелёной полосы с суммой прошлого клиента над шапкой следующего не рисуем
+    // (её легко принять за деньги текущего) — короткая серая строка без суммы; дальше её не таскаем [Фейбл «деньги», LOW-6].
+    // Только у выдачи (деньги — flash.done); удачное «снять нет» на чужом экране — полосой с текстом: куда встала вещь.
+    var bgOk = !!n && flash.cls === 'ok' && !mine && !!flash.done;
     // Своя карточка, но кассир уже набирает следующий номер: итог мог пройти мимо глаз (на телефоне его закрывают цифры),
     // а «Найти» уведёт с карточки — отказ держим полосой с «×», «Выдано» покажем на следующем экране, как ушедшему кассиру
     // [Фейбл «сценарий», круг 1 v6.3, HIGH-1: «Таблица занята» с карточки anna пропадала с первым Enter].
     var seen = mine && !draftOn();
-    var text = (INFL && INFL.label ? INFL.label + ': ' : '') + flash.text;
+    var lb = label != null ? label : (INFL && INFL.label ? INFL.label : '');
+    var text = (lb ? lb + ': ' : '') + flash.text;
+    ord = ord || (String(tok || '') + '|' + nk(no || ''));
     // Записали в закупку, которая сейчас не выбрана: освежение её не спросит — сверку сбросить, вернувшись, касса сверит
     // заново («сверяю»), а не откроет заказ по старой памяти [Фейбл «гонки», v6, LOW-4].
     var wtid = String(tok || '').split('|')[0];
     if (wtid && PACKS[wtid] && !scope().some(function (x) { return x.id === wtid; })) PACKS[wtid].checked = 0;
-    LAST = { text: text, cls: flash.cls, at: Date.now(), tok: tok, flash: flash, shown: seen };
+    // Удачная выдача задания на следующий экран не переезжает никогда: кассир набирал следующий номер, пока шла запись, — зелёная
+    // полоса с суммой прошлого клиента встала бы над суммой следующего [Фейбл «деньги» LOW-1, «сценарий» LOW-1, круг 2 v6.6].
+    LAST = { text: text, cls: flash.cls, at: Date.now(), tok: tok, ord: ord, flash: flash, shown: seen || bgOk || (!!n && flash.cls === 'ok' && !!flash.done) };
     // Удачная запись этого же заказа снимает его прежний отказ.
-    if (flash.cls === 'ok') STICKY = STICKY.filter(function (x) { return x.tok !== tok; });
+    if (n) {
+      // ⛔️ ЗАДАНИЕ ОЧЕРЕДИ [Фейбл «очередь», круг 1 v6.6, HIGH-1, HIGH-2]: кассир на экран уже не смотрит («можно искать следующего»),
+      // поэтому всё, что не чистое «Выдано» (отказ, «записано не всё», «журнал не лёг — скажите владельцу»), — полосой с «×» ВСЕГДА, и на
+      // своей карточке тоже: следующий поиск её не сотрёт. Снимает её только кассир; удача другого задания — даже этого же заказа — не
+      // снимает (у неё другой набор вещей). Итог задания снимает лишь своё временное «склад не подтверждает».
+      var keep = STICKY.filter(function (x) { return !(x.tmp && x.n === n); });
+      if (flash.cls !== 'ok') { keep = keep.concat([{ text: text, cls: flash.cls, tok: tok, ord: ord, n: n }]); LAST.shown = true; }
+      if (keep.length !== STICKY.length || flash.cls !== 'ok') stickySet(keep);
+    }
+    else if (flash.cls === 'ok') { if (STICKY.some(function (x) { return x.ord === ord && !x.n; })) stickySet(STICKY.filter(function (x) { return !(x.ord === ord && !x.n); })); }
     // ⛔️ Отказ, пришедший на ЧУЖОЙ экран, держится, пока кассир его не закроет [Фейбл, круг 2, MED-5]: иначе следующая
     // выдача стирала его через минуту, а заказ так и оставался невыданным, хотя вещи ушли.
-    else if (!seen) { STICKY.push({ text: text, cls: flash.cls, tok: tok }); STICKY = STICKY.slice(-4); LAST.shown = true; }
-    if (mine) afterWrite(no, flash);
-    else if (flash.cls === 'ok') { var hd = $('head'); if (hd) hd.insertBefore(el('div', 'ban ok', text), hd.firstChild); }
+    else if (!seen) { stickySet(STICKY.concat([{ text: text, cls: flash.cls, tok: tok, ord: ord }])); LAST.shown = true; }
+    if (mine) afterWrite(no, (n && flash.cls === 'bad') ? null : flash);
+    // renderSticky — итог мог снять временную «склад не подтверждает…» [Фейбл, круг 2 v6.6, LOW: висела рядом с «✓ записано»].
+    else if (flash.cls === 'ok') { renderSticky(); var hd = $('head'); if (hd) hd.insertBefore(bgOk ? el('div', 'wqok', '✓ ' + (lb || 'выдача') + ' — записано в таблицу') : el('div', 'ban ok', text), hd.firstChild); }
     else renderSticky();
     if (refreshLater) { refreshLater = false; setTimeout(refreshView, 0); }
     setTimeout(invLater, 0);   // ответ про счёт, пришедший во время записи (п.3)
@@ -2043,12 +2395,31 @@
   function checkHold() { return !!(CUR && CUR.kind === 'card' && CUR.checking && CUR.chkUntil && Date.now() < CUR.chkUntil); }
   // Конец паузы — кнопки снова живые (если карточка та же).
   function pauseLater(at) { setTimeout(function () { if (CUR && CUR.kind === 'card' && CUR.shownAt === at) renderActs(CUR.model); }, 720); }
-  async function give(mode, takeIdx) {
+  // ⏳ ВЫДАЧА НА ФОНЕ (v6.6): нажатие не ждёт склад — вещи выданы на экране сразу, запрос — в очередь записей (см. «ОЧЕРЕДЬ ЗАПИСЕЙ»).
+  // Экран «после выдачи» — сразу, деньги — по карточке (как окно «Какие вещи забрала?»); ответ склада заменит их своими.
+  // У клиента в очереди досылка «снять нет» — выдачу после её итога: вещь могла уже встать в заказ, и склад ответил бы «изменился»,
+  // когда клиент уже ушёл (а деньги за альтернативу не взяты) [Фейбл «деньги», круг 1 v6.6, MED-1].
+  function unnetWaits(tid, nick) { return WQ.some(function (j) { return j.action === 'kassa_unnet' && j.tid === tid && j.nick === nick; }); }
+  // Тексты — «через несколько секунд», а не «когда значок погаснет»: в значке теперь и «⛔️ Не записано», оно горит до «×» кассира
+  // [Фейбл «сценарий», круг 2 v6.6, LOW-4].
+  var UNNET_Q_TXT = '⏳ У этого клиента ещё записывается прошлая выдача — снимите «нет» через несколько секунд, когда она запишется.';
+  var UNNET_WAIT_TXT = '⏳ У этого клиента ещё записывается «снять «нет»» — выдайте через несколько секунд, когда оно запишется.';
+  // ⛔️ «Снять «нет»» легло, а выжимка на кассе ещё прежняя (итог пришёл досылкой или кассир ушёл с карточки) — выдача этого клиента
+  // ждёт свежей выжимки: иначе «Забрала всё» ушла бы с прежним составом, без взятой альтернативы, и склад ответил бы «изменился»,
+  // когда клиент уже ушёл, а деньги за альтернативу не взяты [Кодекс HIGH-1, Фейбл «сценарий» MED-1, круг 2 v6.6]. Отметку снимает
+  // выжимка, запрошенная ПОСЛЕ записи; держим не дольше минуты — Google молчит, пусть решает склад («изменился» придёт полосой).
+  var UNNET_DIRTY = {}, UNNET_DIRTY_FOR = 60000;
+  var UNNET_SYNC_TXT = '⏳ «Нет» снято — обновляю заказ этого клиента. Выдайте через несколько секунд.';
+  function unnetDirty(tid, nick) { var at = UNNET_DIRTY[tid + '|' + nick]; return !!at && Date.now() - at < UNNET_DIRTY_FOR; }
+  function unnetClean(tid, t0) { for (var k in UNNET_DIRTY) if (k.indexOf(tid + '|') === 0 && UNNET_DIRTY[k] < t0) delete UNNET_DIRTY[k]; }
+  function give(mode, takeIdx) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || BUSY || !m.open.length || DENIED || !cardInScope() || draftOn()) return;
     if (mode === 'all' && (tooFresh() || checkHold() || invHold())) return;
     lastActivity = Date.now();
     var h = CUR.h, rows = m.open.slice();
+    if (unnetWaits(h.t.id, m.c[0])) { closeDlg(); afterWrite(m.no, { text: UNNET_WAIT_TXT, cls: 'warn' }); return; }
+    if (unnetDirty(h.t.id, m.c[0])) { closeDlg(); afterWrite(m.no, { text: UNNET_SYNC_TXT, cls: 'warn' }); sync(true); return; }
     var a = rows.map(function (r) { return itemOf(m.P, r); });
     var take = mode === 'part' ? takeIdx.slice().sort(function (x, y) { return x - y; }) : [];
     if (mode === 'part' && take.length === rows.length) { mode = 'all'; take = []; }
@@ -2058,82 +2429,73 @@
     var vi = [];
     rows.forEach(function (r, i) { if (r.invX) vi.push(i + ':' + r.invX); });
     if (vi.length) params.vi = vi.join(',');
-    var key = 'give|' + h.t.id + '|' + m.c[0] + '|' + m.no + '|' + mode + '|' + params.t + '|' + (params.vi || '') + '|' + params.a;
-    // ⛔️ У этого заказа висит досылка неизвестной выдачи — новым кодом не пишем [Фейбл, круг 3, LOW-1]: та запись могла не
-    // лечь, новое нажатие записало бы выдачу, а досылка старого кода засчитала бы её в журнал второй раз. То же нажатие
-    // (тот же код) — можно: склад узнает его.
-    var hang = PENDS.filter(function (x) { return x.action === 'kassa_give' && x.params.src === params.src && x.params.nick === params.nick && x.params.no === params.no; })[0];
-    if (hang && !(WOP && WOP.key === key && WOP.n === hang.params.n)) {
-      closeDlg();
-      afterWrite(m.no, { text: '⏳ Склад ещё проверяет прошлое нажатие по этому заказу — касса дошлёт его сама и покажет итог полосой «Проверка». Нажмите после неё.', cls: 'warn' });
-      pendNext(0);
-      return;
-    }
-    var tok = cardTok(), sig0 = CUR.sig;
-    setBusy(true, m.c[0] + ' ' + m.no);
-    var r = null;
-    try { r = await writeCall('kassa_give', params, key); } finally { setBusy(false); }
-    if (cardTok() === tok) closeDlg();
-    if (DENIED) return;
-    var pf = pendFate(r);
-    if (pf === 'add') pendAdd('kassa_give', params, key, m.c[0] + ' ' + m.no, m.no, tok);
-    else if (pf === 'forget') pendForget(params.n);
-    if (r && r.ok) {
-      // Какие вещи выданы — как их выбрал склад: из одинаковых по всем приметам — первые по порядку [Фейбл LOW-6].
-      var need = {};
-      (mode === 'part' ? take.map(function (i) { return rows[i]; }) : rows).forEach(function (x) { var k = JSON.stringify(itemOf(m.P, x)); need[k] = (need[k] || 0) + 1; });
-      var done = rows.filter(function (x) { var k = JSON.stringify(itemOf(m.P, x)); if (need[k] > 0) { need[k]--; return true; } return false; });
-      // Отмечаем у себя, только если данные за время записи не менялись: иначе номера вещей в памяти уже другие,
-      // и правду принесёт свежая выжимка (склад её сбросил).
-      if (cardTok() === tok && CUR.sig === sig0 && CUR.model) applyGiven(CUR.model, done);
-      else {
-        // Кассир ушёл (другой заказ, другая закупка): выжимка та же — отмечаем выданное в ней, иначе, вернувшись, он увидел бы
-        // заказ снова живым к выдаче [Фейбл «гонки», v6, LOW-4]; правду принесёт освежение [Фейбл, круг 2, LOW-3].
-        if (PACKS[h.t.id] && PACKS[h.t.id].p === m.P) applyGiven(m, done);
-        sync(true);
-      }
-      return finishWrite(tok, m.no, giveFlash(r, m.no, r.wrote || done.length));
-    }
-    finishWrite(tok, m.no, giveFlash(r, m.no, 0));
-    if (r && (r.changed || Number(r.wrote) > 0)) sync(true);
+    params.n = newOp();
+    var tok = cardTok(), label = m.c[0] + ' ' + m.no;
+    closeDlg();
+    // Адрес длиннее, чем примет Google, — в очередь не ставим: такой заказ выдают в приложении склада (как и было).
+    if (jsonpUrl('kassa_give', params, 'kcb000_xxxxxxxx').length > URL_MAX) return finishWrite(tok, m.no, giveFlash({ ok: false, error: 'too_big' }, m.no, 0), label, ordOf(h.t.id, m.c[0], m.no));
+    // Какие вещи уходят — как их выберет склад: из одинаковых по всем приметам — первые по порядку [Фейбл LOW-6]. Ими и отмечаем.
+    var sel = mode === 'part' ? take.map(function (i) { return rows[i]; }) : rows;
+    var keys = sel.map(function (x) { return itemKey(m.P, x); });
+    var need = {};
+    keys.forEach(function (k) { need[k] = (need[k] || 0) + 1; });
+    var done = rows.filter(function (x) { var k = itemKey(m.P, x); if (need[k] > 0) { need[k]--; return true; } return false; });
+    var loc = localSums(m, done);
+    wqAdd({ n: params.n, action: 'kassa_give', params: params, tid: h.t.id, tname: h.t.name, nick: m.c[0], no: m.no, label: label, tok: tok,
+            keys: keys, g0: m.givenSel.length, mode: mode, cnt: done.length, tot: rows.length, t0: Date.now(), due: 0, tries: 0, legs: [] });
+    applyGiven(m, done);     // сразу — как их покажет свежая выжимка (и overlayPack — любую, пришедшую до записи)
+    afterWrite(m.no, { text: WQ_TXT, cls: 'info', done: loc, q: 1, n: params.n });
   }
   async function unnet(r) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || BUSY || DENIED || !cardInScope() || draftOn()) return;
     lastActivity = Date.now();
     var h = CUR.h;
+    // ⛔️ У клиента в очереди запись (выдача или досылка) — «снять нет» после неё [v6.6]: «снять нет» идёт мимо очереди, и склад
+    // получил бы его раньше выдачи этого клиента — состав заказа разошёлся бы с тем, что видел кассир.
+    if (wqClient(h.t.id, m.c[0])) {
+      closeDlg();
+      afterWrite(m.no, { text: UNNET_Q_TXT, cls: 'warn' });
+      return;
+    }
     // Подсказка складу — № заказа жёлтой вещи из кол. D (x.d; выжимка старого склада его не везёт — тогда открытый заказ,
     // иначе номер клиента); склад найдёт её заказ сам и скажет какой [Фейбл «корректность», LOW-3: из двух одинаковых
     // жёлтых в двух заказах — та, что в подсказке].
     var hint = r.ordNo || m.no || m.main;
     var params = { src: h.t.id, nick: m.c[0], no: hint, a: JSON.stringify(itemOf(m.P, r)) };
     var key = 'unnet|' + h.t.id + '|' + m.c[0] + '|' + hint + '|' + params.a;
-    var tok = cardTok(), sig0 = CUR.sig;
+    var tok = cardTok(), sig0 = CUR.sig, t0u = Date.now();
     setBusy(true, m.c[0] + ' ' + (m.no || m.main));
+    FGC = h.t.id + '|' + m.c[0];                          // очередь этого клиента подождёт ответа
     var res = null;
-    try { res = await writeCall('kassa_unnet', params, key); } finally { setBusy(false); }
+    try { res = await writeCall('kassa_unnet', params, key); } finally { setBusy(false); FGC = ''; if (WQ.length) wqKick(0); }
     if (cardTok() === tok) closeDlg();
     if (DENIED) return;
     var label = String(r.it[0] || '') + (r.it[1] ? ' ' + r.it[1] : '') + (r.it[2] ? ' ' + r.it[2] : '');
     var pf = pendFate(res);
-    if (pf === 'add') pendAdd('kassa_unnet', params, key, m.c[0] + ' ' + (m.no || m.main), m.no, tok, label);
-    else if (pf === 'forget') pendForget(params.n);
+    spAdd([t0u, 'снять «нет»: ' + label, h.t.name, m.c[0], String(hint || ''), Date.now() - t0u, '', res && res.ms && isFinite(Number(res.ms.all)) ? Number(res.ms.all) : '',
+           res && res.ms ? phText(res.ms) : '', LASTW.legs, outcomeText(res) + (pf === 'add' ? ' → касса дошлёт сама' : ''), params.n]);
+    // Исход неизвестен — досылка тем же кодом из очереди записей; известен — висящая досылка этого кода больше не нужна.
+    if (pf === 'add') wqAdd({ n: params.n, action: 'kassa_unnet', params: Object.assign({}, params), tid: h.t.id, tname: h.t.name, nick: m.c[0],
+                             no: m.no, label: m.c[0] + ' ' + (m.no || m.main), tok: tok, what: label, t0: t0u, sent0: t0u,
+                             due: Date.now() + PEND_STEPS[0] * 1000, tries: 1, legs: [LASTW.legs] });
+    else if (pf === 'forget') WQ.filter(function (x) { return x.n === params.n; }).forEach(wqDrop);
     if (res && res.ok) {
       var inNo = String(res.no || hint || '');
       // «уже» — «нет» сняли раньше (повтор без памяти склада, вторая касса): вещь в заказе так же — отмечаем её у себя
       // и освежаем список, чтобы данные пришли от склада [Кодекс, круг 1, MED-5].
       var applied = !!(cardTok() === tok && CUR.sig === sig0 && CUR.model);
       if (applied) applyUnnet(CUR.model, r, inNo, res.flag);
-      if (res.already || !applied) sync(true);
+      if (res.already || !applied) { UNNET_DIRTY[h.t.id + '|' + m.c[0]] = Date.now(); sync(true); }
       // Показываем заказ, в который вещь встала: касса выдаёт её оттуда [Фейбл «корректность», LOW-3].
-      return finishWrite(tok, inNo || m.no, { text: '✅ «нет» снято: ' + label + ' — вещь в заказе ' + (inNo || 'клиента') + ', в сумме.', cls: 'ok' });
+      return finishWrite(tok, inNo || m.no, { text: '✅ «нет» снято: ' + label + ' — вещь в заказе ' + (inNo || 'клиента') + ', в сумме.', cls: 'ok' }, null, ordOf(h.t.id, m.c[0], m.no));
     }
     if (res && res.changed) {
-      finishWrite(tok, m.no, { text: '⚠️ Вещь в таблице изменилась — «нет» не снято. Обновляю список, проверьте ещё раз.', cls: 'bad' });
+      finishWrite(tok, m.no, { text: '⚠️ Вещь в таблице изменилась — «нет» не снято. Обновляю список, проверьте ещё раз.', cls: 'bad' }, null, ordOf(h.t.id, m.c[0], m.no));
       sync(true);
       return;
     }
-    finishWrite(tok, m.no, unknownOut(res) ? { text: '⚠️ «нет»: ' + failText(res), cls: 'warn' } : { text: '⛔️ «нет» не снято. ' + failText(res), cls: 'bad' });
+    finishWrite(tok, m.no, unknownOut(res) ? { text: '⚠️ «нет»: ' + failText(res), cls: 'warn' } : { text: '⛔️ «нет» не снято. ' + failText(res), cls: 'bad' }, null, ordOf(h.t.id, m.c[0], m.no));
   }
 
   // ── окна ──────────────────────────────────────────────────────────────────────────────
@@ -2161,6 +2523,7 @@
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || BUSY || m.open.length < 2 || tooFresh() || checkHold() || invHold() || !cardInScope() || draftOn()) return;
     lastActivity = Date.now();
+    if (unnetWaits(CUR.h.t.id, m.c[0])) { afterWrite(m.no, { text: UNNET_WAIT_TXT, cls: 'warn' }); return; }
     var rows = m.open.slice(), on = rows.map(function () { return true; });
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox');
@@ -2217,9 +2580,17 @@
     // ⛔️ Окно — про ЭТУ карточку: за ним поиск мог открыть другой заказ (Enter в поле) — номера галочек там другие
     // [Фейбл, круг 2, LOW-2].
     var dtok = cardTok(), dno = m.no;
+    // ⛔️ Состав окна — снимком [Кодекс, круг 1 v6.6, CRIT-1]: пока окно открыто, итог фоновой записи (откат отметок, частичная запись)
+    // пересобирает карточку, и номер галочки указывал бы уже на ДРУГУЮ вещь. Состав сменился — окно закрываем, отмечать заново.
+    var dsnap = rows.map(function (r) { return itemKey(m.P, r); }).join('\n');
     ok.onclick = function () {
       if (BUSY) return;
       if (cardTok() !== dtok || !CUR.model || CUR.model.no !== dno) { closeDlg(); return; }
+      if (CUR.model.open.map(function (r) { return itemKey(CUR.model.P, r); }).join('\n') !== dsnap) {
+        closeDlg();
+        afterWrite(dno, { text: '⚠️ Состав заказа изменился, пока было открыто окно, — отметьте вещи ещё раз.', cls: 'warn' });
+        return;
+      }
       var take = []; on.forEach(function (v, i) { if (v) take.push(i); });
       if (take.length) give('part', take);
     };
@@ -2233,6 +2604,8 @@
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || BUSY || !cardInScope() || draftOn()) return;
     lastActivity = Date.now();
+    // У клиента в очереди запись — сразу словами, без окна (кнопка живая: серая молча ничего бы не объяснила) [Фейбл «сценарий», LOW-5].
+    if (wqClient(CUR.h.t.id, m.c[0])) { afterWrite(m.no, { text: UNNET_Q_TXT, cls: 'warn' }); return; }
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox');
     box.style.maxWidth = '640px';
@@ -2409,11 +2782,13 @@
   });
   // Выбрана прошлая закупка, а 10 мин никто ничего не делает — касса сама на самой свежей, поле пустое [владелец
   // 27.09.2026: «с утра пришёл клиент по старой закупке, работник её открыл, и потом старая закупка до конца дня будет
-  // висеть»]. Набранное заново не ищем: тот же номер в свежей — чужой заказ. Пока пишется выдача, ждёт досылка или открыто
-  // окно — не трогаем. Телефон спал — проверка по пробуждению, раньше, чем оно засчитается за действие кассира.
+  // висеть»]. Набранное заново не ищем: тот же номер в свежей — чужой заказ. Пока пишется «снять нет» (BUSY) или открыто окно —
+  // не трогаем. Очередь фоновых записей НЕ держит [v6.6]: её итог придёт строкой или полосой на любом экране, а застрявшая досылка
+  // (повторы до 6 ч) иначе держала бы прошлую закупку весь день [Фейбл «очередь», круг 1 v6.6, LOW]. Телефон спал — проверка по
+  // пробуждению, раньше, чем оно засчитается за действие кассира.
   var IDLE_BACK = 10 * 60000;
   function idleBack() {
-    if (!SEL || DENIED || !TABLES || !TABLES.list.length || BUSY || PENDS.length || dlgOpen()) return false;
+    if (!SEL || DENIED || !TABLES || !TABLES.list.length || BUSY || dlgOpen()) return false;
     if (Date.now() - lastActivity < IDLE_BACK) return false;
     keepFail();
     typed = ''; pendingSearch = ''; renderNum();
@@ -2429,6 +2804,9 @@
     if (DENIED) return;
     idleBack();
     renderSync();
+    renderWq();
+    if (SPQ.length && !spTimer && !spBusy) spFlush();
+    if (WQ.length && !wqBusy && !wqTimer) wqKick(0);
     if (document.visibilityState === 'visible' && Date.now() - lastActivity < ACTIVE_FOR && syncDue()) sync();
   }, 30000);
 
@@ -2449,6 +2827,16 @@
     }
     try {
       DB = await idbOpen();
+      // Очередь записей прошлого сеанса (закрыли вкладку, перезапустили компьютер) — досылаем тем же кодом [v6.6].
+      var saved = await idbList('wq_');
+      saved.filter(function (j) { return j && j.n && j.action && j.params; }).sort(function (x, y) { return (x.t0 || 0) - (y.t0 || 0); })
+        .forEach(function (j) { if (!WQ.some(function (x) { return x.n === j.n; })) { j.due = 0; j.fly = 0; WQ.push(j); } });
+      var st0 = await idbGet('sticky');                         // отказы записи, которые кассир ещё не закрыл «×» [v6.6]
+      if (Array.isArray(st0) && st0.length) {
+        STICKY = st0.filter(function (x) { return x && typeof x.text === 'string' && /^(bad|warn)$/.test(String(x.cls)); }).concat(STICKY).slice(-STICKY_MAX);
+        renderSticky();
+      }
+      renderWq();
       var tb = await idbGet('tables');
       if (tb && tb.list && tb.list.length) {
         TABLES = { at: tb.at, list: tb.list, checked: 0 };     // из памяти — не сверен в этом сеансе
@@ -2458,7 +2846,12 @@
     if (DENIED) return;
     renderTbl(); renderSync(); if (!CUR) showHome();
     sync();
+    if (WQ.length) wqKick(0);
   })();
+  // Закрыть вкладку, пока склад не подтвердил выдачу, — браузер переспросит [v6.6]: очередь и так в памяти браузера и уйдёт при
+  // следующем открытии кассы, но кассир должен знать, что запись ещё не на складе.
+  $('wq').onclick = function () { try { $('head').scrollTop = 0; $('main').scrollTop = 0; window.scrollTo(0, 0); } catch (e) {} };
+  window.addEventListener('beforeunload', function (e) { if (WQ.length && !DENIED) { var w = 'Склад ещё не подтвердил выдачу'; e.preventDefault(); e.returnValue = w; return w; } });
 
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) {}
   // Новая версия страницы: сторож тянет её в фоне; при возврате в кассу просим проверить обновление.
