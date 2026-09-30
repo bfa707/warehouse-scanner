@@ -35,7 +35,8 @@
   :root { --ink: #18202c; --mute: #6b7280; --line: #e3e7ee; --bg: #f4f6f9; --card: #ffffff; --soft: #f3f4f6;
           --ok: #0b8043; --okbg: #e9f7ef; --okline: #d3ebdc; --oktx: #4a735b;
           --warn: #9a5b00; --warnbg: #fff4e0; --warnline: #e8a33d; --bad: #b00020; --badbg: #fde6e9;
-          --blue: #1a73e8; --bluebg: #eef3fe; }
+          --blue: #1a73e8; --bluebg: #eef3fe;
+          --caret: #9aa3b2; }   /* мигающий курсор поля — светло-серый, как подсказка [владелец 30.09.2026, v6.11] */
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -62,12 +63,12 @@
   /* Мигающий курсор на телефоне [владелец 28.09.2026: «Если ставлю курсор в поле поиска — курсор должен там мигать»]: поле
      там только показывает набранное кнопками-цифрами (своя клавиатура, системная не выезжает), и родного курсора у него нет —
      рисуем свой за последней цифрой, пока цифры на экране. */
-  #caret { position: absolute; display: none; width: 3px; border-radius: 2px; background: var(--ink); pointer-events: none;
+  #caret { position: absolute; display: none; width: 3px; border-radius: 2px; background: var(--caret); pointer-events: none;
            animation: caretblink 1s step-end infinite; }
   @keyframes caretblink { 50% { opacity: 0; } }
   #num { flex: 1; min-width: 0; width: 100%; font: inherit; font-size: 32px; font-weight: 800; letter-spacing: .5px;
          height: 56px; padding: 0 14px; border: 3px solid var(--blue); background: var(--bluebg); border-radius: 14px;
-         color: var(--ink); outline: none; }
+         color: var(--ink); caret-color: var(--caret); outline: none; }
   #num::placeholder { color: #9aa3b2; font-weight: 600; font-size: 20px; letter-spacing: 0; }
   #abc { flex: none; height: 56px; min-width: 60px; border: 0; border-radius: 14px; background: var(--soft);
          font-size: 20px; font-weight: 800; color: var(--ink); cursor: pointer; }
@@ -411,7 +412,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.10 · 30.09.2026';
+  var VER = 'v6.11 · 30.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
