@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Мост тест</title>
+
+<!-- 🧪 ПРОБА «МОСТА» — шаг 0 концепта warehouse/docs/koncept-sklad-kak-kassa-30092026.md (30.09.2026).
+     [владелец: «делай» — сначала замеры и проверка на одном айфоне]
+     Страница проверяет на НАСТОЯЩЕМ айфоне то, что нельзя решить чтением кода:
+       1) память своей страницы (IndexedDB, копия страницы у сторожа) переживает закрытие, перезагрузку и ночь;
+       2) рамка Google отдаёт наверх порт MessageChannel — «мост» работает, и сколько он поднимается;
+       3) что доезжает через мост: значения, ошибки, большие ответы, долгий вызов, жизнь после блокировки экрана;
+       4) большая страница (~2 МБ кода) запускается у себя в рамке srcdoc и blob:, видит память загрузчика и зовёт мост;
+       5) CSP из концепта не ломает встроенный код, обработчики onclick и запрос к Google.
+     Данных склада и клиентов здесь НЕТ: мост — отдельный пробный проект Google без доступа к таблицам.
+     Ревью Фейбла 30.09.2026 (GO с правками 0/3/6/5): «готово» — только после всех проверок; стёртая память называется
+     прямо; время запуска рамки отдельно от ожидания моста; главное число — от тапа; сбой сторожа виден. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Мост тест">
+<meta name="theme-color" content="#0d47a1">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://script.google.com">
+
+<style>
+  body { margin: 0; background: #fff; color: #1a1a1a;
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 17px; line-height: 1.4;
+         padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  .card { border-radius: 14px; padding: 18px 16px; font-size: 22px; font-weight: 700; margin-bottom: 14px; }
+  .card small { display: block; font-size: 16px; font-weight: 500; margin-top: 8px; }
+  .wait { background: #eee; } .ok { background: #e3f4e4; color: #1b5e20; } .new { background: #e3eefb; color: #0d47a1; }
+  .warn { background: #fff4d6; color: #7a5200; } .bad { background: #fde4e4; color: #a30000; }
+  .facts div { padding: 6px 0; border-bottom: 1px solid #eee; font-size: 15px; }
+  button { display: block; width: 100%; font-size: 18px; font-weight: 600; padding: 14px; margin: 14px 0 0;
+           border: 0; border-radius: 12px; background: #0d47a1; color: #fff; }
+  button.ghost { background: #f1f1f1; color: #555; }
+  ol { padding-left: 22px; } li { margin: 6px 0; }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 13px; background: #f6f6f6; padding: 10px; border-radius: 8px; }
+  h3 { margin: 22px 0 6px; font-size: 18px; }
+  #frames { position: fixed; left: -2000px; top: 0; width: 10px; height: 10px; overflow: hidden; }
+  #frames iframe { width: 10px; height: 10px; border: 0; }
+</style>
+</head>
+<body>
+
+<div id="verdict" class="card wait">Проверяю… (1–2 минуты)</div>
+<div id="facts" class="facts"></div>
+<button id="copy" type="button">Копировать отчёт</button>
+<div id="copied" style="text-align:center;color:#0d47a1;min-height:22px;margin-top:6px"></div>
+
+<h3>Как проверить</h3>
+<ol>
+  <li>Откройте эту страницу в <b>Safari</b> → «Поделиться» (квадрат со стрелкой; на новых iOS он может быть в меню «•••» внизу) →
+      «На экран „Домой“». Если есть переключатель «Открыть как веб-приложение» — включите. → «Добавить».</li>
+  <li>Откройте синюю иконку <b>«Мост тест»</b> и дождитесь слова <b>«Готово»</b> вверху (1–2 минуты).</li>
+  <li>Закройте её совсем (смахните вверх из списка приложений), откройте снова и снова дождитесь «Готово».</li>
+  <li>Заблокируйте телефон на 5–10 минут, разблокируйте — на экране появится строка «после паузы». </li>
+  <li>Нажмите «Копировать отчёт» и пришлите мне в чат. Не копируется — 2–3 скриншота, прокручивая вниз.</li>
+  <li>Завтра утром откройте иконку ещё раз, дождитесь «Готово» и снова пришлите отчёт.</li>
+</ol>
+<p>Если вверху красное — всё равно пришлите отчёт: это тоже ответ.</p>
+
+<h3>История запусков</h3>
+<pre id="hist">—</pre>
+<button id="reset" class="ghost" type="button">Начать тест заново</button>
+<div id="frames"></div>
+
+<script>
+(function () {
+  'use strict';
+  var VER = 'most-test v2 · 30.09.2026';
+  var EXEC = 'https://script.google.com/macros/s/AKfycbwVn6Qo0itoRp0XN2MaRkHSgFK5t7roKOlBzIS1hkkr4icjgUgOcSVHFtKVHrYKGd9Q/exec';
+  var T0 = performance.now();          // от начала перехода (тапа по иконке) до первой строки этого скрипта
+  var MODE = (window.navigator.standalone === true ||
+              (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'icon' : 'safari';
+  var SW = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+  var KEY = 'mt_state_' + MODE, PAGE = 'mt_page_' + MODE;
+  var $ = function (id) { return document.getElementById(id); };
+  var R = {}, ORDER = [], PENDING = {};
+  var report = '', DB = null, st = null, finished = false;
+
+  function ms(t) { return Math.round(t) + ' мс'; }
+  function sec(t) { return (Math.round(t / 100) / 10) + ' с'; }
+  function put(k, v) { if (ORDER.indexOf(k) < 0) ORDER.push(k); R[k] = v; render(); }
+  function fmt(t) {
+    var d = new Date(t), p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function hash(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
+  function withTimeout(pr, t, what) {
+    return Promise.race([pr, new Promise(function (_, rej) { setTimeout(function () { rej(new Error((what || 'нет ответа') + ' за ' + t / 1000 + ' с')); }, t); })]);
+  }
+  // Проверка идёт: имя висит в «осталось», пока не закончится (успехом или ошибкой).
+  function track(name, pr) { PENDING[name] = 1; render(); return pr.then(function () { delete PENDING[name]; render(); }, function () { delete PENDING[name]; render(); }); }
+
+  // ── память: localStorage + IndexedDB ────────────────────────────────────────────────────────
+  function idbOpen() {
+    return withTimeout(new Promise(function (res, rej) {
+      var r = indexedDB.open('most-test', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+      r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
+      r.onblocked = function () { rej(new Error('blocked')); };
+    }), 5000, 'база не открылась');
+  }
+  function idbGet(k) {
+    return withTimeout(new Promise(function (res, rej) {
+      var q = DB.transaction('kv', 'readonly').objectStore('kv').get(k);
+      q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); };
+    }), 8000, 'чтение базы');
+  }
+  function idbPut(k, v) {
+    return withTimeout(new Promise(function (res, rej) {
+      var tx = DB.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k);
+      tx.oncomplete = function () { res(); }; tx.onerror = tx.onabort = function () { rej(tx.error); };
+    }), 15000, 'запись базы');
+  }
+
+  // Выдуманная «страница аппки» ~2 МБ живого КОДА (функции с телами, как у склада; комментарии разбираются
+  // в разы дешевле — ревью Фейбла, HIGH-3) + 150 кнопок с onclick. Первый скрипт сразу говорит «я началась»,
+  // затем проверяет, что видит память ЗАГРУЗЧИКА (его метку в localStorage и в базе most-test), ведёт свой
+  // счётчик запусков и только после подъёма моста зовёт сервер.
+  function makePage() {
+    var code = [], i = 0, size = 0;
+    while (size < 1900000) {
+      var f = 'function f' + i + '(a,b){var x=a+b*' + (i % 97) + ';if(x>' + (i % 13) + '){return x-1}else{return [x,a,b,"s' + i + '"].join(",")}}\n';
+      code.push(f); size += f.length; i++;
+    }
+    var btns = ''; for (var k = 0; k < 150; k++) btns += '<button id="b' + k + '" onclick="window.__c=(window.__c||0)+1">кнопка ' + k + '</button>';
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' + btns +
+      '<script>try{parent.MT_START(window.name)}catch(e){}<\/script><script>\n' + code.join('') +
+      '(function(){var res={how:window.name||"?"},left=2;' +
+      'function done(){if(--left)return;parent.MT_INNER(res);}' +
+      'var nonce=parent.MT_NONCE;' +
+      'try{res.ls=localStorage.getItem("mt_nonce")===nonce?"видит память загрузчика":"не видит";' +
+      'var n=Number(localStorage.getItem("mt_inner_n")||0)+1;localStorage.setItem("mt_inner_n",String(n));res.n=n;}catch(e){res.ls="ошибка "+e.message}' +
+      'try{var q=indexedDB.open("most-test",1);q.onsuccess=function(){try{var g=q.result.transaction("kv","readonly").objectStore("kv").get("mt_nonce");' +
+      'g.onsuccess=function(){res.idb=g.result===nonce?"видит базу загрузчика":"не видит";q.result.close();done()};g.onerror=function(){res.idb="ошибка";done()}}catch(e){res.idb="ошибка "+e.message;done()}};' +
+      'q.onerror=function(){res.idb="ошибка";done()};}catch(e){res.idb="ошибка "+e.message;done()}' +
+      'document.getElementById("b7").click();res.click=window.__c===1?"ок":"не сработал";' +
+      'res.fn=typeof f1000==="function"&&f1000(1,2)!==undefined?"ок":"нет";' +
+      'done();})();\n<\/script></body></html>';
+  }
+
+  // ── мост ────────────────────────────────────────────────────────────────────────────────────
+  var NONCE = (function () { try { var a = new Uint8Array(12); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); } catch (e) { return String(Math.random()).slice(2); } })();
+  window.MT_NONCE = NONCE;
+  var PORT = null, SEQ = 0, WAIT = {}, QUEUE = [], bridgeFrame = null, portWaiters = [];
+  var ORIGIN_RE = /^https:\/\/n-[a-z0-9-]+-script\.googleusercontent\.com$/;
+
+  // Вызов через мост: не более одной передачи, без повторов. До подъёма моста — ждёт в очереди.
+  function call(fn, args, waitMs) {
+    return new Promise(function (resolve, reject) {
+      var job = { fn: fn, args: args || [], resolve: resolve, reject: reject, t: 0 };
+      var to = setTimeout(function () {
+        if (!job.sent) { job.dead = true; reject(new Error('не отправлено: мост не поднялся')); }
+        else { delete WAIT[job.id]; reject(new Error('нет ответа за ' + (waitMs || 60000) / 1000 + ' с')); }
+      }, waitMs || 60000);
+      job.done = function () { clearTimeout(to); };
+      if (PORT) send(job); else QUEUE.push(job);
+    });
+  }
+  function send(job) {
+    if (job.dead) return;
+    job.id = ++SEQ; job.sent = true; job.t = performance.now(); WAIT[job.id] = job;
+    PORT.postMessage({ id: job.id, fn: job.fn, args: job.args });
+  }
+  function onPortMessage(ev) {
+    var m = ev.data || {}, job = WAIT[m.id];
+    if (!job) { put('ответ после срока', 'пришёл ответ, которого уже не ждали (id ' + m.id + ')'); return; }
+    delete WAIT[m.id]; job.done();
+    var dt = performance.now() - job.t;
+    if (m.err) { var e = new Error(m.err.message); e.name = m.err.name; e.ms = dt; job.reject(e); }
+    else job.resolve({ v: m.v, ms: dt });
+  }
+  window.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object' || (d.most !== 'port' && d.most !== 'port-fail')) return;
+    if (d.n !== NONCE) { put('мост: чужой код', 'пришло сообщение с чужим разовым кодом — отброшено'); return; }
+    if (d.most === 'port-fail') { put('мост', '❌ рамка Google не смогла отдать порт: ' + d.err); return; }
+    var orgOk = ORIGIN_RE.test(ev.origin);
+    // Рамка страницы Google вложена: наша рамка (script.google.com) → песочница → рамка пользователя.
+    var chain = 'нет';
+    try {
+      var w = ev.source;
+      for (var dpt = 0; dpt < 4 && w; dpt++) {
+        if (w === bridgeFrame.contentWindow) { chain = 'наша рамка на ' + dpt + ' уровне вверх'; break; }
+        if (w.parent === w) break;
+        w = w.parent;
+      }
+    } catch (e) { chain = 'ошибка ' + e.message; }
+    put('мост: источник', ev.origin + (orgOk ? ' ✓' : ' ✗ не похож на рамку Google') + ' · цепочка: ' + chain);
+    if (PORT) { put('мост: второй порт', 'пришёл второй порт — отброшен (принимаем один раз)'); return; }
+    if (!orgOk || !ev.ports || !ev.ports[0]) { put('мост', '❌ порт не принят (источник или порт не те)'); return; }
+    PORT = ev.ports[0]; PORT.onmessage = onPortMessage; if (PORT.start) PORT.start();
+    put('мост', '✅ поднялся через ' + sec(performance.now()) + ' от тапа по иконке');
+    var q = QUEUE; QUEUE = []; q.forEach(send);
+    portWaiters.forEach(function (f) { f(); }); portWaiters = [];
+  });
+  function startBridge() {
+    bridgeFrame = document.createElement('iframe');
+    bridgeFrame.src = EXEC + '?p=bridge&n=' + NONCE + '&o=' + encodeURIComponent(location.origin);
+    $('frames').appendChild(bridgeFrame);
+  }
+  function whenBridge(t) {
+    return withTimeout(new Promise(function (res) { if (PORT) res(); else portWaiters.push(res); }), t, 'мост не поднялся');
+  }
+
+  // ── проверки через мост ─────────────────────────────────────────────────────────────────────
+  async function bridgeTests() {
+    try { await whenBridge(90000); } catch (e) { put('мост', '❌ ' + e.message); return; }
+    var times = [];
+    for (var i = 0; i < 5; i++) {
+      try { var r = await call('mpPing', []); times.push(Math.round(r.ms)); } catch (e) { times.push('ошибка'); }
+    }
+    put('5 вызовов подряд', times.join(' · ') + ' мс');
+    try {
+      var sample = [false, 0, '', null, [1, [2, 'три']], { a: false, b: 0, c: 'ё' }];
+      var e1 = await call('mpEcho', [sample]);
+      put('значения в массиве', JSON.stringify(e1.v) === JSON.stringify(sample) ? '✅ доехали как есть' : '❌ исказились: ' + JSON.stringify(e1.v));
+    } catch (e) { put('значения в массиве', '❌ ' + e.message); }
+    var singles = [false, 0, null, '', undefined], got = [];
+    for (var s = 0; s < singles.length; s++) {
+      try {
+        var one = await call('mpEcho', singles[s] === undefined ? [] : [singles[s]]);
+        var exp = singles[s] === undefined ? 'undefined' : JSON.stringify(singles[s]);
+        var act = one.v === undefined ? 'undefined' : JSON.stringify(one.v);
+        got.push(exp + (act === exp ? ' ✓' : ' → ' + act));
+      } catch (e) { got.push('ошибка ' + e.message); }
+    }
+    put('одиночные значения', got.join(' · '));
+    try { await call('mpBoom', []); put('ошибка сервера', '❌ не пришла как ошибка'); }
+    catch (e) { put('ошибка сервера', (e.message.indexOf('проба ошибки') >= 0 ? '✅ ' : '⚠️ ') + e.name + ': ' + e.message); }
+    var sizes = [256, 1024, 2048, 4096], out = [];
+    for (var j = 0; j < sizes.length; j++) {
+      try { var b = await call('mpBig', [sizes[j]], 120000); out.push(sizes[j] + ' КБ ' + ((b.v || '').length === sizes[j] * 1024 ? '✓' : '✗') + ' ' + sec(b.ms)); }
+      catch (e) { out.push(sizes[j] + ' КБ ✗ ' + e.message); }
+    }
+    put('большие ответы (почти не сжимаются)', out.join(' · '));
+    try { var sl = await call('mpSlow', [20000], 60000); put('долгий вызов (20 с)', '✅ ответ через ' + sec(sl.ms)); }
+    catch (e) { put('долгий вызов (20 с)', '❌ ' + e.message); }
+  }
+
+  // ── страница у себя: srcdoc и blob: ─────────────────────────────────────────────────────────
+  function runInner(how, text) {
+    return withTimeout(new Promise(function (res) {
+      var f = document.createElement('iframe'), t0 = performance.now(), started = 0;
+      window.MT_START = function () { started = performance.now() - t0; };
+      window.MT_INNER = function (r) { r.started = started; r.total = performance.now() - t0; res(r); };
+      f.name = how;
+      if (how === 'srcdoc') f.srcdoc = text;
+      else f.src = URL.createObjectURL(new Blob([text], { type: 'text/html' }));
+      $('frames').appendChild(f);
+    }), 120000, how + ' не ответила');
+  }
+  async function innerTests(text) {
+    var hows = ['srcdoc', 'blob'];
+    for (var i = 0; i < hows.length; i++) {
+      try {
+        var r = await runInner(hows[i], text);
+        put('страница 2 МБ кода в ' + hows[i], 'первый скрипт через ' + ms(r.started) + ' · весь код разобран через ' + ms(r.total) +
+            ' · память: ' + r.ls + ' · база: ' + r.idb + ' · onclick ' + r.click + ' · функции ' + r.fn + ' · её запуск № ' + r.n);
+      } catch (e) { put('страница 2 МБ кода в ' + hows[i], '❌ ' + e.message); }
+    }
+    // Вызов сервера из такой страницы — только когда мост уже поднят (иначе меряем ожидание моста).
+    try { await whenBridge(90000); var c = await call('mpPing', []); put('вызов из страницы через мост', '✅ ' + ms(c.ms)); }
+    catch (e) { put('вызов из страницы через мост', '❌ ' + e.message); }
+  }
+
+  // ── CSP из концепта ─────────────────────────────────────────────────────────────────────────
+  function cspTest() {
+    var pol = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://lh3.googleusercontent.com; " +
+              "connect-src 'self' https://script.google.com https://script.googleusercontent.com; frame-src https://script.google.com";
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + pol + '"></head><body>' +
+      '<button id="x" onclick="window.__c=1">x</button><script>' +
+      'var res={v:[]};document.addEventListener("securitypolicyviolation",function(e){res.v.push(e.violatedDirective)});' +
+      'res.inline="ок";document.getElementById("x").click();res.onclick=window.__c===1?"ок":"не сработал";' +
+      'var im=new Image();im.onload=function(){res.img="ок"};im.onerror=function(){res.img="ошибка"};im.src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";' +
+      'fetch("' + EXEC + '?p=txt").then(function(r){return r.text()}).then(function(t){res.fetch=/^ok /.test(t)?"ок":"странный ответ"})' +
+      '.catch(function(e){res.fetch="заблокирован: "+e.message}).then(function(){setTimeout(function(){parent.MT_CSP(res)},300)});' +
+      '<\/script></body></html>';
+    return withTimeout(new Promise(function (res) {
+      window.MT_CSP = res;
+      var f = document.createElement('iframe'); f.srcdoc = html; $('frames').appendChild(f);
+    }), 60000, 'CSP не ответила').then(function (r) {
+      put('CSP концепта (скрипт, onclick, картинка data:, запрос к Google; рамку моста и фото lh3 не проверяли)',
+          'скрипт ' + r.inline + ' · onclick ' + r.onclick + ' · картинка ' + r.img + ' · запрос ' + r.fetch +
+          (r.v.length ? ' · нарушения: ' + r.v.join(', ') : ' · нарушений нет'));
+    }, function (e) { put('CSP концепта', '❌ ' + e.message); });
+  }
+
+  // ── version.json мимо сторожа ───────────────────────────────────────────────────────────────
+  function versionTest() {
+    var t = performance.now();
+    return withTimeout(fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }), 5000, 'version.json')
+      .then(function (j) { put('version.json (сеть, мимо сторожа)', (j && j.v ? j.v : '?') + ' за ' + ms(performance.now() - t)); },
+            function (e) { put('version.json (сеть, мимо сторожа)', 'нет: ' + e.message + ' (без интернета — это нормально)'); });
+  }
+
+  // ── сторож ──────────────────────────────────────────────────────────────────────────────────
+  function swTest() {
+    if (!('serviceWorker' in navigator)) { put('сторож', '❌ браузер не умеет сторожа'); return Promise.resolve(); }
+    return navigator.serviceWorker.register('sw.js').then(function (reg) {
+      var s = reg.active ? 'работает' : (reg.installing ? 'ставится' : (reg.waiting ? 'ждёт' : '?'));
+      return (window.caches ? caches.has('most-test-v1') : Promise.resolve(false)).then(function (has) {
+        put('сторож', s + ' · копия страницы в телефоне: ' + (has ? 'есть' : 'пока нет'));
+      });
+    }, function (e) { put('сторож', '❌ не зарегистрировался: ' + (e && e.message || e)); });
+  }
+
+  // ── после блокировки экрана ─────────────────────────────────────────────────────────────────
+  var hiddenAt = 0, pauseN = 0;
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (!hiddenAt) return;
+    var away = Date.now() - hiddenAt; hiddenAt = 0;
+    if (away < 30000) return;
+    var label = 'после паузы ' + (++pauseN) + ' (' + Math.round(away / 60000 * 10) / 10 + ' мин)';
+    if (!PORT) { put(label, '❌ моста нет'); return; }
+    put(label, 'проверяю…');
+    call('mpPing', [], 15000).then(function (r) { put(label, '✅ мост жив, ответ ' + ms(r.ms)); },
+                                   function (e) { put(label, '❌ ' + e.message); });
+  });
+
+  // ── итог на экране ──────────────────────────────────────────────────────────────────────────
+  function render() {
+    var v = $('verdict'), bad = [], left = Object.keys(PENDING);
+    ORDER.forEach(function (k) { if (/❌/.test(R[k])) bad.push(k); });
+    var head, cls, sub = '';
+    if (!st || !finished) {
+      head = 'Проверяю… не закрывайте'; cls = 'wait';
+      sub = left.length ? 'Осталось: ' + left.join(', ') : '';
+    } else if (MODE === 'safari') {
+      head = 'Готово, но открыто в Safari'; cls = 'warn';
+      sub = 'Добавьте страницу на экран «Домой» (шаг 1 ниже) и откройте синюю иконку.';
+    } else if (st.lost) {
+      head = 'Готово · ❌ память пропала · запуск ' + st.n; cls = 'bad';
+      sub = 'Пропало: ' + st.lost + '. Нажмите «Копировать отчёт» и пришлите.';
+    } else if (st.n === 1 && SW) {
+      head = 'Готово · ❌ похоже, память стёрлась'; cls = 'bad';
+      sub = 'Данных нет, хотя копия страницы в телефоне уже была. Пришлите отчёт сразу, не перезапуская.';
+    } else if (st.n === 1) {
+      head = 'Готово · запуск 1, память была пустой'; cls = 'new';
+      sub = 'Если вы открываете иконку впервые — всё правильно: закройте её и откройте снова. ' +
+            'Если уже открывали раньше — значит память стёрлась: пришлите отчёт сразу, не перезапуская.';
+    } else if (bad.length) {
+      head = 'Готово · ❌ есть сбои'; cls = 'bad'; sub = bad.join(', ') + '. Нажмите «Копировать отчёт» и пришлите.';
+    } else if (!SW) {
+      head = 'Готово · ⚠️ страница не из памяти телефона · запуск ' + st.n; cls = 'warn';
+      sub = 'Память цела, но сама страница пришла из интернета. Нажмите «Копировать отчёт» и пришлите.';
+    } else {
+      head = 'Готово · ✅ запуск ' + st.n + ', память цела'; cls = 'ok';
+      sub = 'Нажмите «Копировать отчёт» и пришлите.';
+    }
+    v.className = 'card ' + cls; v.textContent = head;
+    if (sub) { var s = document.createElement('small'); s.textContent = sub; v.appendChild(s); }
+    $('facts').innerHTML = '';
+    ORDER.forEach(function (k) { var d = document.createElement('div'); d.textContent = k + ': ' + R[k]; $('facts').appendChild(d); });
+    report = VER + ' · ' + head + (sub ? ' — ' + sub : '') + '\n' + ORDER.map(function (k) { return k + ': ' + R[k]; }).join('\n') +
+             '\nТелефон: ' + navigator.userAgent + '\nИстория:\n' + $('hist').textContent;
+  }
+
+  // ── запуск ──────────────────────────────────────────────────────────────────────────────────
+  async function run() {
+    startBridge();                                          // мост поднимается параллельно всему остальному
+    var nav = null; try { nav = performance.getEntriesByType('navigation')[0] || null; } catch (e) {}
+    put('открыто', (MODE === 'icon' ? 'с иконки' : 'в Safari') + ' · страница открылась через ' + ms(T0) + ' от тапа' +
+        ' · из памяти телефона: ' + (SW ? 'да' : 'нет') + (nav && typeof nav.transferSize === 'number' ? ' (скачано ' + nav.transferSize + ' Б)' : '') +
+        ' · интернет: ' + (navigator.onLine === false ? 'нет' : 'есть'));
+    var ls = null, lsErr = '';
+    try { ls = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { lsErr = e.message; }
+    var idbSt = null, page = null, idbErr = '', tR = performance.now();
+    try { DB = await idbOpen(); idbSt = await idbGet(KEY) || null; page = await idbGet(PAGE) || null; } catch (e) { idbErr = e.message; }
+    var readMs = performance.now() - tR;
+    var prev = (idbSt && (!ls || idbSt.n >= ls.n)) ? idbSt : ls;
+    st = { n: (prev ? prev.n : 0) + 1, first: prev ? prev.first : Date.now(), hist: (prev && prev.hist) || [] };
+    var lost = [];
+    if (st.n > 1) {
+      if (!ls) lost.push('localStorage' + (lsErr ? ' (' + lsErr + ')' : ''));
+      if (!idbSt) lost.push('база' + (idbErr ? ' (' + idbErr + ')' : ''));
+      if (!page || hash(page.text || '') !== page.h) lost.push('страница 2 МБ в базе');
+    }
+    st.lost = lost.join(', ');
+    var text = (page && hash(page.text || '') === page.h) ? page.text : null;
+    put('память', st.n === 1 ? 'пустая — первый запуск (или стёрлась)' : (st.lost ? '❌ пропало: ' + st.lost : 'цела · первая запись ' + fmt(st.first)) +
+        ' · прочитана за ' + ms(readMs));
+    if (!text) {
+      text = makePage();
+      try { var tw = performance.now(); await idbPut(PAGE, { text: text, h: hash(text) }); put('страница 2 МБ', 'записана в базу за ' + ms(performance.now() - tw)); }
+      catch (e) { put('страница 2 МБ', '❌ не записалась: ' + e.message); }
+    } else put('страница 2 МБ', 'прочитана из базы целой (' + Math.round(text.length / 1024) + ' КБ)');
+    // Метка загрузчика для внутренней страницы: она должна увидеть ИМЕННО эту память (ревью Фейбла, MED-6).
+    try { localStorage.setItem('mt_nonce', NONCE); } catch (e) {}
+    try { if (DB) await idbPut('mt_nonce', NONCE); } catch (e) {}
+    st.hist.push({ t: Date.now(), sw: SW, lost: st.lost, on: navigator.onLine !== false, t0: Math.round(T0) });
+    if (st.hist.length > 30) st.hist = st.hist.slice(-30);
+    try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { put('память', '❌ localStorage не пишется: ' + e.message); }
+    try { if (DB) await idbPut(KEY, st); } catch (e) { put('память', '❌ база не пишется: ' + e.message); }
+    $('hist').textContent = st.hist.map(function (h, i) {
+      return (st.n - st.hist.length + i + 1) + ') ' + fmt(h.t) + ' · из памяти: ' + (h.sw ? 'да' : 'нет') + ' · открылась ' + (h.t0 != null ? h.t0 + ' мс' : '?') +
+             ' · интернет: ' + (h.on ? 'есть' : 'нет') + (h.lost ? ' · ПРОПАЛО: ' + h.lost : '');
+    }).join('\n');
+    try {
+      if (navigator.storage && navigator.storage.persisted) put('защита от очистки', (await navigator.storage.persisted()) ? 'есть' : 'нет (просили — iOS решает сам)');
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+    } catch (e) {}
+    await Promise.all([
+      track('сторож', swTest()), track('version.json', versionTest()), track('CSP', cspTest()),
+      track('страница 2 МБ', innerTests(text)), track('мост', bridgeTests())
+    ]);
+    put('итог', 'все проверки закончились через ' + sec(performance.now()) + ' от тапа');
+    finished = true; render();
+  }
+
+  $('copy').onclick = function () {
+    var done = function (ok) { $('copied').textContent = ok ? 'Скопировано — вставьте в чат' : 'Не скопировалось — сделайте 2–3 скриншота'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(report).then(function () { done(true); }, function () { done(false); });
+    else {
+      var ta = document.createElement('textarea'); ta.value = report; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta); done(ok);
+    }
+  };
+  $('reset').onclick = function () {
+    if (!confirm('Стереть тестовые данные и начать с «Запуск 1»?')) return;
+    try { ['mt_state_icon', 'mt_state_safari', 'mt_nonce', 'mt_inner_n'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
+    try { if (DB) DB.close(); } catch (e) {}
+    var r = indexedDB.deleteDatabase('most-test');
+    r.onsuccess = r.onerror = r.onblocked = function () { location.reload(); };
+  };
+
+  run().catch(function (e) { put('ошибка проверки', '❌ ' + (e && e.message || e)); finished = true; render(); });
+})();
+</script>
+</body>
+</html>
