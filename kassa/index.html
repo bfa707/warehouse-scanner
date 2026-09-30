@@ -411,7 +411,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.9 · 30.09.2026';
+  var VER = 'v6.10 · 30.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -1632,7 +1632,7 @@
     // клиентки — всё заново. Поиск ТОЙ ЖЕ клиентки с её карточки (другой её заказ по номеру, её ник) — память та же: иначе отмеченный заказ
     // спрашивался бы снова [Кодекс, круг 2 v6.8, MED]. Только с карточки, открытой кассиром (prev.mine).
     var lvKeep = !!(prev && prev.lv && (keep || prev.mine));
-    CUR.lv = lvKeep ? prev.lv : { done: {} };
+    CUR.lv = lvKeep ? prev.lv : { done: {}, at: Date.now(), touched: 0 };   // at, touched — окно «Заказ не отмечен» молчит первые 5 с (v6.10)
     if (lvKeep && prev.flash && prev.flash.done && prev.no) CUR.lv.done[nk(prev.no)] = 1;
     // Выдача этого заказа ещё в очереди записей — видно и на заново открытой карточке [v6.6].
     var wqj = m.no ? wqOrder(h.t.id, c[0], m.no) : null;
@@ -2584,6 +2584,14 @@
   // Окно открыто — фокус ни на чём: случайная клавиша не закроет ни окно, ни заказ, а Enter/пробел не «щёлкнут» вещь
   // или кнопку, на которой фокус остался [Фейбл «сценарий» HIGH-2, «гонки» MED-5].
   var dlgAt = 0;
+  // Нажатие на карточке (вещь, фото, «Снять «нет»», кнопки выдачи — и серые, «Открыть этот заказ», палец по вещам) — кассир с ней работает:
+  // окно «Заказ не отмечен» спросит и в первые 5 с с её показа (v6.10). Ловим начало нажатия, а не только click: серая кнопка click не
+  // рождает, касание с движением пальца — тоже [Кодекс, круг 1 v6.10, HIGH: нажал серую «Забрала всё», ушёл за 2 с — окна не было]; click —
+  // ещё и Enter/пробел на кнопке. Цифры, поле и окна — не карточка.
+  var touchCard = function (e) {
+    if (CUR && CUR.kind === 'card' && CUR.lv && e.target && e.target.closest && e.target.closest('#head, #out, #acts')) CUR.lv.touched = 1;
+  };
+  ['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(function (t) { document.addEventListener(t, touchCard, { capture: true, passive: true }); });
   function dlgShow() {
     var d = $('dlg'); d.className = 'on'; dlgAt = Date.now();
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
@@ -2707,9 +2715,14 @@
   // Неотмеченный заказ: { m, no, n, sum } — сначала тот, что на экране, потом другие заказы клиентки с вещами к выдаче, и те, что кассир
   // не открывал [владелец 30.09.2026: «ДА» — спрашивать и про второй заказ, который кассир не открывал: отдал и не отметил или забыл отдать;
   // до v6.9 — только открытые на этой карточке].
+  // Карточку открыли и сразу ушли — меньше 5 с на экране и ни одного нажатия на ней: кассир ошибся номером, окно не спрашивает [владелец
+  // 30.09.2026: «Не показывать окно, если карточка простояла меньше 5 секунд и на ней ничего не нажимали? — ДА»]. Время и нажатия — у
+  // клиентки (CUR.lv): поиск той же клиентки с её карточки их не сбрасывает. Отдать вещи за 5 с нельзя — забытую отметку это не пропустит.
+  var LEAVE_QUIET = 5000;
   function unmarked() {
     if (!CUR || CUR.kind !== 'card' || !CUR.model || !CUR.h || DENIED || !cardInScope() || !CUR.mine) return null;
     var m = CUR.model, lv = CUR.lv || { done: {} };
+    if (lv.at && !lv.touched && Date.now() - lv.at < LEAVE_QUIET) return null;
     // на экране — «после выдачи» (flash.done) или уже отмечен — не спрашиваем
     if (m.no && m.open.length && !(CUR.flash && CUR.flash.done) && !lv.done[nk(m.no)]) return { m: m, no: m.no, n: m.open.length, sum: m.sum };
     var fr = m.frames || [];
