@@ -412,7 +412,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.11 · 30.09.2026';
+  var VER = 'v6.12 · 30.09.2026';
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -2763,9 +2763,10 @@
     box.appendChild(el('h3', null, 'Заказ ' + u.no + ' не отмечен'));
     box.appendChild(el('div', 'sub', m.c[0] + ' · ' + things(u.n) + ' · ' + eur(u.sum) + ' — клиентка забрала заказ?'));
     var ft = el('div', 'dlgft lv');
-    var skip = el('button', 'btn no lvskip', 'Не выдавали — искать дальше');
-    var part = el('button', 'btn lvpart', 'Не забрала всё…');
-    var all = el('button', 'btn ok lvall', '✅ Забрала всё');
+    // Подписи кнопок — словами владельца [30.09.2026, v6.12: «Ничего не выдавали / Выдали, но забрала не всё / Выдали, забрала всё»].
+    var skip = el('button', 'btn no lvskip', 'Ничего не выдавали');
+    var part = el('button', 'btn lvpart', 'Выдали, но забрала не всё');
+    var all = el('button', 'btn ok lvall', 'Выдали, забрала всё');
     skip.type = part.type = all.type = 'button';
     ft.appendChild(skip);
     if (u.n > 1) ft.appendChild(part);
