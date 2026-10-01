@@ -297,7 +297,10 @@
   <div id="list" class="list"></div>
   <button id="showall" class="showall" type="button" style="display:none"></button>
 
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- 🔒 Библиотека камеры — СВОЕЙ копией рядом со страницей (html5-qrcode 2.3.8; sha256 сверен с npm 01.10.2026), а не с
+       jsdelivr [Кодекс и Фейбл «безопасность», круг 1 моста, MED]. Сканер живёт на bfa707.github.io вместе с кассой и мостом
+       склада (sklad2): чужой скрипт с CDN здесь читал бы их память и мог бы подменить сохранённую страницу аппки. -->
+  <script src="html5-qrcode.min.js"></script>
   <script>
     // Адрес склада (/exec) приходит параметром ?back=… от приложения. Он же —
     // и ссылка «← Назад», и база для запросов данных о товаре (action=lookup).

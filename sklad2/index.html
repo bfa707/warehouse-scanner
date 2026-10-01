@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<!-- 🔒 CSP [концепт моста, 4.5; Кодекс HIGH-3 и Фейбл MED-3 круга 2; Фейбл «безопасность», круг 1 пилота, LOW-1].
+     Страницу аппки загрузчик запускает в своей рамке (srcdoc) — она наследует эти правила. Скрипты, запросы и рамки — только
+     СВОЁ развёртывание склада (путь /exec) и ответы JSONP (macros/echo); картинки — только хосты Google (фото каталога: lh3,
+     lh7-rt и Диск, и своя дверь для запасной отметки смены картинкой); формы — никуда. Так запрос, картинка или рамка не
+     увезут данные на чужой адрес.
+     ⚠️ ЧЕГО CSP НЕ ДЕЛАЕТ [Фейбл «безопасность», круг 2 пилота, LOW-2]:
+      · 'unsafe-inline' нужен (встроенные onclick страницы) — от подмены кода она не защищает;
+      · img-src *.googleusercontent.com пускает и хосты рамок ЧУЖИХ проектов Apps Script, а macros/echo отдаёт кэш любого
+        проекта. Канала, где чужой увидел бы такой запрос, не известно, но «ни в чужой проект» CSP буквально не обещает;
+        сужать img-src нельзя — фото ездят с разных хостов Google;
+      · переход верхнего окна, window.open и ссылки target=_blank, WebRTC, dns-prefetch — не закрыть ничем.
+     Защита от этого прежняя — данные клиентов только через textContent.
+     Нарушения страница пишет в «Лог действий» (заменитель google.script.run, строка «мост: CSP не пустила») — адрес БЕЗ
+     хвоста запроса: в нём бывают ключ и код работника, а лог владелец пересылает в чаты. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec https://script.googleusercontent.com/macros/echo; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com https://drive.google.com https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec; connect-src 'self' https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec https://script.googleusercontent.com/macros/echo; frame-src https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>BERKONTI 2</title>
+
+<!-- ════════════════════════════════════════════════════════════════════════════════════════════════════
+     🌉 ЗАГРУЗЧИК ПИЛОТА «МОСТ» [владелец 30.09.2026: «как кардинально решить медленную загрузку»; 01.10.2026: пилот
+     — «Да», данные в телефонах — «Устраивает!»]. Концепт и два круга ревью: warehouse/docs/koncept-sklad-kak-kassa-30092026.md
+     (ветка docs/koncept-sklad-kak-kassa), серверная половина — warehouse/apps-script/bridge.js.
+
+     Чем отличается от sklad/ (нынешний ярлык). Тот каждый запуск просит у Google ВСЮ страницу (6–10 с) — её память
+     iPhone стирает. Этот хранит текст страницы в своей памяти (IndexedDB на github.io, она живёт — проба 30.09–01.10)
+     и запускает его у себя в рамке за доли секунды. С сервером страница говорит через «мост»: скрытую рамку Google
+     этого же развёртывания (дверь action=bridge за сторожем ключа), которая отдаёт порт MessageChannel и зовёт по нему
+     тот же google.script.run. Сервер, таблицы, замки, проверки — без изменений.
+
+     ПРАВИЛА (концепт 4.1–4.6, оба круга ревью):
+      1. Каждый вызов страницы уходит на сервер НЕ БОЛЕЕ ОДНОГО РАЗА; повтора после неизвестного исхода нет.
+      2. Ни одного вызова страницы, пока отпечаток моста не равен отпечатку запущенного текста. Не равен (выкладка или
+         откат) → скачать текст через мост → проверить отпечаток → сохранить → и только потом перезапустить страницу.
+      3. Вызов, не ушедший за T.cap (25 с), завершается «не отправлено» — сервер его не видел. Короткие сторожа страницы
+         «ответ не пришёл» (вход 12 с, бронь 12 с, предзагрузка 20 с, карточки 30 с, опрос инвойса 15 и 8 с) ждут, пока
+         мост держит вызов (whBrHeld_ в web-app.js) [Кодекс MED-2; Фейбл «протокол» LOW-2, круг 1].
+      4. Вызовы по пальцу — первыми; фоновые вызовы старта — через T.bg после «готов».
+      5. После возврата из фона (≥30 с) — эхо рамки (жива ли) и пустой пинг сервера (первый вызов после паузы iPhone
+         обрывает «HTTP 0» — проба 01.10.2026); вызовы страницы ждут ПЕРВОГО исхода пинга, но не дольше T.resumeHold.
+      6. Порт — только от рамки моста: разовый код, вид источника n-…-script.googleusercontent.com, цепочка до своей рамки.
+      7. Порта нет → JSONP-проба ключа (дверь bridge_ping): отказ — тем же текстом, что сегодня, и стираем данные клиентов.
+      8. Старый режим (ровно sklad/: страница Google в рамке) — при выключателе, сломанном мосте, несобравшейся странице.
+     ════════════════════════════════════════════════════════════════════════════════════════════════════ -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="BERKONTI 2">
+<meta name="application-name" content="BERKONTI 2">
+<meta name="theme-color" content="#ffffff">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://script.google.com">
+
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; z-index: 2; }
+  #frames { position: fixed; left: -3000px; top: 0; width: 10px; height: 10px; overflow: hidden; }
+  #frames iframe { width: 10px; height: 10px; border: 0; }
+  #splash { position: fixed; inset: 0; z-index: 5; background: #fff; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 22px; transition: opacity .3s ease; }
+  #splash.hide { opacity: 0; pointer-events: none; }
+  #splash img { width: 150px; height: 150px; animation: breathe 1.9s ease-in-out infinite; }
+  #splash .brand { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: #1a1a1a; }
+  #splash .st { font-size: 15px; color: #8a8f98; min-height: 20px; text-align: center; padding: 0 24px; }
+  @keyframes breathe { 0%,100% { opacity: .82; transform: scale(1); } 50% { opacity: 1; transform: scale(1.045); } }
+  #cover { position: fixed; inset: 0; z-index: 4; background: rgba(255,255,255,.94); display: none; flex-direction: column;
+           align-items: center; justify-content: center; text-align: center; padding: 24px;
+           font-size: 18px; font-weight: 600; color: #333; }
+  #cover.on { display: flex; }
+  #cover.stale { background: rgba(0,0,0,.28); justify-content: flex-end; padding-bottom: max(28px, env(safe-area-inset-bottom)); }
+  #cover.stale > div { background: #fff; border-radius: 14px; padding: 18px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  #cover button { font-size: 18px; font-weight: 700; padding: 14px 28px; border: 0; border-radius: 12px; background: #1a73e8; color: #fff; }
+  #note { position: fixed; left: 50%; top: max(6px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 4;
+          display: none; background: rgba(32,33,36,.86); color: #fff; font-size: 13px; padding: 5px 12px; border-radius: 14px;
+          pointer-events: none; white-space: nowrap; }
+  #note.on { display: block; }
+  #deny { position: fixed; inset: 0; z-index: 6; background: #fff; display: none; padding: 40px 22px; font-size: 18px;
+          line-height: 1.45; white-space: pre-line; color: #222; }
+  #deny.on { display: block; }
+</style>
+</head>
+<body>
+  <iframe id="app" title="BERKONTI · Склад" allow="camera; clipboard-read; clipboard-write; fullscreen"></iframe>
+  <div id="frames" aria-hidden="true"></div>
+  <div id="cover" role="status"></div>
+  <div id="note" role="status"></div>
+  <div id="deny" role="alert"></div>
+  <div id="splash"><img src="icon-512.png" alt=""><div class="brand">BERKONTI</div><div class="st" id="splash-st"></div></div>
+  <noscript>Включите JavaScript — без него склад не открывается.</noscript>
+  <script>
+  (function () {
+    'use strict';
+    // ── постоянные ─────────────────────────────────────────────────────────────────────────────────────────
+    var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
+    // Рамка моста — страница HtmlService: Google кладёт её на n-<…>-script.googleusercontent.com (проба 30.09–01.10).
+    var BR_ORIGIN_RE = /^https:\/\/n-[a-z0-9-]+-script\.googleusercontent\.com$/;
+    // Библиотека QR страницы — своей копией (та же 1.4.4, sha256 сверен с npm 01.10.2026): без чужого адреса и сети.
+    var QR_CDN = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+    // Сроки (мс). Стенд (tests/test-most-loader.js) укорачивает их через window.__WHL_T до запуска страницы.
+    var T = { port: 12000, probe: 10000, offline: 30000, broken: 40000, first: 45000, update: 60000, cap: 25000,
+              bg: 2000, finger: 1500, ready: 20000, hidden: 30000, echo: 3000, ping: 10000, resumeHold: 1500, fresh: 30000,
+              note: 1500, badTtl: 1800000, wipeAfter: 604800000, slow: 90000, silent: 20000, relGrace: 10000 };
+    try {
+      var _o = window.__WHL_T;
+      if (_o && typeof _o === 'object') for (var _k in _o) {
+        if (typeof _o[_k] === 'number' && typeof T[_k] === 'number') T[_k] = _o[_k];
+      }
+    } catch (e) {}
+    // Аргументы-«возраст» (мс от события до отправки): пока вызов ждал моста, возраст рос — досчитываем его в момент
+    // передачи [концепт 4.2; Кодекс, круг 2, HIGH-1]: attMark(код, вид, op, возраст), heartbeatPick(src, wid, простой, …).
+    var AGE_ARG = { attMark: 3, heartbeatPick: 2 };
+    var $ = function (id) { return document.getElementById(id); };
+    var now = function () { return Date.now(); };
+    var noop = function () {};
+    var TAP = now();
+    try { TAP = Math.round(performance.timeOrigin || performance.timing.navigationStart) || now(); } catch (e) {}
+
+    // ⛔️ Загрузчик в чужой рамке аппку не запускает [концепт 4.5]: порт моста получил бы тот, кто нас встроил.
+    if (window.top !== window) { document.body.textContent = 'Откройте склад иконкой «BERKONTI 2».'; return; }
+
+    // ── ключ, метка браузера, признаки запуска — как у sklad/ (разбор там) ─────────────────────────────────
+    // ⚠️ Ключ в памяти — под СВОИМ именем (wh2_app_key): на компьютере у sklad/ и sklad2/ одна память на адрес.
+    function keyFromHash() {
+      var m = String(location.hash || '').match(/[#&]k=([^&]*)/);
+      try { return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; }
+    }
+    var WH_K = keyFromHash(), WH_KSRC = WH_K ? 'h' : '';
+    try {
+      if (WH_K) localStorage.setItem('wh2_app_key', WH_K);
+      else { WH_K = localStorage.getItem('wh2_app_key') || ''; if (WH_K) WH_KSRC = 'm'; }
+    } catch (e) {}
+    var WH_D = '';
+    try {
+      WH_D = String(localStorage.getItem('wh_dev') || '');
+      if (!/^[0-9a-f]{32}$/.test(WH_D)) {
+        var _r = new Uint8Array(16); window.crypto.getRandomValues(_r); WH_D = '';
+        for (var _i = 0; _i < _r.length; _i++) WH_D += (_r[_i] < 16 ? '0' : '') + _r[_i].toString(16);
+        localStorage.setItem('wh_dev', WH_D);
+        var _w = String(localStorage.getItem('wh_dev') || ''); if (/^[0-9a-f]{32}$/.test(_w)) WH_D = _w;
+      }
+    } catch (e) { WH_D = ''; }
+    var WH_SA = '0', WH_CS = 'x', WH_PL = 'o';
+    try { if (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) WH_SA = '1'; } catch (e) {}
+    try { WH_CS = sessionStorage.getItem('wh_sess') ? '0' : '1'; sessionStorage.setItem('wh_sess', '1'); } catch (e) { WH_CS = 'x'; }
+    try { var _ua = String((window.navigator && window.navigator.userAgent) || '');
+      WH_PL = (/iPhone|iPad|iPod/.test(_ua) || (/Macintosh/.test(_ua) && window.navigator.maxTouchPoints > 1)) ? 'i' : /Android/.test(_ua) ? 'a' : 'o'; } catch (e) {}
+    // В страницу — только безобидные знаки, ровно как делает showApp на сервере (web-app.js).
+    var KEY_SAFE = String(WH_K).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+    var KSRC_SAFE = (WH_KSRC === 'h' || WH_KSRC === 'm') ? WH_KSRC : '';
+    var DEV_SAFE = /^[0-9a-f]{32}$/.test(WH_D) ? WH_D : '';
+    function doorQs(action) {
+      return '?action=' + action + (WH_K ? '&k=' + encodeURIComponent(WH_K) + '&ks=' + WH_KSRC : '') +
+             (WH_D ? '&d=' + WH_D : '') + '&sa=' + WH_SA + '&cs=' + WH_CS + '&pl=' + WH_PL;
+    }
+    // Новую ссылку вставили в эту же вкладку — меняется только хвост после «#»: перезагружаемся сами (как sklad/).
+    window.addEventListener('hashchange', function () { try { location.reload(); } catch (e) {} });
+
+    // ── ⭐ ОТПЕЧАТОК ТЕКСТА — ДОСЛОВНО как whBridgeFp_ в apps-script/bridge.js (равенство держит гейт) ──────────
+    function whlFp(s) {
+      s = String(s == null ? '' : s);
+      var h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+      for (var i = 0; i < s.length; i++) {
+        var c = s.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 0x01000193);
+        h2 = Math.imul(h2 ^ c, 0x5bd1e995);
+        h2 ^= h2 >>> 15;
+      }
+      var hx = function (h) { return ('0000000' + (h >>> 0).toString(16)).slice(-8); };
+      return hx(h1) + hx(h2) + '-' + s.length.toString(36);
+    }
+
+    // ── экран: заставка, накрытие, плашка, отказ ──────────────────────────────────────────────────────────
+    function splashSt(t) { var e = $('splash-st'); if (e) e.textContent = t || ''; }
+    function hideSplash() { var e = $('splash'); if (e) e.classList.add('hide'); }
+    function showSplash() { var e = $('splash'); if (e) e.classList.remove('hide'); }
+    // Накрытие экрана: '' | connect (палец ждёт моста) | update (качаю новую версию) | stale (версия разошлась, у работника
+    // дело на экране — кнопка «Обновить»). noteTick трогает только своё «connect».
+    var COVER = '';
+    function cover(t, kind, btn) {
+      var e = $('cover'); if (!e) return;
+      e.textContent = ''; e.className = '';
+      COVER = t ? (kind || 'x') : '';
+      if (!t) return;
+      var box = document.createElement('div'); box.textContent = t;
+      (btn ? (Array.isArray(btn) ? btn : [btn]) : []).forEach(function (x, i) {
+        var b = document.createElement('button'); b.type = 'button'; b.textContent = x.text; b.onclick = x.fn;
+        if (i) b.style.cssText = 'background:#eceff1;color:#333;font-weight:600';
+        box.appendChild(document.createElement('br')); box.appendChild(document.createElement('br')); box.appendChild(b);
+      });
+      e.appendChild(box);
+      e.className = 'on' + (kind === 'stale' ? ' stale' : '');
+    }
+    var NOTE_T = 0;
+    function note(t) { var e = $('note'); if (!e) return; if (t) { e.textContent = t; e.classList.add('on'); } else e.classList.remove('on'); }
+
+    // ── память загрузчика: IndexedDB «sklad2» ────────────────────────────────────────────────────────────
+    //   page  — { text, fp, at }: текст страницы этой выкладки (только через мост, за ключом);
+    //   fresh — { fps, meta, autoInv, unt, at }: последний ответ whBridgeFresh (для следующего запуска);
+    //   bad   — отпечаток текста, который на этом телефоне не поднялся (его не запускаем, пока не выйдет новый).
+    var DB = null;
+    function withTimeout(p, ms, what) {
+      return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error((what || 'нет ответа') + ' за ' + ms / 1000 + ' с')); }, ms); })]);
+    }
+    function dbOpen() {
+      return withTimeout(new Promise(function (res, rej) {
+        var r = indexedDB.open('sklad2', 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error || new Error('база')); };
+        r.onblocked = function () { rej(new Error('база занята')); };
+      }), 5000, 'база не открылась');
+    }
+    function dbTx(mode, fn, ms) {
+      if (!DB) return Promise.reject(new Error('базы нет'));
+      return withTimeout(new Promise(function (res, rej) {
+        try {
+          var tx = DB.transaction('kv', mode), rq = fn(tx.objectStore('kv')), out;
+          rq.onsuccess = function () { out = rq.result; };
+          tx.oncomplete = function () { res(out); };
+          tx.onerror = tx.onabort = function () { rej(tx.error || new Error('база')); };
+        } catch (e) { rej(e); }
+      }), ms, 'база');
+    }
+    function dbGet(k) { return dbTx('readonly', function (s) { return s.get(k); }, 8000); }
+    function dbPut(k, v) { return dbTx('readwrite', function (s) { return s.put(v, k); }, 20000); }
+    function dbDel(k) { return dbTx('readwrite', function (s) { return s.delete(k); }, 8000); }
+
+    // ── состояние ────────────────────────────────────────────────────────────────────────────────────────
+    // MODE: bridge | old | denied.  ST: loading (текста нет) | page (страница идёт, мост не готов) | updating |
+    // checking (после паузы) | ready | offline.
+    var MODE = 'bridge', ST = 'loading';
+    var PAGE = null, PAGE_GEN = 0, PAGE_WIN = null, PAGE_T = 0;
+    var FRESH = null, BAD = '', BAD_REC = null, FRESH_ASKED = false, FIRST_RESP = 0, RELOAD_ASK = false, UPDATING = false;
+    var BGQ = [], BG_T = 0;          // фоновые вызовы, отпущенные «готов»: уходят через T.bg или с первым касанием
+    var BR = { gen: 0, frame: null, nonce: '', port: null, fp: '', t: 0, up: 0, probed: '' };
+    var HOLD = true, Q = [], WAIT = {}, SEQ = 0, LAST_TOUCH = 0, DBG = [];
+
+    function nonce() {
+      try { var a = new Uint8Array(12); window.crypto.getRandomValues(a); var s = ''; for (var i = 0; i < a.length; i++) s += ('0' + a[i].toString(16)).slice(-2); return s; }
+      catch (e) { return String(Math.random()).slice(2) + String(now()); }
+    }
+
+    // ── строки замера — в «Лог действий» страницы (whDbg: и на экран, и в журнал скорости сервера) ───────────
+    function dbg(op, ms, nt) {
+      DBG.push([op, ms, nt]);
+      flushDbg();
+    }
+    function flushDbg() {
+      var w = PAGE_WIN, f = null;
+      try { f = w && w.__whReady && typeof w.whDbg === 'function' ? w.whDbg : null; } catch (e) { f = null; }
+      if (!f) return;
+      var a = DBG; DBG = [];
+      a.forEach(function (x) { try { f(x[0], x[1], x[2] || ''); } catch (e) {} });
+    }
+
+    // ── страница: сборка текста и запуск в своей рамке ──────────────────────────────────────────────────
+    // Метки, которые ставит showApp на сервере, и метки моста (bridge.js) — ВСЕ вхождения, ОДНИМ проходом по тексту
+    // выкладки: вставленное (отпечатки и флаги — текст из листа) второй раз не просматривается и не меняется
+    // [Кодекс, круг 1, LOW-10: имя работника «__WH_BR_META__» портило блок отпечатков].
+    function jsonBlock(v) { return JSON.stringify(v).replace(/</g, '\\u003c'); }
+    function whlBuild(text, fresh) {
+      var h = String(text);
+      var shim = '<script>(' + whlShim.toString() + ')();<\/script>';
+      var i = h.indexOf('<head>');
+      h = i >= 0 ? (h.slice(0, i + 6) + shim + h.slice(i + 6)) : (shim + h);
+      var sub = {
+        '__WH_BUILD_MS__': '0', '__WH_SRV_T0__': '0', '__WH_LAUNCH_T0__': String(TAP),
+        '__WH_AUTO_INV__': (fresh && fresh.autoInv === 0) ? '0' : '1',
+        '__WH_UNTOUCHED__': (fresh && fresh.unt === 1) ? '1' : '0',
+        '__WH_APP_KEY__': KEY_SAFE, '__WH_APP_KSRC__': KSRC_SAFE, '__WH_APP_DEV__': DEV_SAFE,
+        '__WH_BR_WEBURL__': EXEC,
+        '__WH_BR_FPS__': jsonBlock(fresh && Array.isArray(fresh.fps) ? fresh.fps : []),
+        '__WH_BR_META__': jsonBlock(fresh && fresh.meta && typeof fresh.meta === 'object' ? fresh.meta : {})
+      };
+      sub[QR_CDN] = new URL('qrcode.js', location.href).href;
+      var re = new RegExp(Object.keys(sub).map(function (k) { return k.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&'); }).join('|'), 'g');
+      return h.replace(re, function (m) { return sub[m]; });
+    }
+    function startPage(rec) {
+      PAGE = rec; PAGE_GEN++; PAGE_T = now();
+      // Вызовы прежней страницы, не ушедшие на сервер, — в никуда (сервер их не видел).
+      dropQueue();
+      var html;
+      try { html = whlBuild(rec.text, FRESH); } catch (e) { startOld('страница не собралась: ' + msg(e)); return; }
+      // Каждый запуск — НОВАЯ рамка: у неё своё окно, и ответы прежней страницы до новой не доедут.
+      var old = $('app'), f = document.createElement('iframe');
+      f.id = 'app'; f.title = 'BERKONTI · Склад'; f.setAttribute('allow', 'camera; clipboard-read; clipboard-write; fullscreen');
+      // ⚠️ PAGE_WIN гасим ДО снятия прежней рамки: её pagehide (снять брони, дослать замеры) зовёт сервер в момент
+      // снятия, и «текущим» окном она быть уже не должна — иначе вызов старой версии ушёл бы под новым поколением
+      // [Фейбл «сценарий», круг 1, LOW-1]. Брони дотаят сами (5 мин), замеры — потеря строки.
+      PAGE_WIN = null;
+      old.parentNode.replaceChild(f, old);
+      PAGE_WIN = f.contentWindow;
+      f.srcdoc = html;
+      // Поднялся ли основной скрипт страницы (window.__whReady). ⚠️ Телефон ушёл в фон, пока страница разбиралась, —
+      // iOS морозит разбор, и это не поломка текста: ждём ещё [Фейбл «сценарий», круг 1, MED-3]. «Плохой» версия
+      // становится только со ВТОРОГО раза подряд и только на T.badTtl [Кодекс, круг 1, LOW-8]: один медленный запуск
+      // не должен лишать телефон моста до новой выкладки.
+      var g = PAGE_GEN, hid = false;
+      var onVis = function () { if (document.visibilityState === 'hidden') hid = true; };
+      document.addEventListener('visibilitychange', onVis);
+      setTimeout(function chk() {
+        if (g !== PAGE_GEN || MODE !== 'bridge') { document.removeEventListener('visibilitychange', onVis); return; }
+        var ok = false; try { ok = !!(PAGE_WIN && PAGE_WIN.__whReady); } catch (e) {}
+        if (!ok && (hid || document.visibilityState === 'hidden')) { hid = false; setTimeout(chk, T.ready); return; }
+        document.removeEventListener('visibilitychange', onVis);
+        if (ok) { if (BAD_REC && BAD_REC.fp === rec.fp) { BAD_REC = null; dbDel('bad').catch(noop); } return; }
+        var n = (BAD_REC && BAD_REC.fp === rec.fp ? (Number(BAD_REC.n) || 1) : 0) + 1;
+        BAD_REC = { fp: rec.fp, n: n, at: now() };
+        dbPut('bad', BAD_REC).catch(noop);
+        if (n >= 2) BAD = rec.fp;
+        startOld('страница из памяти не поднялась' + (n >= 2 ? ' второй раз — эта версия на телефоне выключена на 30 мин' : ''));
+      }, T.ready);
+    }
+
+    // ── 🌉 ЗАМЕНИТЕЛЬ google.script.run — его текст (toString) вставляется ПЕРВЫМ скриптом в страницу ──────
+    // Вид вызова тот же: google.script.run.withSuccessHandler(…).withFailureHandler(…).withUserObject(…).fn(…).
+    // Каждое «with…» даёт НОВЫЙ запускатель (обработчики не протекают в соседние вызовы; все места страницы, где
+    // запускатель кладут в переменную, навешивают обработчики до этого — 01.10.2026 сверено по коду).
+    function whlShim() {
+      var L = null;
+      try { L = window.parent && window.parent.__WHL; } catch (e) { L = null; }
+      if (!L) return;
+      var me = window;
+      window.__whBridge = 1;
+      function runner(s, f, u) {
+        return new Proxy({}, {
+          get: function (t, name) {
+            if (name === 'withSuccessHandler') return function (fn) { return runner(fn, f, u); };
+            if (name === 'withFailureHandler') return function (fn) { return runner(s, fn, u); };
+            if (name === 'withUserObject') return function (o) { return runner(s, f, o); };
+            if (typeof name !== 'string' || name === 'then') return undefined;
+            return function () { L.call(me, name, Array.prototype.slice.call(arguments), s, f, u); };
+          }
+        });
+      }
+      var g = window.google = window.google || {};
+      var sc = g.script = g.script || {};
+      Object.defineProperty(sc, 'run', { configurable: true, enumerable: true, get: function () { return runner(null, null, undefined); } });
+      // Нарушения CSP — в «Лог действий»: в пилоте видно, что правила не пустили (адрес без хвоста запроса).
+      document.addEventListener('securitypolicyviolation', function (e) {
+        try { L.csp(me, String(e.violatedDirective || ''), String(e.blockedURI || '').split('?')[0].slice(0, 120)); } catch (x) {}
+      });
+      var mark = function () { try { L.touch(me); } catch (e) {} };
+      document.addEventListener('pointerdown', mark, true);
+      document.addEventListener('touchstart', mark, true);
+      document.addEventListener('keydown', mark, true);
+    }
+
+    // ── вызовы страницы ──────────────────────────────────────────────────────────────────────────────────
+    function msg(e) { return String((e && e.message) || e || ''); }
+    function later(fn) { setTimeout(fn, 0); }        // google.script.run никогда не зовёт обработчик внутри вызова
+    function deliver(job, ok, v) {
+      if (job.gen !== PAGE_GEN || job.win !== PAGE_WIN) return;   // страница заменена — ответ некому
+      var h = ok ? job.s : job.f, arg = v;
+      if (!ok) {
+        try { arg = new job.win.Error(String((v && v.message) || 'ошибка')); arg.name = String((v && v.name) || 'Error'); }
+        catch (e) { arg = new Error(String((v && v.message) || 'ошибка')); }
+      }
+      if (typeof h !== 'function') { if (!ok) { try { job.win.console.warn('google.script.run ' + job.fn + ': ' + arg.message); } catch (e) {} } return; }
+      // Исключение в обработчике успеха НЕ зовёт обработчик ошибки (как у google.script.run) — только в консоль.
+      try { h.call(job.win, arg, job.u); } catch (e) { setTimeout(function () { throw e; }, 0); }
+    }
+    function notSent(job, why) {
+      if (job.dead) return; job.dead = true; clearTimeout(job.cap);
+      later(function () { deliver(job, false, { name: 'NetworkError', message: 'NetworkError: не отправлено — ' + why }); });
+    }
+    function dropQueue() {
+      var q = Q.concat(BGQ); Q = []; BGQ = [];
+      if (BG_T) { clearTimeout(BG_T); BG_T = 0; }
+      q.forEach(function (j) { j.dead = true; clearTimeout(j.cap); });
+    }
+    function pageCall(win, fn, args, s, f, u) {
+      if (win !== PAGE_WIN || MODE !== 'bridge') return;          // голос прежней страницы — молча, как у умершей
+      var job = { fn: String(fn), args: args || [], s: s, f: f, u: u, win: win, gen: PAGE_GEN, tq: now(),
+                  finger: (now() - LAST_TOUCH) < T.finger, id: 0, sent: false, dead: false, cap: 0 };
+      if (!HOLD && BR.port) { send(job); if (job.finger && BGQ.length) flushBg(); return; }   // палец первым [Кодекс, круг 2, LOW-4]
+      Q.push(job);
+      job.cap = setTimeout(function () {
+        if (job.sent || job.dead) return;
+        var i = Q.indexOf(job); if (i >= 0) Q.splice(i, 1);
+        notSent(job, 'нет связи с Google (мост не готов)');
+      }, T.cap);
+      setTimeout(noteTick, T.note);
+    }
+    function send(job) {
+      if (job.sent || job.dead) return;
+      if (job.gen !== PAGE_GEN) { job.dead = true; clearTimeout(job.cap); return; }
+      if (!BR.port) { Q.push(job); return; }
+      job.sent = true; clearTimeout(job.cap); job.id = ++SEQ; job.ts = now(); WAIT[job.id] = job;
+      var args = job.args, ai = AGE_ARG[job.fn];
+      if (ai != null && typeof args[ai] === 'number' && job.ts > job.tq) { args = args.slice(); args[ai] = args[ai] + (job.ts - job.tq); }
+      try { BR.port.postMessage({ id: job.id, fn: job.fn, args: args }); }
+      catch (e) { delete WAIT[job.id]; job.sent = false; notSent(job, msg(e)); }
+    }
+    function release() {
+      var fg = [], urg = [], q = Q; Q = [];
+      // Фоновый, которому до потолка ожидания меньше T.bg + 1 с, уходит сразу — но ПОСЛЕ вызовов по пальцу: иначе
+      // холодным утром всё, что страница поставила в первые секунды, падало бы «не отправлено» в шаге от моста
+      // [Фейбл «сценарий», круг 1, LOW-4].
+      q.forEach(function (j) { if (j.dead) return; if (j.finger) fg.push(j); else if (now() - j.tq >= T.cap - T.bg - 1000) urg.push(j); else BGQ.push(j); });
+      fg.forEach(send); urg.forEach(send);
+      if (BGQ.length && !BG_T) BG_T = setTimeout(flushBg, T.bg);
+      noteTick();
+    }
+    // Фоновые — через T.bg после «готов» или сразу по первому касанию: действие по пальцу часто ждёт как раз их
+    // («Открыть» встаёт в полёт стартового списка закупок) [Фейбл «сценарий», круг 1, LOW-3].
+    function flushBg() {
+      if (BG_T) { clearTimeout(BG_T); BG_T = 0; }
+      var q = BGQ; BGQ = [];
+      q.forEach(function (j) { if (j.dead || j.sent) return; if (!HOLD && BR.port) send(j); else Q.push(j); });
+    }
+    function noteTick() {
+      if (MODE !== 'bridge') { note(''); return; }
+      note(ST === 'offline' ? 'Нет связи с Google — повторяю…' : '');
+      // ⭐ ПАЛЕЦ ЖДЁТ МОСТА ДОЛЬШЕ T.note — НАКРЫВАЕМ ЭКРАН [Кодекс, круг 1, HIGH-1]. Работник нажал то, чему нужен
+      // сервер, а версия страницы ещё не сверена: новую работу (набор в карточке, следующую запись), которую, может
+      // быть, нечем будет сохранить, не начинаем. Фоновые вызовы экран не трогают.
+      var fw = HOLD && Q.some(function (j) { return !j.dead && j.finger && (now() - j.tq) >= T.note; });
+      if (fw && !COVER) cover(ST === 'offline' ? 'Нет связи с Google — повторяю…' : 'Подключаюсь к Google…', 'connect');
+      else if (!fw && COVER === 'connect') cover('');
+    }
+
+    // Свои вызовы загрузчика через тот же порт (текст страницы, свежее, пинг) — мимо очереди страницы.
+    function intCall(fn, args, ms, echo) {
+      return new Promise(function (res, rej) {
+        var port = BR.port;
+        if (!port) { rej(new Error('моста нет')); return; }
+        var id = ++SEQ, done = false;
+        var t = setTimeout(function () {
+          if (done) return; done = true; delete WAIT[id];
+          var e = new Error('нет ответа за ' + ms / 1000 + ' с'); e.kind = 'timeout'; rej(e);
+        }, ms);
+        WAIT[id] = { int: true, done: function (m) {
+          if (done) return; done = true; clearTimeout(t);
+          if (echo ? m.echo : m.ok) res(m.v); else rej(new Error(String((m.err && m.err.message) || 'ошибка')));
+        } };
+        try { port.postMessage(echo ? { id: id, echo: 1 } : { id: id, fn: fn, args: args || [] }); }
+        catch (e) { done = true; clearTimeout(t); delete WAIT[id]; rej(e); }
+      });
+    }
+    var LAST_PORT_MSG = 0;
+    function onPortMsg(ev) {
+      var m = ev && ev.data;
+      if (!m || typeof m.id !== 'number') return;
+      LAST_PORT_MSG = now();
+      var job = WAIT[m.id];
+      if (!job) return;
+      delete WAIT[m.id];
+      if (job.int) { job.done(m); return; }
+      if (!FIRST_RESP) { FIRST_RESP = now(); dbg('мост: первый ответ сервера', FIRST_RESP - TAP, 'от тапа · ' + job.fn); }
+      if (m.ok) deliver(job, true, m.v); else deliver(job, false, m.err);
+    }
+
+    // ── мост: рамка, порт, проверка версии ──────────────────────────────────────────────────────────────
+    function newBridge(why) {
+      if (BR.frame && BR.frame.parentNode) BR.frame.parentNode.removeChild(BR.frame);
+      if (BR.port) { try { BR.port.onmessage = null; BR.port.close(); } catch (e) {} }
+      // Свои незавершённые вызовы прежнего порта — отказом (их ждут процедуры загрузчика). Вызовы страницы, уже
+      // ушедшие на сервер, тоже получают ОТКАЗ — тот же, что даёт google.script.run при обрыве («HTTP 0»): рамку,
+      // которая ждала их ответ, мы снимаем, и иначе обработчик не позвался бы никогда (ATT_LOADING и подобные метки
+      // «в полёте» залипали бы) [Кодекс, круг 1, MED-3]. Исход неизвестен (запись могла и лечь) — к такому отказу
+      // страница готова; сам мост ничего не повторяет.
+      Object.keys(WAIT).forEach(function (id) {
+        var j = WAIT[id]; delete WAIT[id];
+        if (!j) return;
+        if (j.int) { j.done({ err: { message: 'мост пересоздан' } }); return; }
+        later(function () { deliver(j, false, { name: 'NetworkError', message: 'NetworkError: Ошибка подключения (мост пересоздан, ответ потерян — исход неизвестен)' }); });
+      });
+      BR = { gen: BR.gen + 1, frame: null, nonce: nonce(), port: null, fp: '', t: now(), up: 0, probed: '', why: why, loaded: 0, rounds: 0, netErr: false };
+      HOLD = true; if (ST === 'ready') ST = PAGE ? 'page' : 'loading';     // новая рамка — канал не готов до её порта
+      var f = document.createElement('iframe'), g = BR.gen;
+      f.title = 'мост';
+      f.onload = function () { if (BR.gen === g) BR.loaded = now(); };    // страница двери догрузилась (с портом или без)
+      f.src = EXEC + doorQs('bridge') + '&n=' + BR.nonce;
+      $('frames').appendChild(f);
+      BR.frame = f;
+      setTimeout(function () { if (BR.gen === g && !BR.port && MODE === 'bridge') probeKey(g); }, T.port);
+    }
+    function fromFrame(src, frame) {
+      try {
+        var w = src;
+        for (var i = 0; i < 5 && w; i++) { if (w === frame.contentWindow) return true; if (w.parent === w) break; w = w.parent; }
+      } catch (e) {}
+      return false;
+    }
+    window.addEventListener('message', function (ev) {
+      var d = ev && ev.data;
+      if (d === 'wh-sklad-ready') {
+        // Пришло из рамки МОСТА — значит, дверь отдала саму аппку: выкладка без моста (откат). Старый режим сразу
+        // [концепт 4.1 п.5; Фейбл «безопасность», круг 1, MED-2: иначе бесконечное «нет связи» и полные сборки
+        // страницы на сервере каждые полминуты].
+        if (MODE === 'bridge' && BR.frame && fromFrame(ev.source, BR.frame)) { startOld('дверь отдала аппку без моста (откат?)'); return; }
+        onPageReady(ev); return;
+      }
+      if (d === 'wh-sklad-reload') { onReloadAsk(ev); return; }
+      if (!d || typeof d !== 'object' || d.wh !== 'bridge-port') return;
+      if (MODE !== 'bridge' || !BR.frame || d.n !== BR.nonce) return;            // чужая или прежняя рамка
+      if (!BR_ORIGIN_RE.test(String(ev.origin || ''))) return;
+      if (!fromFrame(ev.source, BR.frame)) return;
+      if (BR.port || !ev.ports || !ev.ports[0]) return;                         // порт принимаем один раз
+      BR.port = ev.ports[0];
+      BR.port.onmessage = onPortMsg;
+      try { BR.port.start(); } catch (e) {}
+      BR.fp = String(d.fp || ''); BR.up = now();
+      onBridgeUp(d);
+    });
+    function onBridgeUp(d) {
+      if (ST === 'offline') ST = PAGE ? 'page' : 'loading';
+      noteTick();
+      var same = !!(PAGE && PAGE.fp === BR.fp);
+      dbg('мост готов', BR.up - TAP, 'от тапа · рамка ' + (BR.up - BR.t) + ' мс · ' +
+          (same ? 'версия та же' : (PAGE ? 'новая версия' : 'первая загрузка')) + (BR.why ? ' · ' + BR.why : ''));
+      if (!BR.fp) { startOld('мост без отпечатка' + (d && d.err ? ': ' + d.err : '')); return; }
+      if (BR.fp === BAD) { startOld('эта версия страницы на телефоне не поднялась'); return; }
+      if (same && !RELOAD_ASK) { setReady(); return; }
+      if (same && RELOAD_ASK) { RELOAD_ASK = false; cover(''); startPage(PAGE); setReady(); return; }
+      if (ST === 'stale') { if (!STALE.rec && !STALE.fetching) staleFetch(); return; }   // уже ждём кнопку
+      if (PAGE && !RELOAD_ASK && pageBusy()) { stale(); return; }
+      update();
+    }
+    // Есть ли у страницы работа, которую перезапуск унёс бы: палец ждёт ответа или страница не на «чистых руках»
+    // (verSafe_ — та же проверка, что у её окна «вышла новая версия»: карточка, черновики, записи в полёте, формы).
+    function pageBusy() {
+      if (Q.some(function (j) { return !j.dead && j.finger; })) return true;
+      try { var v = PAGE_WIN && PAGE_WIN.verSafe_; if (typeof v === 'function') return !v(); } catch (e) {}
+      return false;
+    }
+    // ⭐⭐ ВЕРСИЯ РАЗОШЛАСЬ, А У РАБОТНИКА ДЕЛО НА ЭКРАНЕ [Кодекс, круг 1, HIGH-1]. Говорить с сервером новой выкладки
+    // старой странице нельзя (правило 2), а перезапуск без спроса МОЛЧА унёс бы набранное и запись, ждущую моста.
+    // Поэтому экран не трогаем, но накрываем полупрозрачно: набранное видно, нового не наберёшь. Текст новой версии
+    // качаем сразу, а страница перезапускается только по кнопке — работник знает, что недосохранённое надо повторить.
+    var STALE = { rec: null, asked: false, fetching: false };
+    function stale() {
+      ST = 'stale'; HOLD = true; STALE = { rec: null, asked: false, fetching: false };
+      cover('Вышла новая версия аппки. Что не успело сохраниться, — запомните и повторите после обновления.', 'stale',
+            { text: 'Обновить', fn: staleGo });
+      dbg('мост: новая версия, на экране дело', 0, 'перезапуск — по кнопке «Обновить»');
+      staleFetch();
+    }
+    // ⛔️ Не скачалось — экран с набранным НЕ снимаем сами: старый режим только по кнопке работника, когда он переписал
+    // своё [Кодекс, круг 2, HIGH-1: прежде ошибка скачивания молча уводила в старый режим и уносила набранное].
+    function staleFetch() {
+      STALE.fetching = true; UPDATING = true;
+      if (STALE.asked) cover('Скачиваю новую версию…', 'update');
+      fetchText().then(function (rec) {
+        STALE.fetching = false; UPDATING = false; STALE.rec = rec;
+        if (STALE.asked) staleGo();
+      }, function (e) {
+        STALE.fetching = false; UPDATING = false;
+        if (MODE !== 'bridge' || ST !== 'stale') return;
+        if (msg(e) === 'мост пересоздан') return;          // новая рамка скажет версию — скачаем тогда (onBridgeUp)
+        STALE.asked = false;
+        var bad = /не поднялась/.test(msg(e));
+        dbg('мост: новая версия не скачалась', 0, msg(e));
+        cover((bad ? 'Новая версия аппки на этом телефоне не открывается.'
+                   : 'Новую версию аппки скачать не вышло (нет связи).') + ' Набранное на экране — перепишите его, потом:', 'stale',
+              (bad ? [] : [{ text: 'Повторить', fn: function () { STALE.asked = true; staleFetch(); } }]).concat([{ text: 'Открыть старым способом', fn: function () {
+                if (ST === 'stale') startOld('по кнопке: новая версия не скачалась'); } }]));
+      });
+    }
+    function staleGo() {
+      if (ST !== 'stale') return;
+      if (!STALE.rec) { STALE.asked = true; cover('Скачиваю новую версию…', 'update'); if (!STALE.fetching) staleFetch(); return; }
+      var rec = STALE.rec; STALE = { rec: null, asked: false, fetching: false };
+      cover(''); startPage(rec); setReady();
+    }
+    // Версия разошлась (выкладка, откат) или текста нет: скачать → проверить → сохранить → перезапустить.
+    // Скачать текст версии моста → проверить отпечаток → сохранить. Запуск — у того, кто позвал.
+    function fetchText() {
+      var t0 = now();
+      return intCall('whBridgeText', [], T.update).then(function (r) {
+        if (MODE === 'denied') throw new Error('ключ отозван');      // после отказа в память не кладём [Фейбл «безопасность», круг 2, LOW-4]
+        if (!r || typeof r.text !== 'string' || !r.fp || whlFp(r.text) !== r.fp) throw new Error('текст пришёл не целым');
+        var rec = { text: r.text, fp: r.fp, at: now() };
+        // Не записалось (место кончилось) — запускаем всё равно: в следующий раз скачаем снова. Но в лог: иначе каждый
+        // запуск молча качал бы 2,6 МБ [Фейбл «сценарий», круг 1, LOW-6].
+        return dbPut('page', rec).then(function () { return rec; },
+          function (e) { dbg('мост: страница не сохранилась в память', 0, msg(e)); return rec; });
+      }).then(function (rec) {
+        if (MODE !== 'bridge') throw new Error('режим сменился');
+        BR.fp = rec.fp;                         // сервер мог смениться между дверью и вызовом — равняемся на текст
+        if (rec.fp === BAD) throw new Error('эта версия страницы на телефоне не поднялась');
+        dbg('мост: страница скачана', now() - t0, Math.round(rec.text.length / 1024) + ' К знаков');
+        return rec;
+      });
+    }
+    function update() {
+      if (UPDATING) return;
+      UPDATING = true; HOLD = true; ST = 'updating'; RELOAD_ASK = false;
+      if (PAGE) cover('Обновляю аппку…', 'update'); else splashSt('Первая загрузка аппки…');
+      fetchText().then(function (rec) {
+        UPDATING = false;
+        cover('');
+        startPage(rec);
+        setReady();
+      }).catch(function (e) {
+        UPDATING = false;
+        if (MODE === 'bridge' && msg(e) !== 'мост пересоздан') startOld('страница не скачалась: ' + msg(e));
+      });
+    }
+    function setReady() {
+      if (MODE !== 'bridge') return;
+      ST = 'ready'; HOLD = false; cover('');
+      release();
+      if (!FRESH_ASKED) { FRESH_ASKED = true; setTimeout(fetchFresh, T.bg); }   // с фоновыми [Фейбл «сценарий», LOW-2]
+    }
+    function fetchFresh() {
+      intCall('whBridgeFresh', [], T.fresh).then(function (d) {
+        if (!d || typeof d !== 'object' || MODE === 'denied') return;   // поздний ответ после отказа ключа стёртое не пишет [Фейбл «безопасность», круг 2, LOW-4]
+        FRESH = d;
+        // В память — БЕЗ флагов кодов (meta: отпечатки владельцев и обкатки): они только для этого сеанса [концепт 4.4;
+        // Фейбл «безопасность», круг 1, LOW-3]. На следующем запуске плитки владельца появятся с приходом свежего.
+        dbPut('fresh', { fps: d.fps, autoInv: d.autoInv, unt: d.unt, at: d.at }).catch(noop);
+        applyFresh();
+      }, function (e) { FRESH_ASKED = false; dbg('мост: свежее не пришло', 0, msg(e)); });   // спросим при следующем «готов» [Кодекс, круг 1, MED-6]
+    }
+    function applyFresh() {
+      try { if (FRESH && PAGE_WIN && typeof PAGE_WIN.whBridgeFresh_ === 'function') PAGE_WIN.whBridgeFresh_(FRESH); } catch (e) {}
+    }
+
+    // ── порта нет: проба ключа (JSONP) ───────────────────────────────────────────────────────────────────
+    function jsonp(url, ms) {
+      return new Promise(function (res, rej) {
+        var cb = '__whl' + nonce().slice(0, 12), s = document.createElement('script'), done = false;
+        var t = setTimeout(function () { fin(); var e = new Error('нет ответа'); e.kind = 'timeout'; rej(e); }, ms);
+        function fin() { done = true; clearTimeout(t); window[cb] = noop; if (s.parentNode) s.parentNode.removeChild(s); }
+        window[cb] = function (d) { if (done) return; fin(); res(d); };
+        s.onerror = function () { if (done) return; fin(); var e = new Error('сеть'); e.kind = 'net'; rej(e); };
+        s.src = url + '&callback=' + cb + '&t=' + now();
+        document.head.appendChild(s);
+      });
+    }
+    // ⚠️ РАМКУ, КОТОРАЯ ЕЩЁ ГРУЗИТСЯ, НЕ СНИМАЕМ [Фейбл «сценарий» и «протокол», круг 1, MED-1]. В плохой день Google
+    // дверь моста отвечает дольше наших сроков, и снятие по таймеру давало круг «рамка — снять — рамка» без единого порта,
+    // без старого режима. Решаем по пробе ключа:
+    //   · отказ — отказ;
+    //   · ключ годен, а страница двери догрузилась без порта — мост сломан → старый режим;
+    //   · ключ годен, рамка ещё грузится — ждём до T.broken от рамки, дальше старый режим (как sklad/: страница Google);
+    //   · проба МОЛЧИТ (таймаут) — Google медленный: рамку не трогаем, проба снова через T.offline; дольше T.slow от
+    //     рамки — старый режим;
+    //   · проба упала ОШИБКОЙ — нет сети: ждём (страница из памяти полезнее белого экрана); когда проба снова скажет «ок»
+    //     или придёт событие online — новая рамка (заведённая без сети, она уже не поднимется).
+    function probeKey(g) {
+      if (BR.gen !== g || BR.port || MODE !== 'bridge') return;
+      BR.rounds++;
+      jsonp(EXEC + doorQs('bridge_ping'), T.probe).then(function (r) {
+        if (BR.gen !== g || BR.port || MODE !== 'bridge') return;
+        if (r && r.ok === false && r.error === 'no_key') { deny(String(r.why || '')); return; }
+        if (r && r.ok === true) {
+          BR.probed = 'ok';
+          if (BR.netErr) { newBridge('сеть вернулась'); return; }
+          if (BR.loaded) { startOld('мост не поднялся: страница двери без порта, ключ годен'); return; }
+          var left = Math.max(0, T.broken - (now() - BR.t));
+          setTimeout(function () {
+            if (BR.gen === g && !BR.port && MODE === 'bridge') startOld('мост не поднялся за ' + Math.round(T.broken / 1000) + ' с, ключ годен');
+          }, left);
+          return;
+        }
+        offline(g, 'slow');   // «занято» и прочее — как медленный Google
+      }, function (e) { if (BR.gen === g && !BR.port && MODE === 'bridge') offline(g, e && e.kind === 'net' ? 'net' : 'slow'); });
+    }
+    function offline(g, why) {
+      ST = 'offline'; noteTick();
+      if (!PAGE) splashSt('Нет связи с Google — повторяю…');   // текста нет: заставка закрывает плашку [Кодекс, круг 1, LOW-9]
+      if (why === 'net') BR.netErr = true;
+      dbg('мост: нет связи с Google', now() - BR.t, 'круг ' + BR.rounds + (why === 'net' ? ' · сеть' : ' · Google молчит'));
+      if (why !== 'net' && now() - BR.t >= T.slow) { startOld('Google не отвечает ' + Math.round((now() - BR.t) / 1000) + ' с'); return; }
+      setTimeout(function () { probeKey(g); }, T.offline);
+    }
+    window.addEventListener('online', function () { if (MODE === 'bridge' && !BR.port) newBridge('сеть вернулась'); });
+
+    // ── отказ ключа ─────────────────────────────────────────────────────────────────────────────────────
+    // Тексты — те же, что у двери склада (whKeyDeny_ в app-key.js).
+    var DENY_TXT = {
+      pnodev: 'Откройте склад иконкой «BERKONTI» на экране «Домой».\n\nНе помогло — скажите владельцу.',
+      pdev: 'Этот телефон не узнан.\n\nОткройте склад иконкой «BERKONTI» на СВОЁМ телефоне. Если это ваш телефон — скажите владельцу.',
+      nodev: 'Страница устарела.\n\nЗакройте эту вкладку и откройте приложение склада с закладки «BERKONTI» на этом компьютере, затем обновите страницу (Ctrl+F5). Не помогло — скажите владельцу.',
+      dev: 'Эта ссылка работает только на своём компьютере.\n\nЕсли это рабочий компьютер магазина — скажите владельцу.',
+      '': 'Этот телефон не пускают в приложение склада.\n\nПопробуйте открыть иконку «BERKONTI» заново. Если не пустит — попросите у владельца новую ссылку.'
+    };
+    // Данные клиентов в памяти телефона при отказе стираем; неподтверждённые очереди (номера, печать, отметки,
+    // инвойсы) — нет: они чужая работа, и их дошлёт следующий законный запуск (как у кассы).
+    var WIPE_RE = /^(wh_cat1_|wh_tables_v2|pickRecent_|wh_worker_last|wh_worker_name|wh_worker_code|wh_worker_seen)/;
+    function wipeData() {
+      dbDel('page').catch(noop); dbDel('fresh').catch(noop);
+      try {
+        var ks = []; for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && WIPE_RE.test(k)) ks.push(k); }
+        ks.forEach(function (k) { localStorage.removeItem(k); });
+      } catch (x) {}
+    }
+    function deny(why) {
+      MODE = 'denied'; HOLD = true; dropQueue();
+      if (BR.frame && BR.frame.parentNode) BR.frame.parentNode.removeChild(BR.frame);
+      if (BR.port) { try { BR.port.onmessage = null; BR.port.close(); } catch (e) {} }   // ответы из очереди порта — мимо [Фейбл «безопасность», круг 2, LOW-4]
+      BR.port = null;
+      PAGE_WIN = null;
+      var old = $('app'), f = document.createElement('iframe'); f.id = 'app'; old.parentNode.replaceChild(f, old);
+      var e = $('deny'); e.textContent = DENY_TXT.hasOwnProperty(why) ? DENY_TXT[why] : DENY_TXT['']; e.classList.add('on');
+      hideSplash(); cover(''); note('');
+      wipeData();
+    }
+
+    // ── старый режим: ровно sklad/ — страница Google в рамке ───────────────────────────────────────────────
+    function startOld(why) {
+      if (MODE !== 'bridge') return;
+      MODE = 'old'; HOLD = true; dropQueue(); cover(''); note('');
+      try { localStorage.setItem('wh2_last_old', new Date().toISOString() + ' · ' + why); } catch (e) {}
+      if (BR.frame && BR.frame.parentNode) BR.frame.parentNode.removeChild(BR.frame);
+      if (BR.port) { try { BR.port.close(); } catch (e) {} }
+      BR.port = null;
+      var old = $('app'), f = document.createElement('iframe');
+      f.id = 'app'; f.title = 'BERKONTI · Склад'; f.setAttribute('allow', 'camera; clipboard-read; clipboard-write; fullscreen');
+      f.src = EXEC + (WH_K ? ('?k=' + encodeURIComponent(WH_K) + '&ks=' + WH_KSRC + (WH_D ? '&d=' + WH_D : '') + '&lt=' + TAP +
+                              '&sa=' + WH_SA + '&cs=' + WH_CS + '&pl=' + WH_PL) : ('?lt=' + TAP));
+      PAGE_WIN = null;
+      old.parentNode.replaceChild(f, old);
+      // Причину видно на заставке, пока грузится страница Google [Фейбл «сценарий», круг 1, LOW-6].
+      showSplash(); splashSt('старый режим: ' + why);
+      setTimeout(hideSplash, 25000);
+    }
+
+    // ── сообщения страницы ──────────────────────────────────────────────────────────────────────────────
+    function onPageReady(ev) {
+      hideSplash();
+      if (MODE === 'bridge') { flushDbg(); applyFresh(); }
+    }
+    // «Обновить» в окне новой версии: страница просит перезагрузить ярлык и ждёт «принял», иначе через 3 с уйдёт
+    // на адрес Google (web-app.js). В мосте — своя процедура: новая рамка моста скажет версию, разошлась — скачаем.
+    function onReloadAsk(ev) {
+      try { if (ev.source) ev.source.postMessage('wh-sklad-reload-ok', '*'); } catch (e) {}
+      if (MODE !== 'bridge') { try { location.reload(); } catch (e) {} return; }
+      if (ev.source !== PAGE_WIN) return;
+      RELOAD_ASK = true; HOLD = true; ST = PAGE ? 'page' : 'loading'; FRESH_ASKED = false;   // «Обновить» — и свежее заново
+      cover('Обновляю аппку…', 'update');
+      newBridge('обновить');
+    }
+
+    // ── возврат из фона: проверка связи до первого вызова ──────────────────────────────────────────────────
+    var HID_AT = 0;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') { HID_AT = now(); return; }
+      var away = HID_AT ? now() - HID_AT : 0; HID_AT = 0;
+      if (away >= T.hidden) resumeCheck(Math.round(away / 6000) / 10 + ' мин');
+    });
+    window.addEventListener('pageshow', function (e) { if (e && e.persisted) resumeCheck('из памяти браузера'); });
+    function resumeCheck(away) {
+      if (MODE !== 'bridge' || ST !== 'ready' || !BR.port) return;
+      ST = 'checking'; HOLD = true;
+      var t0 = now(), g = BR.gen, over = false;
+      function done(how) {
+        if (over || BR.gen !== g) return;
+        over = true;
+        dbg('мост: связь после паузы', now() - t0, away + ' · ' + how);
+        if (ST === 'checking') setReady();
+      }
+      intCall('', [], T.echo, true).then(function () {
+        // Рамка жива. Первый вызов после паузы iPhone обрывает «HTTP 0» — его берёт на себя пустой пинг. Вызовы страницы
+        // ждут ПЕРВОГО исхода пинга (успех или обрыв), но не дольше T.resumeHold: удачный пинг — целое исполнение Apps
+        // Script (в бою 4–7 с), и ждать его на каждой разблокировке нельзя [Фейбл «сценарий», круг 1, MED-2].
+        // Сколько пинг шёл на самом деле, пишем отдельной строкой — это замер пилота.
+        var hold = setTimeout(function () { done('пинг молчит ' + T.resumeHold + ' мс — отпускаю'); }, T.resumeHold);
+        var tp = now();
+        intCall('whBridgePing', [], T.ping).then(function () {
+          clearTimeout(hold); dbg('мост: пинг после паузы', now() - t0, 'ок'); done('пинг ок');
+        }, function (e) {
+          clearTimeout(hold); dbg('мост: пинг после паузы', now() - t0, msg(e)); done('пинг: ' + msg(e));
+          // Пинг МОЛЧАЛ T.ping (не ошибка, а тишина) и за всё это время через порт не пришло НИЧЕГО: рамка отвечает на
+          // эхо, а google.script.run в ней мёртв — новая рамка [концепт 4.2; Фейбл «протокол», круг 1, MED-2]. Пришёл
+          // любой ответ — канал жив (пинг просто стоял в очереди google.script.run), рамку не трогаем [Кодекс, круг 2, MED-3].
+          if (e && e.kind === 'timeout' && BR.gen === g && MODE === 'bridge' && LAST_PORT_MSG < tp) newBridge('пинг молчит');
+        });
+      }, function () {
+        if (over || BR.gen !== g) return;
+        over = true;
+        dbg('мост: рамка не ответила после паузы', now() - t0, away + ' · новая рамка');
+        newBridge('после паузы');
+      });
+    }
+
+    // ── сторож молчащего моста, пока аппка на экране [Фейбл «протокол», круг 1, MED-2; концепт 4.2] ───────────
+    // Самый старый ушедший вызов страницы ждёт дольше T.silent, а через порт за это время не пришло НИЧЕГО — спрашиваем
+    // пустым пингом (отдельное исполнение: долгая запись соседа ему не мешает). Пинг молчит T.ping — рамка мертва или
+    // зомби: новая рамка; ушедшие вызовы получают «обрыв» (newBridge), сам мост их не повторяет.
+    var SILENT_CHECK = false;
+    setInterval(function () {
+      if (MODE !== 'bridge' || ST !== 'ready' || !BR.port || SILENT_CHECK || document.visibilityState === 'hidden') return;
+      var oldest = 0;
+      for (var id in WAIT) { var j = WAIT[id]; if (j && !j.int && j.ts && (!oldest || j.ts < oldest)) oldest = j.ts; }
+      if (!oldest || now() - oldest < T.silent || now() - LAST_PORT_MSG < T.silent) return;
+      SILENT_CHECK = true;
+      var g = BR.gen, t0 = now();
+      intCall('whBridgePing', [], T.ping).then(function () { SILENT_CHECK = false; }, function (e) {
+        SILENT_CHECK = false;
+        if (BR.gen !== g || MODE !== 'bridge' || !(e && e.kind === 'timeout')) return;
+        if (LAST_PORT_MSG >= t0) return;                    // за время пинга порт отвечал — канал жив [Кодекс, круг 2, MED-3]
+        dbg('мост: замолчал', now() - oldest, 'пинг не ответил за ' + (now() - t0) + ' мс — новая рамка');
+        newBridge('мост замолчал');
+      });
+    }, 1000);
+
+    // ── выключатель владельца: version.json (только сеть) — действует со СЛЕДУЮЩЕГО запуска ────────────────
+    function checkSwitch() {
+      try {
+        fetch('version.json?t=' + now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+          try { if (j && j.bridge === 0) localStorage.setItem('wh2_off', '1'); else if (j) localStorage.removeItem('wh2_off'); } catch (e) {}
+          // «Стереть память пилота» [Фейбл «безопасность», круг 1, LOW-4]: метка wipe в version.json — разовая на телефон.
+          try { if (j && j.wipe && localStorage.getItem('wh2_wiped') !== String(j.wipe)) localStorage.setItem('wh2_wipe', String(j.wipe)); } catch (e) {}
+        }).catch(noop);
+      } catch (e) {}
+    }
+
+    // ── API для страницы (тот же источник) ────────────────────────────────────────────────────────────────
+    window.__WHL = {
+      call: pageCall,
+      // Касание без своего вызова (экран ждёт уже идущую фоновую загрузку) тоже отпускает фоновые — чуть позже, чтобы
+      // вызов этого же касания (click после pointerdown) ушёл первым [Кодекс, круг 2, LOW-4].
+      touch: function (win) { if (win !== PAGE_WIN) return; LAST_TOUCH = now(); if (BGQ.length) setTimeout(function () { if (!HOLD && BR.port && BGQ.length) flushBg(); }, 300); },
+      csp: function (win, dir, uri) { if (win === PAGE_WIN) dbg('мост: CSP не пустила', 0, dir + ' ' + uri); },
+      // Удар сердца страницы узнал, что ключ отозван (whKeyLock_ в web-app.js): то же, что отказ на входе — данные
+      // клиентов и текст страницы стираем, очереди оставляем [Кодекс, круг 1, MED-4].
+      keyBad: function (win) { if (win === PAGE_WIN && MODE === 'bridge') deny(''); },
+      // Держит ли мост вызовы (канал не готов): сторожа страницы «ответ не пришёл» в это время не считают. И ещё T.relGrace
+      // после ухода вызова, который ЖДАЛ моста: сторож считает срок от тапа, и вызов, ушедший за секунду-две до срока,
+      // получал «Нет связи», а верный ответ сервера выбрасывался [Фейбл «протокол», круг 2, MED-1].
+      held: function () {
+        if (MODE !== 'bridge') return false;
+        if (HOLD) return true;
+        var live = function (j) { return !j.dead && !j.sent; };
+        if (Q.some(live) || BGQ.some(live)) return true;
+        for (var id in WAIT) { var j = WAIT[id]; if (j && !j.int && j.ts - j.tq > 300 && now() - j.ts < T.relGrace) return true; }
+        return false;
+      }
+    };
+
+    // ── запуск ──────────────────────────────────────────────────────────────────────────────────────────
+    function begin(page, fresh, bad) {
+      // Данные клиентов в телефоне не живут вечно: не освежались T.wipeAfter (7 дней) или владелец велел стереть
+      // (wipe в version.json) — стираем, как при отказе ключа, и грузимся заново [концепт 4.5 — решение владельца
+      // «Устраивает!»; Фейбл «безопасность», круг 1, LOW-4].
+      var wipeTok = ''; try { wipeTok = localStorage.getItem('wh2_wipe') || ''; } catch (e) {}
+      // Срок — от последнего разговора с сервером: свежего или скачанного текста (что позже); свежего могло не быть вовсе
+      // [Кодекс, круг 2, LOW-5].
+      var lastAt = Math.max(Number(fresh && fresh.at) || 0, Number(page && page.at) || 0);
+      var oldFresh = !!(lastAt && now() - lastAt > T.wipeAfter);
+      if (wipeTok || oldFresh) {
+        wipeData(); page = null; fresh = null;
+        try { if (wipeTok) { localStorage.setItem('wh2_wiped', wipeTok); localStorage.removeItem('wh2_wipe'); } } catch (e) {}
+      }
+      FRESH = (fresh && typeof fresh === 'object') ? fresh : null;
+      BAD_REC = (bad && typeof bad === 'object' && bad.fp && now() - (Number(bad.at) || 0) < T.badTtl) ? bad : null;
+      BAD = (BAD_REC && Number(BAD_REC.n) >= 2) ? String(BAD_REC.fp) : '';
+      // Текст в памяти «плохой» (дважды не поднялся за последние 30 мин) — сразу старый режим, мост не ждём.
+      if (BAD && page && page.fp === BAD) { startOld('эта версия страницы на телефоне не поднялась дважды'); return; }
+      newBridge('');                                   // мост — сразу, параллельно странице
+      if (page && typeof page.text === 'string' && page.fp && page.fp !== BAD && whlFp(page.text) === page.fp) {
+        ST = 'page';
+        startPage(page);
+        dbg('мост: страница из памяти', PAGE_T - TAP, 'от тапа · ' + Math.round(page.text.length / 1024) + ' К знаков');
+      } else {
+        ST = 'loading';
+        splashSt('Первая загрузка аппки…');
+        setTimeout(function () { if (MODE === 'bridge' && ST === 'loading') startOld('первая загрузка не дождалась моста'); }, T.first);
+      }
+    }
+    try { if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(noop); } catch (e) {}
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(noop); } catch (e) {}
+    checkSwitch();
+    var off = false; try { off = localStorage.getItem('wh2_off') === '1'; } catch (e) {}
+    if (off) {
+      // Мост выключен, а владелец велел стереть память пилота — стираем и здесь, всю базу разом [Кодекс, круг 2, LOW-6].
+      try {
+        var wt = localStorage.getItem('wh2_wipe') || '';
+        if (wt) {
+          var ks = []; for (var wi = 0; wi < localStorage.length; wi++) { var wk = localStorage.key(wi); if (wk && WIPE_RE.test(wk)) ks.push(wk); }
+          ks.forEach(function (k) { localStorage.removeItem(k); });
+          try { indexedDB.deleteDatabase('sklad2'); } catch (x) {}
+          localStorage.setItem('wh2_wiped', wt); localStorage.removeItem('wh2_wipe');
+        }
+      } catch (e) {}
+      startOld('выключатель version.json'); return;
+    }
+    if (!window.indexedDB || !window.MessageChannel || typeof Proxy !== 'function') { startOld('браузер не умеет мост'); return; }
+    $('splash').addEventListener('click', hideSplash);
+    setInterval(noteTick, 1000);
+    dbOpen().then(function (db) {
+      DB = db;
+      return Promise.all([dbGet('page').catch(noop), dbGet('fresh').catch(noop), dbGet('bad').catch(noop)]);
+    }).then(function (a) { begin(a[0], a[1], a[2]); }, function () { begin(null, null, null); });
+  })();
+  </script>
+</body>
+</html>
