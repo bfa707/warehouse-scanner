@@ -150,6 +150,18 @@
     var WH_SA = '0', WH_CS = 'x', WH_PL = 'o';
     try { if (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) WH_SA = '1'; } catch (e) {}
     try { WH_CS = sessionStorage.getItem('wh_sess') ? '0' : '1'; sessionStorage.setItem('wh_sess', '1'); } catch (e) { WH_CS = 'x'; }
+    // ⭐ ХОЛОДНЫЙ ЗАПУСК = ВЫХОД, КАК НА iPhone В sklad/ [владелец 01.10.2026: «убиваю аппку и вновь запускаю — код не
+    // спрашивается, висит мой предыдущий профиль»; Фейбл «сценарий», круг 1, MED-4 — «решать владельцу»]. В sklad/ iOS при
+    // «смахнуть» стирала память страницы Google, и каждый запуск начинался с кода и нового id телефона. Здесь память живёт
+    // на github.io — делаем то же сами, ДО запуска страницы: новая сессия вкладки (WH_CS = '1') — код, имя и отметка простоя
+    // стёрты, id телефона новый (брони ушедшего не станут своими у следующего за телефоном). Возврат из сканера
+    // (history.back в той же сессии) и перезапуск страницы внутри загрузчика (новая версия, «Обновить») — вход цел.
+    if (WH_CS === '1') {
+      try {
+        localStorage.removeItem('wh_worker_name'); localStorage.removeItem('wh_worker_code'); localStorage.removeItem('wh_worker_seen');
+        localStorage.setItem('wh_worker_id', 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+      } catch (e) {}
+    }
     try { var _ua = String((window.navigator && window.navigator.userAgent) || '');
       WH_PL = (/iPhone|iPad|iPod/.test(_ua) || (/Macintosh/.test(_ua) && window.navigator.maxTouchPoints > 1)) ? 'i' : /Android/.test(_ua) ? 'a' : 'o'; } catch (e) {}
     // В страницу — только безобидные знаки, ровно как делает showApp на сервере (web-app.js).
