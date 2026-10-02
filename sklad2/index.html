@@ -723,7 +723,8 @@
     };
     // Данные клиентов в памяти телефона при отказе стираем; неподтверждённые очереди (номера, печать, отметки,
     // инвойсы) — нет: они чужая работа, и их дошлёт следующий законный запуск (как у кассы).
-    var WIPE_RE = /^(wh_cat1_|wh_tables_v2|pickRecent_|wh_worker_last|wh_worker_name|wh_worker_code|wh_worker_seen)/;
+    // wh_sts_snap — последние цифры «Статистики» (деньги закупки) [склад v553, 02.10.2026].
+    var WIPE_RE = /^(wh_cat1_|wh_tables_v2|pickRecent_|wh_worker_last|wh_worker_name|wh_worker_code|wh_worker_seen|wh_sts_snap)/;
     function wipeData() {
       dbDel('page').catch(noop); dbDel('fresh').catch(noop);
       try {
