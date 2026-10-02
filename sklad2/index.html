@@ -522,9 +522,23 @@
       BR.port = ev.ports[0];
       BR.port.onmessage = onPortMsg;
       try { BR.port.start(); } catch (e) {}
-      BR.fp = String(d.fp || ''); BR.up = now();
+      BR.fp = String(d.fp || ''); BR.up = now(); BR.tb = tbOf(d.tb);
       onBridgeUp(d);
     });
+    // ⚡ Перечень закупок, приехавший в двери моста (кэш сервера, whBridgeDoor_) [владелец 01.10.2026: «Собрать заказ»
+    // после перерыва ждал два круга до Google — перечень, потом заказы]. Здесь — только вид; правила (новее ли, можно
+    // ли по нему открыть закупку) у страницы (whBridgeTables_ в web-app.js). Прежняя дверь поля не шлёт — null.
+    function tbOf(x) {
+      if (!x || typeof x !== 'object' || !(Number(x.at) > 0) || !Array.isArray(x.list) || !x.list.length) return null;
+      return x;
+    }
+    // Отдаём, когда мост ГОТОВ (версия сверена: страницу прежней версии сейчас перезапустят — кормить её незачем) и у
+    // страницы есть приёмник; кто из двух позже — тот и отдаёт (setReady или «страница поднялась»). Повтор безвреден:
+    // страница кладёт перечень, только если он новее её собственного (штамп серверный). Свежий перечень везёт новая рамка.
+    function applyTables() {
+      if (!BR.tb || MODE !== 'bridge' || HOLD) return;
+      try { if (PAGE_WIN && typeof PAGE_WIN.whBridgeTables_ === 'function') PAGE_WIN.whBridgeTables_(BR.tb); } catch (e) {}
+    }
     function onBridgeUp(d) {
       if (ST === 'offline') ST = PAGE ? 'page' : 'loading';
       noteTick();
@@ -622,6 +636,9 @@
     function setReady() {
       if (MODE !== 'bridge') return;
       ST = 'ready'; HOLD = false; cover('');
+      // Перечень — ДО отпуска очереди: экран «Загрузка списка закупок…» просыпается им сразу и шлёт заказы, не дожидаясь
+      // своего вызова за перечнем (тот уйдёт фоном, его поздний ответ страница сверит по штампу).
+      applyTables();
       release();
       if (!FRESH_ASKED) { FRESH_ASKED = true; setTimeout(fetchFresh, T.bg); }   // с фоновыми [Фейбл «сценарий», LOW-2]
     }
@@ -748,7 +765,7 @@
     // ── сообщения страницы ──────────────────────────────────────────────────────────────────────────────
     function onPageReady(ev) {
       hideSplash();
-      if (MODE === 'bridge') { flushDbg(); applyFresh(); }
+      if (MODE === 'bridge') { flushDbg(); applyFresh(); applyTables(); }
     }
     // «Обновить» в окне новой версии: страница просит перезагрузить ярлык и ждёт «принял», иначе через 3 с уйдёт
     // на адрес Google (web-app.js). В мосте — своя процедура: новая рамка моста скажет версию, разошлась — скачаем.
