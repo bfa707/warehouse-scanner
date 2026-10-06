@@ -412,7 +412,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.13 · 30.09.2026';
+  var VER = 'v6.14 · 06.10.2026';   // v6.14 — поиск одними цифрами всегда списком [владелец 06.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -437,6 +437,8 @@
   // карточку ловит сверка: пока она идёт — серая «сверяю…»; пришла, и под номером уже не одна эта клиентка (или номер
   // ушёл к другой) — карточка сама падает в список с «Заказ изменился» (refreshView_). Сверка не удалась — жёлтое
   // «не сверен — сверьте серию номера и ник». «Номер целиком» и неточный ник по-прежнему только выбором кассира.
+  // С v6.14 [владелец 06.10.2026] сама открывается только карточка по номеру с дефисом и по точному нику: одни цифры — всегда список
+  // (см. canAutoOpen).
   var VERIFIED_FOR = 300000;
   // ⏱ СКОЛЬКО ЖДАТЬ GOOGLE [живая проверка владельца 26.09.2026]: в тот день Google держал ЛЮБОЙ запрос к складу
   // 10–114 с (сам склад отвечал за 0,1–2 с — журнал), и при прежних 45 с большая закупка не грузилась НИКОГДА:
@@ -1046,6 +1048,9 @@
   // список едет, заказ 9-971 в нём может ещё не быть, и «971» сама открыла бы 9-71 чужого клиента.
   // С дефисом («9-971») серия набрана явно — такой номер открывается сам. Ник — только ТОЧНЫЙ и единственный.
   // Сверку canAutoOpen больше не требует [владелец 28.09.2026] — см. VERIFIED_FOR; удерживает карточку refreshView_.
+  // ⭐ ОДНИ ЦИФРЫ — ВСЕГДА СПИСОК, И ПРИ ОДНОМ КЛИЕНТЕ [владелец 06.10.2026, v6.14]: номера «A10-017» … «E10-017» делят одни цифры, а касса
+  // видит только собранные заказы (кол. D). Собран A10-017 (anna), к кассе пришёл bob с B10-017 (ещё не собран) — «017» сама открыла бы
+  // anna. Строка списка с полным номером («A10-017 · anna») — кассир смотрит на букву и жмёт её (+1 тап, владелец согласен).
   function fresh(at) { return !!at && Date.now() - at < VERIFIED_FOR; }
   function searchVerified() {
     var sc = scope();
@@ -1053,8 +1058,11 @@
   }
   function canAutoOpen(hits, q) {
     if (hits.length !== 1 || missingTables().length) return false;
-    var v = hits[0].via;
-    return q.kind === 'num' ? v.indexOf('n') >= 0 : q.kind === 'full' ? v.indexOf('f') >= 0 : v === 'x';
+    var v = hits[0].via, h0 = hits[0];
+    // ⭐ Номер с дефисом, но без буквы («10-017»), а у клиента он с буквой («A10-017»): буква не набрана — та же беда, что у одних цифр
+    // (B10-017 ещё не собран — открылась бы anna). Сама — только с набранной буквой или номер без буквы и у клиента («9-711») [Фейбл L1 HIGH-1, v6.14].
+    if (q.kind === 'full' && !q.pre && clientNos(h0.pk.p, h0.i).some(function (no) { return numMatches(no, q) && /^\s*[A-Za-zА-Яа-яЁёЀ-ӿ]/.test(no); })) return false;
+    return q.kind === 'full' ? v.indexOf('f') >= 0 : q.kind === 'nick' && v === 'x';   // одни цифры — никогда [v6.14]
   }
   function renderResults(hits, q, again, banner) {
     if (canAutoOpen(hits, q)) return showCard(hits[0], q, banner, false, null);
@@ -1095,6 +1103,8 @@
       // Так же — любая открытая карточка, пока сверка не закончена: сверка нужна, чтобы открыть карточку, а не чтобы её
       // удержать. Иначе несверенное освежение роняло её в список с ложным «Заказ изменился», и открытый кассиром 9-720
       // подменялся найденным 9-721 [Кодекс MED-1 и Фейбл F1–F3, перепроверка 743e535, v6.1].
+      // Карточка по одним цифрам — всегда из списка [v6.14]: стоит, пока набор совпадений прежний; появился клиент с теми же цифрами
+      // (собрали B10-017 к открытой A10-017) — снова список. Сама по цифрам касса карточку не открывает и здесь (renderResults).
       var okAlone = same.length === 1 && ((CUR.fromList || !searchVerified()) ? whoOf(hits) === CUR.who : canAutoOpen(hits, CUR.q));
       if (okAlone) {
         if (sigOf(same[0]) !== CUR.sig) { if (dlgOpen()) closeDlg(); showCard(same[0], CUR.q, 'Данные заказа обновились — проверьте ещё раз.', CUR.fromList, CUR.no, CUR.flash, CUR.who); }
@@ -1276,10 +1286,18 @@
     }
   }
   function showList(hits, q, banner) {
+    // Список вырос из карточки поиском ТОЙ ЖЕ клиентки (все строки — она: другой её заказ по номеру) — память окна «Заказ не отмечен» едет
+    // со списком: тап по строке берёт её, как поиск той же клиентки с карточки до v6.14 [Кодекс, круг 2 v6.8, MED]. По цифрам другой заказ
+    // клиентки теперь всегда через строку — без этого её частично выданный заказ спрашивался бы снова [v6.14]. В списке есть и другой
+    // клиент — это уход от неё, память заново, как до v6.14: иначе «Ничего не выдавали», нажатое в окне перед этим списком, глушило бы
+    // окно про заказ, который кассир откроет следом [Фейбл L1 MED-1, v6.14].
+    var onlyOf = function (b) { return !!b && hits.length > 0 && hits.every(function (h) { return h.t.id === b.tid && h.pk.p.c[h.i][0] === b.nick; }); };
+    var back = (CUR && CUR.kind === 'card' && CUR.lv && onlyOf({ tid: CUR.sel.tid, nick: CUR.sel.nick })) ? { tid: CUR.sel.tid, nick: CUR.sel.nick, lv: CUR.lv, mine: CUR.mine, flash: CUR.flash, no: CUR.no }
+      : (CUR && CUR.kind === 'list' && onlyOf(CUR.back)) ? CUR.back : null;
     setView('pad');
     var o = clearOut(), hd = $('head');
     CUR = { kind: 'list', q: q, qk: qKey(q), sig: hits.map(sigOf).join('\n') + '|' + missingTables().length, ver: searchVerified() + '|' + syncing,
-            banner: banner || null };
+            banner: banner || null, back: back };
     renderActs(null);
     lastBanner(hd);
     if (banner) hd.appendChild(el('div', 'ban bad', banner));
@@ -1289,7 +1307,10 @@
       hd.appendChild(syncing ? el('div', 'chk', 'Сверяю список с таблицей (он на ' + at + ')…')
         : el('div', 'ban warn', '⚠️ Список на ' + at + ' не сверен с таблицей — сверьте серию номера и ник.'));
     }
-    o.appendChild(el('div', 'sec', 'Найдено: ' + hits.length + (hits.length >= NICK_MAX && q.kind === 'nick' ? ' (показаны первые — уточните ник)' : '') + ' — выберите'));
+    // Одна строка — не «выберите из нескольких», а «посмотрите и нажмите»: по одним цифрам так приходит и единственный клиент, и
+    // кассир сверяет букву полного номера [владелец 06.10.2026, v6.14].
+    o.appendChild(el('div', 'sec', hits.length === 1 ? 'Проверьте номер и ник — нажмите'
+      : 'Найдено: ' + hits.length + (hits.length >= NICK_MAX && q.kind === 'nick' ? ' (показаны первые — уточните ник)' : '') + ' — выберите'));
     hits.forEach(function (h) {
       var P = h.pk.p, c = P.c[h.i];
       var b = el('button', 'row'); b.type = 'button';
@@ -1568,6 +1589,8 @@
     // Кнопки на паузе видно серыми.
     var same = !!(CUR && CUR.kind === 'card' && CUR.sel.tid === h.t.id && CUR.sel.nick === c[0]);
     var prevNo = same ? CUR.no : null, prev = same ? CUR : null;
+    // Карточка той же клиентки, с которой вырос список (showList, CUR.back), — её память окна [v6.14].
+    var back = (CUR && CUR.kind === 'list' && CUR.back && CUR.back.tid === h.t.id && CUR.back.nick === c[0]) ? CUR.back : null;
     // Новый поиск той же клиентки с её же карточки — тоже новая карточка: пауза, как у любой [Фейбл «выдача», круг 1 v6.3, LOW-1].
     var keep = same && !fresh;
     // Карточку открыл кассир (свой поиск, строка списка) — или это перерисовка такой карточки той же клиентки. Карточку, которую касса
@@ -1632,9 +1655,11 @@
     // Экран «после выдачи» остаётся отмеченным и после перехода к другому заказу клиентки («Открыть этот заказ»). Новый поиск другой
     // клиентки — всё заново. Поиск ТОЙ ЖЕ клиентки с её карточки (другой её заказ по номеру, её ник) — память та же: иначе отмеченный заказ
     // спрашивался бы снова [Кодекс, круг 2 v6.8, MED]. Только с карточки, открытой кассиром (prev.mine).
-    var lvKeep = !!(prev && prev.lv && (keep || prev.mine));
-    CUR.lv = lvKeep ? prev.lv : { done: {}, at: Date.now(), touched: 0 };   // at, touched — окно «Заказ не отмечен» молчит первые 7 с (v6.10, v6.13)
-    if (lvKeep && prev.flash && prev.flash.done && prev.no) CUR.lv.done[nk(prev.no)] = 1;
+    // [v6.14] Другой заказ клиентки по одним цифрам открывается строкой списка — память та же через список (back).
+    var lvFrom = prev || back;
+    var lvKeep = !!(lvFrom && lvFrom.lv && (keep || lvFrom.mine));
+    CUR.lv = lvKeep ? lvFrom.lv : { done: {}, at: Date.now(), touched: 0 };   // at, touched — окно «Заказ не отмечен» молчит первые 7 с (v6.10, v6.13)
+    if (lvKeep && lvFrom.flash && lvFrom.flash.done && lvFrom.no) CUR.lv.done[nk(lvFrom.no)] = 1;
     // Выдача этого заказа ещё в очереди записей — видно и на заново открытой карточке [v6.6].
     var wqj = m.no ? wqOrder(h.t.id, c[0], m.no) : null;
     if (wqj && !(flash && flash.q)) bans.appendChild(el('div', 'chk', '⏳ Выдача этого заказа ' + (wqj.fly ? 'записывается' : wqj.tries ? 'ждёт повтора' : 'ждёт записи') + ' в таблицу…'));
@@ -2871,7 +2896,9 @@
     // Enter второй раз по списку из одной строки — открыть её (явный выбор кассира; склад всё равно сверит заказ при
     // записи) [Фейбл «сценарий», ускорение 5].
     // Только по сверенному списку: иначе одна клавиша обходила бы правило «карточка — по сверенному поиску» [Фейбл, круг 2, MED-2].
-    if (CUR && CUR.kind === 'list' && CUR.qk === qKey(parseQ(typed)) && searchVerified() && !missingTables().length) {
+    // ⛔️ И не по одним цифрам [владелец 06.10.2026, v6.14] и не по номеру без буквы («10-017», Фейбл L1 HIGH-1): такой список — чтобы кассир
+    // посмотрел на букву номера и нажал строку; второй «Найти» по привычке (двойной тап) открыл бы карточку, не глядя. Только тап по строке.
+    if (CUR && CUR.kind === 'list' && CUR.q && CUR.q.kind !== 'num' && !(CUR.q.kind === 'full' && !CUR.q.pre) && CUR.qk === qKey(parseQ(typed)) && searchVerified() && !missingTables().length) {
       var one = document.querySelectorAll('#out .row');
       if (one.length === 1) { one[0].click(); return; }
     }
