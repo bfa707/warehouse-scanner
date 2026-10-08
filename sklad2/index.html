@@ -34,8 +34,11 @@
 
      ПРАВИЛА (концепт 4.1–4.6, оба круга ревью):
       1. Каждый вызов страницы уходит на сервер НЕ БОЛЕЕ ОДНОГО РАЗА; повтора после неизвестного исхода нет.
-      2. Ни одного вызова страницы, пока отпечаток моста не равен отпечатку запущенного текста. Не равен (выкладка или
-         откат) → скачать текст через мост → проверить отпечаток → сохранить → и только потом перезапустить страницу.
+      2. Отпечаток моста не равен отпечатку запущенного текста (выкладка или откат) — перезапуск ТОЛЬКО по кнопке окна
+         «Вышла новая версия приложения.», а окно — ТОЛЬКО в главном меню [владелец 08.10.2026]. Человек в главном меню —
+         окно, и ни одного вызова страницы до перезапуска: скачать текст через мост → проверить отпечаток → сохранить →
+         перезапустить. Не в главном меню — работа идёт дальше на прежней странице (её вызовы уходят на сервер новой
+         выкладки, как у страницы, открытой до выкладки, пока рамка жива), а окно ждёт возвращения в главное меню.
       3. Вызов, не ушедший за T.cap (25 с), завершается «не отправлено» — сервер его не видел. Короткие сторожа страницы
          «ответ не пришёл» (вход 12 с, бронь 12 с, предзагрузка 20 с, карточки 30 с, опрос инвойса 15 и 8 с) ждут, пока
          мост держит вызов (whBrHeld_ в web-app.js) [Кодекс MED-2; Фейбл «протокол» LOW-2, круг 1].
@@ -107,7 +110,7 @@
     // Сроки (мс). Стенд (tests/test-most-loader.js) укорачивает их через window.__WHL_T до запуска страницы.
     var T = { port: 12000, probe: 10000, offline: 30000, broken: 40000, first: 45000, update: 60000, cap: 25000,
               bg: 2000, finger: 1500, ready: 20000, hidden: 30000, echo: 3000, ping: 10000, resumeHold: 1500, fresh: 30000,
-              note: 1500, badTtl: 1800000, wipeAfter: 604800000, slow: 90000, silent: 20000, relGrace: 10000 };
+              note: 1500, badTtl: 1800000, wipeAfter: 604800000, slow: 90000, silent: 20000, relGrace: 10000, defer: 1000 };
     try {
       var _o = window.__WHL_T;
       if (_o && typeof _o === 'object') for (var _k in _o) {
@@ -193,8 +196,8 @@
     function splashSt(t) { var e = $('splash-st'); if (e) e.textContent = t || ''; }
     function hideSplash() { var e = $('splash'); if (e) e.classList.add('hide'); }
     function showSplash() { var e = $('splash'); if (e) e.classList.remove('hide'); }
-    // Накрытие экрана: '' | connect (палец ждёт моста) | update (качаю новую версию) | stale (версия разошлась, у работника
-    // дело на экране — кнопка «Обновить»). noteTick трогает только своё «connect».
+    // Накрытие экрана: '' | connect (палец ждёт моста) | update (качаю новую версию) | stale (версия разошлась, человек в
+    // главном меню — кнопка «Обновить»). noteTick трогает только своё «connect».
     var COVER = '';
     function cover(t, kind, btn) {
       var e = $('cover'); if (!e) return;
@@ -297,6 +300,7 @@
       return h.replace(re, function (m) { return sub[m]; });
     }
     function startPage(rec) {
+      deferStop();                                  // новая страница — ждать главного меню больше нечего
       PAGE = rec; PAGE_GEN++; PAGE_T = now();
       // Вызовы прежней страницы, не ушедшие на сервер, — в никуда (сервер их не видел).
       dropQueue();
@@ -407,6 +411,10 @@
       if (job.sent || job.dead) return;
       if (job.gen !== PAGE_GEN) { job.dead = true; clearTimeout(job.cap); return; }
       if (!BR.port) { Q.push(job); return; }
+      // ⛔️ ПОКА ОКНО ЖДЁТ ГЛАВНОГО МЕНЮ, ВОПРОС СТРАНИЦЫ «С КАКОЙ ВЕРСИИ ОБНОВЛЯТЬСЯ» НЕ ОТПРАВЛЯЕМ [Кодекс, круг 1, MED-1]:
+      // ответ сервера новой выкладки поднял бы окно самой страницы (verShow_, рубильник «всем обновиться») на рабочем
+      // экране — мимо правила «только в главном меню». Окно новой версии здесь — забота загрузчика; страница спросит снова.
+      if (DEFER_T && job.fn === 'whAppVer') { notSent(job, 'окно новой версии ждёт главного меню'); return; }
       job.sent = true; clearTimeout(job.cap); job.id = ++SEQ; job.ts = now(); WAIT[job.id] = job;
       var args = job.args, ai = AGE_ARG[job.fn];
       if (ai != null && typeof args[ai] === 'number' && job.ts > job.tq) { args = args.slice(); args[ai] = args[ai] + (job.ts - job.tq); }
@@ -550,7 +558,7 @@
       if (same && !RELOAD_ASK) { setReady(); return; }
       if (same && RELOAD_ASK) { RELOAD_ASK = false; cover(''); startPage(PAGE); setReady(); return; }
       if (ST === 'stale') { if (!STALE.rec && !STALE.fetching) staleFetch(); return; }   // уже ждём кнопку
-      if (PAGE && !RELOAD_ASK && pageBusy()) { stale(); return; }
+      if (PAGE && !RELOAD_ASK) { if (onHome()) stale(); else defer(); return; }
       update();
     }
     // Есть ли у страницы работа, которую перезапуск унёс бы: палец ждёт ответа или страница не на «чистых руках»
@@ -560,35 +568,86 @@
       try { var v = PAGE_WIN && PAGE_WIN.verSafe_; if (typeof v === 'function') return !v(); } catch (e) {}
       return false;
     }
-    // ⭐⭐ ВЕРСИЯ РАЗОШЛАСЬ, А У РАБОТНИКА ДЕЛО НА ЭКРАНЕ [Кодекс, круг 1, HIGH-1]. Говорить с сервером новой выкладки
-    // старой странице нельзя (правило 2), а перезапуск без спроса МОЛЧА унёс бы набранное и запись, ждущую моста.
-    // Поэтому экран не трогаем, но накрываем полупрозрачно: набранное видно, нового не наберёшь. Текст новой версии
-    // качаем сразу, а страница перезапускается только по кнопке — работник знает, что недосохранённое надо повторить.
-    var STALE = { rec: null, asked: false, fetching: false };
-    function stale() {
-      ST = 'stale'; HOLD = true; STALE = { rec: null, asked: false, fetching: false };
-      cover('Вышла новая версия аппки. Что не успело сохраниться, — запомните и повторите после обновления.', 'stale',
-            { text: 'Обновить', fn: staleGo });
-      dbg('мост: новая версия, на экране дело', 0, 'перезапуск — по кнопке «Обновить»');
-      staleFetch();
+    // ⭐ ЧЕЛОВЕК В ГЛАВНОМ МЕНЮ [владелец 08.10.2026: «…чтобы эта табличка возникала только если человек находится в
+    // главном меню»]: у страницы на экране «главная» (#v-home.active), не экран кода (#wlogin.on), и работы нет (pageBusy).
+    function homeView(win) {
+      try {
+        var d = win && win.document, h = d && d.getElementById('v-home'), w = d && d.getElementById('wlogin');
+        return !!(h && h.classList.contains('active') && !(w && w.classList.contains('on')));
+      } catch (e) { return false; }
     }
-    // ⛔️ Не скачалось — экран с набранным НЕ снимаем сами: старый режим только по кнопке работника, когда он переписал
-    // своё [Кодекс, круг 2, HIGH-1: прежде ошибка скачивания молча уводила в старый режим и уносила набранное].
-    function staleFetch() {
-      STALE.fetching = true; UPDATING = true;
+    function onHome() { return homeView(PAGE_WIN) && !pageBusy(); }
+    // ⭐ ОКНО САМОЙ СТРАНИЦЫ — ТОЖЕ ТОЛЬКО В ГЛАВНОМ МЕНЮ [владелец 08.10.2026; Кодекс, круг 1 и заплатка, MED-1]. У страницы
+    // своё окно «Вышла новая версия приложения. Нажмите «Обновить»…» (verShow_, рубильник «всем обновиться») — оно ждёт
+    // лишь чистых рук и всплывало бы на рабочем экране, в том числе по ответу, полученному ещё до ожидания (_verWant).
+    // В мосте пускаем его к показу только в главном меню: страница зовёт verShow_ раз в минуту (verCheck_), и окно придёт
+    // при ближайшем заходе в меню. Обёртка ставится один раз на страницу (метка __wh).
+    function guardVerShow(win) {
+      try {
+        var o = win && win.verShow_;
+        if (typeof o !== 'function' || o.__wh) return;
+        var g = function () { if (!homeView(win)) return; return o.apply(this, arguments); };
+        g.__wh = 1; win.verShow_ = g;
+      } catch (e) {}
+    }
+    // ⭐ НОВАЯ ВЕРСИЯ, А ЧЕЛОВЕК НЕ В ГЛАВНОМ МЕНЮ — ОКНО ЖДЁТ [владелец 08.10.2026]. Работа идёт дальше на прежней
+    // странице: мост отпущен, её вызовы уходят на сервер новой выкладки — так же, как у страницы, открытой до выкладки,
+    // пока рамка моста жива. Раз в T.defer смотрим: человек в главном меню — окно (stale). Новая страница запущена
+    // (startPage), режим сменился или новая рамка принесла тот же отпечаток (откат) — ждать нечего.
+    // Текст новой версии качаем СРАЗУ, пока человек занят (код, сборка) [Фейбл «сценарий», круг 1, LOW-1]: к окну он уже в
+    // памяти — «Обновить» перезапускает без ожидания, а следующий холодный запуск поднимет новую версию сам. Не скачалось —
+    // молча (staleFetch вне окна ничего не показывает): окно в главном меню скачает заново.
+    var DEFER_T = 0;
+    function defer() {
+      if (!DEFER_T) {
+        DEFER_T = setInterval(deferTick, T.defer);
+        dbg('мост: новая версия, человек не в главном меню', 0, 'работа идёт дальше, окно — в главном меню');
+      }
+      setReady();
+      guardVerShow(PAGE_WIN);
+      if (!(STALE.rec && STALE.rec.fp === BR.fp) && !STALE.fetching) staleFetch(true);
+    }
+    function deferStop() { if (DEFER_T) { clearInterval(DEFER_T); DEFER_T = 0; } }
+    function deferTick() {
+      if (MODE !== 'bridge' || !PAGE || !BR.fp || PAGE.fp === BR.fp || ST === 'stale' || ST === 'updating') { deferStop(); return; }
+      if (ST !== 'ready' || document.visibilityState === 'hidden' || !onHome()) return;
+      deferStop();
+      stale();
+    }
+    // ⭐⭐ ВЕРСИЯ РАЗОШЛАСЬ, ЧЕЛОВЕК В ГЛАВНОМ МЕНЮ — ОКНО С ОДНОЙ КНОПКОЙ [Кодекс, круг 1, HIGH-1; владелец 08.10.2026:
+    // текст «Вышла новая версия приложения.» и «Обновить»]. Говорить с сервером новой выкладки старой странице после
+    // окна нельзя (правило 2): экран накрываем, вызовы держим. Текст новой версии — уже скачанный, пока окно ждало
+    // главного меню (defer), или качаем сразу; страница перезапускается только по кнопке.
+    // away — телефон был скрыт под окном дольше T.hidden: после перезапуска — та же проверка связи, что после паузы
+    // (resumeCheck: эхо рамки и пустой пинг) [Фейбл «протокол», круг 1, LOW-1].
+    var STALE = { rec: null, asked: false, fetching: false, away: false };
+    function stale() {
+      deferStop();
+      var pre = (STALE.rec && STALE.rec.fp === BR.fp) ? STALE.rec : null;
+      ST = 'stale'; HOLD = true; STALE = { rec: pre, asked: false, fetching: STALE.fetching, away: false };
+      cover('Вышла новая версия приложения.', 'stale', { text: 'Обновить', fn: staleGo });
+      dbg('мост: новая версия, человек в главном меню', 0, 'перезапуск — по кнопке «Обновить»' + (pre ? ' · текст уже скачан' : ''));
+      if (!STALE.rec && !STALE.fetching) staleFetch();
+    }
+    // ⛔️ Не скачалось — окно НЕ снимаем сами: старый режим только по кнопке работника [Кодекс, круг 2, HIGH-1: прежде ошибка
+    // скачивания молча уводила в старый режим]. Вне окна (скачивание заранее, defer) — молча: окно скачает заново.
+    // bg — скачивание заранее: UPDATING не трогаем [Кодекс, заплатка круга 1, MED-2]. Иначе «Обновить» из самой страницы
+    // (RELOAD_ASK → update()), пришедшее, пока текст ещё пишется в память, выходило бы на UPDATING и оставляло
+    // «Обновляю аппку…» навсегда.
+    function staleFetch(bg) {
+      STALE.fetching = true; if (!bg) UPDATING = true;
       if (STALE.asked) cover('Скачиваю новую версию…', 'update');
       fetchText().then(function (rec) {
-        STALE.fetching = false; UPDATING = false; STALE.rec = rec;
+        STALE.fetching = false; if (!bg) UPDATING = false; STALE.rec = rec;
         if (STALE.asked) staleGo();
       }, function (e) {
-        STALE.fetching = false; UPDATING = false;
+        STALE.fetching = false; if (!bg) UPDATING = false;
         if (MODE !== 'bridge' || ST !== 'stale') return;
         if (msg(e) === 'мост пересоздан') return;          // новая рамка скажет версию — скачаем тогда (onBridgeUp)
         STALE.asked = false;
         var bad = /не поднялась/.test(msg(e));
         dbg('мост: новая версия не скачалась', 0, msg(e));
-        cover((bad ? 'Новая версия аппки на этом телефоне не открывается.'
-                   : 'Новую версию аппки скачать не вышло (нет связи).') + ' Набранное на экране — перепишите его, потом:', 'stale',
+        cover(bad ? 'Новая версия приложения на этом телефоне не открывается.' : 'Новую версию приложения скачать не вышло (нет связи).', 'stale',
               (bad ? [] : [{ text: 'Повторить', fn: function () { STALE.asked = true; staleFetch(); } }]).concat([{ text: 'Открыть старым способом', fn: function () {
                 if (ST === 'stale') startOld('по кнопке: новая версия не скачалась'); } }]));
       });
@@ -596,8 +655,9 @@
     function staleGo() {
       if (ST !== 'stale') return;
       if (!STALE.rec) { STALE.asked = true; cover('Скачиваю новую версию…', 'update'); if (!STALE.fetching) staleFetch(); return; }
-      var rec = STALE.rec; STALE = { rec: null, asked: false, fetching: false };
+      var rec = STALE.rec, away = STALE.away; STALE = { rec: null, asked: false, fetching: false, away: false };
       cover(''); startPage(rec); setReady();
+      if (away) resumeCheck('после окна новой версии');
     }
     // Версия разошлась (выкладка, откат) или текста нет: скачать → проверить → сохранить → перезапустить.
     // Скачать текст версии моста → проверить отпечаток → сохранить. Запуск — у того, кто позвал.
@@ -766,7 +826,7 @@
     // ── сообщения страницы ──────────────────────────────────────────────────────────────────────────────
     function onPageReady(ev) {
       hideSplash();
-      if (MODE === 'bridge') { flushDbg(); applyFresh(); applyTables(); }
+      if (MODE === 'bridge') { guardVerShow(PAGE_WIN); flushDbg(); applyFresh(); applyTables(); }
     }
     // «Обновить» в окне новой версии: страница просит перезагрузить ярлык и ждёт «принял», иначе через 3 с уйдёт
     // на адрес Google (web-app.js). В мосте — своя процедура: новая рамка моста скажет версию, разошлась — скачаем.
@@ -784,6 +844,7 @@
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') { HID_AT = now(); return; }
       var away = HID_AT ? now() - HID_AT : 0; HID_AT = 0;
+      if (away >= T.hidden && ST === 'stale') STALE.away = true;   // проверка связи — после «Обновить» (staleGo)
       if (away >= T.hidden) resumeCheck(Math.round(away / 6000) / 10 + ' мин');
     });
     window.addEventListener('pageshow', function (e) { if (e && e.persisted) resumeCheck('из памяти браузера'); });
