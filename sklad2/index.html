@@ -253,6 +253,7 @@
     // checking (после паузы) | ready | offline.
     var MODE = 'bridge', ST = 'loading';
     var PAGE = null, PAGE_GEN = 0, PAGE_WIN = null, PAGE_T = 0;
+    var TALK_GEN = 0;                // поколение страницы, чей вызов уже ушёл в порт моста (разговор с сервером был)
     var FRESH = null, BAD = '', BAD_REC = null, FRESH_ASKED = false, FIRST_RESP = 0, RELOAD_ASK = false, UPDATING = false;
     var BGQ = [], BG_T = 0;          // фоновые вызовы, отпущенные «готов»: уходят через T.bg или с первым касанием
     var BR = { gen: 0, frame: null, nonce: '', port: null, fp: '', t: 0, up: 0, probed: '' };
@@ -269,6 +270,9 @@
       flushDbg();
     }
     function flushDbg() {
+      // Идёт перезапуск по «Обновить» (сам или по кнопке): строки — в новую страницу (onPageReady), а не в прежнюю, которую
+      // вот-вот заменят [Фейбл L1, круг 1 «без окна», LOW-1: строка о тихом обновлении пропадала вместе со старой страницей].
+      if (ST === 'stale' && STALE.asked) return;
       var w = PAGE_WIN, f = null;
       try { f = w && w.__whReady && typeof w.whDbg === 'function' ? w.whDbg : null; } catch (e) { f = null; }
       if (!f) return;
@@ -418,7 +422,7 @@
       job.sent = true; clearTimeout(job.cap); job.id = ++SEQ; job.ts = now(); WAIT[job.id] = job;
       var args = job.args, ai = AGE_ARG[job.fn];
       if (ai != null && typeof args[ai] === 'number' && job.ts > job.tq) { args = args.slice(); args[ai] = args[ai] + (job.ts - job.tq); }
-      try { BR.port.postMessage({ id: job.id, fn: job.fn, args: args }); }
+      try { BR.port.postMessage({ id: job.id, fn: job.fn, args: args }); TALK_GEN = job.gen; }
       catch (e) { delete WAIT[job.id]; job.sent = false; notSent(job, msg(e)); }
     }
     function release() {
@@ -558,7 +562,11 @@
       if (same && !RELOAD_ASK) { setReady(); return; }
       if (same && RELOAD_ASK) { RELOAD_ASK = false; cover(''); startPage(PAGE); setReady(); return; }
       if (ST === 'stale') { if (!STALE.rec && !STALE.fetching) staleFetch(); return; }   // уже ждём кнопку
-      if (PAGE && !RELOAD_ASK) { if (onHome()) stale(); else defer(); return; }
+      if (PAGE && !RELOAD_ASK) {
+        var q = quietWhy();
+        if (q !== null) stale(q); else if (onHome()) stale(); else defer();
+        return;
+      }
       update();
     }
     // Есть ли у страницы работа, которую перезапуск унёс бы: палец ждёт ответа или страница не на «чистых руках»
@@ -567,6 +575,57 @@
       if (Q.some(function (j) { return !j.dead && j.finger; })) return true;
       try { var v = PAGE_WIN && PAGE_WIN.verSafe_; if (typeof v === 'function') return !v(); } catch (e) {}
       return false;
+    }
+    // ⭐ ЗАПУСК: ВЕРСИЯ РАЗОШЛАСЬ, А ТЕРЯТЬ НЕЧЕГО — «ОБНОВИТЬ» ЖМЁМ ЗА РАБОТНИКА, БЕЗ ОКНА [владелец 08.10.2026: «это хорошее
+    // решение!» — на «при запуске аппка обновляется сама, без окна; нажатие, сделанное в первые секунды, пропадёт, и его
+    // придётся повторить»]. Окно ловили на каждом телефоне после каждой выкладки: страница из памяти поднимается сразу, мост
+    // сверяет версию через 5–10 с, и окно ждало человека в главном меню. Без окна — только когда перезапуск не уносит ничего,
+    // кроме нажатий первых секунд:
+    //   · страница этого запуска НИ РАЗУ не говорила с сервером (TALK_GEN): данных сервера на ней нет, а значит, нет и
+    //     записей в полёте и отказов, о которых работнику надо помнить;
+    //   · руки чистые (verSafe_ страницы — та же проверка, что у её окна: карточка, черновики, формы, запись номера…);
+    //   · КАЖДЫЙ вызов, ждущий по пальцу, — из QUIET: показать/найти (экран не открылся — нажмут снова) или то, что новая
+    //     страница сделает сама. Запись вне списка — как было: окно в главном меню (или ждёт его, defer).
+    // Дальше всё ровно как после кнопки «Обновить»: «Скачиваю новую версию…», перезапуск; не скачалось — окно «скачать не
+    // вышло» с «Повторить» и «Открыть старым способом» (staleFetch).
+    var QUIET = {
+      // вход по коду и отметки: сверка кода (быстрый вход уже впустил, иначе экран кода вернётся), свои отметки, номер версии
+      getWorkerByCode: 1, attMine: 1, attDay: 1, attHistory: 1, whAppVer: 1,
+      // «версия аппки» в «Настройках» и строки замера: новая страница отметит версию сама — уже своим номером (seenNote_);
+      // выключатель замеров (perfOn) экраны «Собрать заказ» и «Каталог» спрашивают при входе — новая страница спросит снова
+      // [Фейбл L2, круг 1 «без окна», MED-1: без него главный утренний путь «код → Собрать заказ» оставался с окном]
+      whSeen: 1, perfClient: 1, perfPing: 1, perfOn: 1,
+      // первые экраны: «Собрать заказ», «Выдать заказ», «Каталог», «Смотреть склад», «Печать наклеек», «Сводка», «Статистика»
+      listOrderTables: 1, getPickTablesStamped: 1, warmPickTable: 1, getPickClients: 1, getPickBlocks: 1, getPickEfirClients: 1,
+      getPickEfirBlocks: 1, getPickClaims: 1, getPickActive: 1, getPickNoIndex: 1, getPickPhotos: 1, getPickSearchPack: 1,
+      findPickOrder: 1, findPickEfirOrder: 1, findOrderCands: 1, findPickNicksOpen: 1, getPickNicksClean: 1, getTableNicks: 1,
+      getTablePrefill: 1, catalogEditOpen: 1, catalogEditList: 1, catalogShopsGet: 1, catalogWhoOrdered: 1, listSkladCatalogs: 1,
+      getCatalogPayload: 1, getScanCounts: 1, getPhotoUrls: 1, getPhotoUrl: 1, whSummaryBuild: 1, whStatsPart: 1, whStatsLogFind: 1,
+      // отметка смены: страница кладёт нажатие в память телефона ДО отправки (attQPut_, ключ wh_att_q), а новая страница на
+      // старте досылает очередь сама (attApply → attQFlush_) — той же меткой и с исходным временем. Без окна — только если
+      // метка ЭТОГО нажатия в памяти действительно лежит.
+      attMark: function (j) {
+        try {
+          var op = String(j.args[2] || ''), a = JSON.parse(localStorage.getItem('wh_att_q') || '[]');
+          for (var i = 0; op && Array.isArray(a) && i < a.length; i++) if (a[i] && a[i].op === op) return true;
+        } catch (e) {}
+        return false;
+      }
+    };
+    // Можно ли обновиться без окна: null — нельзя (окно, как было); строка — можно: что ждёт по пальцу, через запятую
+    // ('' — по пальцу ничего не ждёт).
+    function quietWhy() {
+      if (TALK_GEN === PAGE_GEN) return null;
+      try { var v = PAGE_WIN && PAGE_WIN.verSafe_; if (typeof v !== 'function' || !v()) return null; } catch (e) { return null; }
+      var fns = [];
+      for (var i = 0; i < Q.length; i++) {
+        var j = Q[i];
+        if (j.dead || !j.finger) continue;
+        var q = Object.prototype.hasOwnProperty.call(QUIET, j.fn) ? QUIET[j.fn] : 0;
+        if (q !== 1 && !(typeof q === 'function' && q(j))) return null;
+        if (fns.indexOf(j.fn) < 0) fns.push(j.fn);
+      }
+      return fns.join(', ');
     }
     // ⭐ ЧЕЛОВЕК В ГЛАВНОМ МЕНЮ [владелец 08.10.2026: «…чтобы эта табличка возникала только если человек находится в
     // главном меню»]: у страницы на экране «главная» (#v-home.active), не экран кода (#wlogin.on), и работы нет (pageBusy).
@@ -620,11 +679,24 @@
     // главного меню (defer), или качаем сразу; страница перезапускается только по кнопке.
     // away — телефон был скрыт под окном дольше T.hidden: после перезапуска — та же проверка связи, что после паузы
     // (resumeCheck: эхо рамки и пустой пинг) [Фейбл «протокол», круг 1, LOW-1].
+    // quiet — строка quietWhy (запуск, терять нечего): окна нет, «Обновить» нажат сразу.
     var STALE = { rec: null, asked: false, fetching: false, away: false };
-    function stale() {
+    function stale(quiet) {
       deferStop();
       var pre = (STALE.rec && STALE.rec.fp === BR.fp) ? STALE.rec : null;
       ST = 'stale'; HOLD = true; STALE = { rec: pre, asked: false, fetching: STALE.fetching, away: false };
+      if (typeof quiet === 'string') {
+        // ⭐ СВЕРКУ КОДА ПОВТОРЯЕМ НА НОВОМ СЕРВЕРЕ [Кодекс, круг 1 «без окна», MED]. Сервер на ней засекает «первый вход за
+        // сегодня» (whWorkerHit_ → attFirstSeen_, подсказка владельцу в отметках смены), а новая страница вошедшего по
+        // быстрому входу сервером заново не сверяет — утренний вход пропадал бы на каждой выкладке. Загрузчик шлёт её сам,
+        // своим вызовом и после перезапуска (staleGo): ответ никому не отдаём, страница прежней версии сервер не зовёт.
+        STALE.redo = Q.filter(function (j) { return !j.dead && j.fn === 'getWorkerByCode'; }).map(function (j) { return j.args; });
+        STALE.asked = true;                            // «Обновить» нажат за работника: строки ниже — уже в новую страницу (flushDbg)
+        dbg('мост: новая версия при запуске', 0, 'руки чистые, ' + (quiet ? 'по пальцу ждёт ' + quiet : 'по пальцу ничего не ждёт') +
+            ' — «Обновить» сам, без окна' + (pre ? ' · текст уже скачан' : ''));
+        staleGo();
+        return;
+      }
       cover('Вышла новая версия приложения.', 'stale', { text: 'Обновить', fn: staleGo });
       dbg('мост: новая версия, человек в главном меню', 0, 'перезапуск — по кнопке «Обновить»' + (pre ? ' · текст уже скачан' : ''));
       if (!STALE.rec && !STALE.fetching) staleFetch();
@@ -655,9 +727,10 @@
     function staleGo() {
       if (ST !== 'stale') return;
       if (!STALE.rec) { STALE.asked = true; cover('Скачиваю новую версию…', 'update'); if (!STALE.fetching) staleFetch(); return; }
-      var rec = STALE.rec, away = STALE.away; STALE = { rec: null, asked: false, fetching: false, away: false };
+      var rec = STALE.rec, away = STALE.away, redo = STALE.redo || []; STALE = { rec: null, asked: false, fetching: false, away: false };
       cover(''); startPage(rec); setReady();
       if (away) resumeCheck('после окна новой версии');
+      redo.forEach(function (a) { intCall('getWorkerByCode', a, T.fresh).catch(noop); });
     }
     // Версия разошлась (выкладка, откат) или текста нет: скачать → проверить → сохранить → перезапустить.
     // Скачать текст версии моста → проверить отпечаток → сохранить. Запуск — у того, кто позвал.
