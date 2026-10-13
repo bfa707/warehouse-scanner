@@ -36,12 +36,15 @@
           --ok: #0b8043; --okbg: #e9f7ef; --okline: #d3ebdc; --oktx: #4a735b;
           --warn: #9a5b00; --warnbg: #fff4e0; --warnline: #e8a33d; --bad: #b00020; --badbg: #fde6e9;
           --blue: #1a73e8; --bluebg: #eef3fe;
-          --caret: #9aa3b2; }   /* мигающий курсор поля — светло-серый, как подсказка [владелец 30.09.2026, v6.11] */
+          --caret: #9aa3b2;     /* мигающий курсор поля — светло-серый, как подсказка [владелец 30.09.2026, v6.11] */
+          --kd: 50px;           /* 📊 высота полосы «Забрано сегодня» на телефоне (v6.15) */
+          --kbh: 72px; }        /* 📊 высота самого высокого столбика дня в подробностях */
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  /* Снизу — место под полосу «Забрано сегодня» (📊, v6.15): она прибита к низу экрана и сама держит отступ «Домой» айфона. */
   body { display: flex; flex-direction: column; height: 100%;
-         padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); overflow: hidden; }
+         padding: env(safe-area-inset-top) 0 calc(var(--kd) + env(safe-area-inset-bottom)); overflow: hidden; }
   button { font: inherit; }
   #top { flex: none; background: var(--card); padding: 10px 16px 6px; border-bottom: 1px solid var(--line); }
   #tblbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -262,8 +265,10 @@
        и цифры — по-прежнему внизу экрана, на месте (липнут к низу). Вне карточки — как было: поле над цифрами. */
     body.card { height: auto; min-height: 100%; overflow: visible; }
     body.card #main { flex: 1 0 auto; overflow: visible; }   /* короткая карточка — кнопки всё равно внизу [Фейбл «сценарий», LOW-1] */
-    body.card #acts, body.card.typing #pad { position: sticky; bottom: 0; z-index: 5; }
-    body.card.typing #pad { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+    /* 📊 [v6.15] Липнут над полосой «Забрано сегодня» (она внизу экрана и на карточке): кнопки выдачи и цифры подняты на ту же
+       полосу, что и цифры главного экрана, — «Забрала всё» по-прежнему над местом ряда «⌫ 0 Найти». Отступ «Домой» — у полосы. */
+    body.card #acts, body.card.typing #pad { position: sticky; bottom: calc(var(--kd) + env(safe-area-inset-bottom)); z-index: 5; }
+    body.card.typing #pad { padding-bottom: 10px; }
     /* шапка — посередине пустого места сверху; ответ («не найден») — по-прежнему прямо над полем */
     body.brand #brand { margin: auto 0; }
     body.brand #brand ~ #head { margin-top: 0; }
@@ -280,13 +285,16 @@
 
   /* ── КОМПЬЮТЕР: две половины [вид B] ─────────────────────────────────────────────────────── */
   @media (min-width: 900px) {
-    body { display: grid; grid-template-columns: 440px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+    /* 📊 [v6.15] Четвёртая строка — полоса «Забрано сегодня» под кнопками ЛЕВОЙ половины: правая (вещи заказа) — по-прежнему во всю
+       высоту, 9 вещей выбранного заказа целиком в экране 900 px [владелец 26.09.2026, вид B]. */
+    body { display: grid; grid-template-columns: 440px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto;
+           padding-bottom: env(safe-area-inset-bottom); }
     #top { grid-column: 1; grid-row: 1; padding: 20px 22px 8px; border-bottom: 0; border-right: 1px solid var(--line); }
     #main { display: contents; }
     #head { grid-column: 1; grid-row: 2; overflow-y: auto; background: var(--card); padding: 6px 22px 12px;
             border-right: 1px solid var(--line); }
     #head:empty { display: block; }
-    #out { grid-column: 2; grid-row: 1 / span 3; overflow-y: auto; padding: 18px 22px 28px; }
+    #out { grid-column: 2; grid-row: 1 / span 4; overflow-y: auto; padding: 18px 22px 28px; }
     #acts, body.card #acts { grid-column: 1; grid-row: 3; grid-template-columns: 1fr; gap: 12px; padding: 12px 22px 20px;
                              background: var(--card); border-top: 0; border-right: 1px solid var(--line); }
     #pad, #abc { display: none; }
@@ -296,9 +304,9 @@
     /* строка «Данные на…» — только на первом экране и внизу слева [владелец 27.09.2026: «на компе оставь только на
        первом экране и опусти это вниз экрана»] */
     #sync { display: none; }
-    body.home #sync { display: block; position: fixed; left: 22px; bottom: 16px; width: 396px; margin: 0; }
+    body.home #sync { display: block; position: fixed; left: 22px; bottom: calc(16px + var(--kd)); width: 396px; margin: 0; }
     /* шапка — посередине правой половины, крупнее: там пусто, пока заказ не найден */
-    #brand { grid-column: 2; grid-row: 1 / span 3; align-self: center; justify-self: center; gap: 20px; }
+    #brand { grid-column: 2; grid-row: 1 / span 4; align-self: center; justify-self: center; gap: 20px; }
     #brand .mk { --h: 124px; } #brand .wm { --h: 27px; } #brand .tx { font-size: 17px; margin-top: -4px; }
     #num { height: 74px; font-size: 42px; padding-right: 76px; }
     #num::placeholder { font-size: 24px; }
@@ -360,8 +368,14 @@
   @media (max-width: 899px) {
     .dlgft.lv { flex-direction: column; align-items: stretch; }
     /* Окно — у верха экрана: посередине «✅ Забрала всё» вставала над рядом «1 2 3», и тап по цифре через 0,7 с записывал выдачу
-       [Фейбл «сценарий», круг 1 v6.8, MED-1: iPhone SE и 12–15 значком на «Домой»]. */
-    #dlg:has(.dlgft.lv) { align-items: flex-start; padding-top: calc(12px + env(safe-area-inset-top)); }
+       [Фейбл «сценарий», круг 1 v6.8, MED-1: iPhone SE и 12–15 значком на «Домой»]. С v6.15 цифры стоят выше на полосу «Забрано
+       сегодня» (50 px) — окно на те же 50 px ниже ростом (кнопки 50 px, промежутки 8 px, отступ сверху 6 px): иначе «Выдали, забрала
+       всё» снова вставала над рядом «1 2 3» на iPhone SE значком [Фейбл «кассир», круг 1 v6.15, MED-3]. */
+    .dlgft.lv { gap: 8px; } .dlgft.lv .btn { height: 50px; }
+    /* Кнопка ниже ростом — шрифт меньше: «Выдали, но забрала не всё» в 21 px ложилась второй строкой на рамку (360–375 px)
+       [Фейбл «кассир», круг 2б v6.15, LOW-1]. */
+    .dlgft.lv .btn { font-size: 18px; }
+    #dlg:has(.dlgft.lv) { align-items: flex-start; padding-top: calc(6px + env(safe-area-inset-top)); }
   }
   /* Низкое окно кассы (1366×768 без масштаба, 1920×1080 со 150 % — окно ~650 px): левая половина плотнее, иначе сумма к оплате
      уходила под кнопки [Фейбл «сценарий», круг 1 v6, MED-2]. До 860 px — и 1366×768 во весь экран, 1440×900 / 1600×900 с
@@ -384,6 +398,149 @@
     .sumb .l { font-size: 17px; }
     .sumb .r { font-size: 48px; }
   }
+
+  /* ── 📊 «ЗАБРАНО СЕГОДНЯ» (v6.15, 13.10.2026) ────────────────────────────────────────────────────────────────────────────────
+     [владелец: «всегда на экране (компа и мобилы) должна висеть краткая инфа: забрано сегодня заказов кол-во и общая сумма. А при
+     нажатии на это окно уже подробная инфа»; вид — вариант C (тёмная полоса внизу, подробности выезжают снизу, заказ — чеком);
+     «статистику указывай только за последние 3 дня (сегодня включая)»]. Телефон — полоса во всю ширину у нижнего края; компьютер —
+     под кнопками левой половины. Окна выше полосы: «Не забрала всё…», «Заказ не отмечен» (#dlg 40) — над подробностями (35–37). */
+  /* Подпись — мелкой строкой над числом заказов, сумма и стрелка — справа на всю высоту: одной строкой «Забрано сегодня · 104 заказа ·
+     230 вещей · 5 123,40 €» не влезало в левую половину компьютера (440 px) и в телефон 360 px — хвост суммы и стрелка уходили за полосу
+     [Фейбл «кассир», круг 1 v6.15, MED-1]. overflow — страховка: не влезшее обрезается внутри полосы, а не рисуется поверх соседей. */
+  /* Сумма — деньги кассы, над ней мелко «на кассе» [владелец 13.10.2026: «Подписать «на кассе»»]: «8 заказов» — все забранные,
+     а сумма — без забранного по счёту. */
+  #kd { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto;
+        grid-template-areas: "l g c i" "n g s i"; align-content: center; align-items: center; column-gap: 10px; overflow: hidden;
+        height: calc(var(--kd) + env(safe-area-inset-bottom)); padding: 0 12px env(safe-area-inset-bottom) 16px; margin: 0; border: 0;
+        border-radius: 0; background: var(--ink); color: #fff; font: inherit; text-align: left; cursor: pointer; }
+  #kd .l { grid-area: l; font-size: 12px; line-height: 1.2; font-weight: 800; color: #c9ced6; white-space: nowrap; }
+  #kd .n { grid-area: n; font-size: 17px; line-height: 1.2; font-weight: 900; white-space: nowrap; }
+  #kd .t { display: none; grid-area: t; font-size: 15px; line-height: 1.2; font-weight: 700; color: #c9ced6; white-space: nowrap;
+           overflow: hidden; text-overflow: ellipsis; }
+  #kd .t::before { content: '· '; }
+  #kd .t:empty::before { content: none; }   /* «…» / «—» — без одинокой «·» посреди полосы компьютера [Фейбл «вид», после 2б, LOW-3] */
+  #kd .g { grid-area: g; min-width: 0; }
+  #kd .s { grid-area: s; justify-self: end; font-size: 21px; line-height: 1.1; font-weight: 900; color: #8fe3b0; white-space: nowrap; }
+  #kd .c { grid-area: c; justify-self: end; font-size: 12px; line-height: 1.2; font-weight: 800; color: #c9ced6; white-space: nowrap; }
+  #kd svg { grid-area: i; width: 22px; height: 22px; color: #c9ced6; }
+  #kd.wait .n, #kd.wait .s { opacity: .6; }
+  #kbg { position: fixed; inset: 0; z-index: 34; display: none; background: rgba(17,24,39,.45); }
+  #kbg.on { display: block; }
+  #kst { position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; display: none; flex-direction: column; height: 94%; height: 94dvh;
+         background: var(--bg); border-radius: 20px 20px 0 0; box-shadow: 0 -16px 48px rgba(0,0,0,.25); overflow: hidden;
+         padding-bottom: env(safe-area-inset-bottom); }
+  #kst.on { display: flex; }
+  .ksh { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+  .ksh h2 { flex: 1; min-width: 0; margin: 0; font-size: 21px; font-weight: 900; }
+  .ksh .at { font-size: 13px; font-weight: 600; color: var(--mute); white-space: nowrap; }
+  .ksh .cl { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; min-width: 44px; padding: 0 12px;
+             border: 0; border-radius: 12px; background: var(--soft); color: var(--ink); font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
+  .ksh .cl span { display: none; }
+  .ksh .cl svg { width: 22px; height: 22px; }
+  .kch { flex: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; height: 140px;
+         margin: 10px 16px 0; padding: 10px 12px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+  .kbar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; min-width: 0;
+          margin: 0; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+  .kbar .v { font-size: 13px; font-weight: 700; color: var(--mute); white-space: nowrap; }
+  .kbar .b { display: block; width: 100%; max-width: 64px; border-radius: 8px 8px 3px 3px; background: #c5d5f3; }
+  .kbar .d { font-size: 13px; font-weight: 700; color: var(--mute); white-space: nowrap; }
+  .kbar.on .v { color: var(--blue); font-weight: 900; }
+  .kbar.on .b { background: var(--blue); }
+  .kbar.on .d { color: var(--ink); font-weight: 900; }
+  .kdt { flex: none; padding: 10px 16px 0; }
+  .kdt b { display: block; font-size: 16px; font-weight: 900; }
+  .kdt span { font-size: 13px; font-weight: 700; color: var(--mute); }
+  .klst { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; grid-template-columns: minmax(0, 1fr);
+          gap: 6px; align-content: start; padding: 8px 16px; }
+  .kt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; width: 100%; margin: 0; padding: 10px 12px;
+        border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .kt .k1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .kt .no { flex: none; font-size: 19px; font-weight: 900; color: var(--blue); }
+  .kt .nk { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 800; }
+  .kt .k2 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-top: 2px; font-size: 13px; font-weight: 700; color: var(--mute); }
+  .kt .pt { padding: 1px 7px; border-radius: 6px; background: var(--warnbg); color: var(--warn); font-weight: 800; }
+  .kt .kw { color: var(--warn); font-weight: 800; }
+  .kt .kb { text-align: right; }
+  .kt .sm { display: block; font-size: 19px; font-weight: 900; color: var(--ok); white-space: nowrap; }
+  .kt .iv { display: block; margin-top: 1px; font-size: 12px; font-weight: 700; color: var(--warn); white-space: nowrap; }   /* «по счёту» */
+  .kt .sm.ivx { color: var(--warn); }
+  .kemp { padding: 18px 4px; color: var(--mute); font-size: 16px; font-weight: 600; }
+  .kemp .sw2 { margin-left: 8px; }
+  .kft { flex: none; margin: 4px 16px 12px; padding: 10px 14px; border-radius: 14px; background: var(--ink); color: #fff; }
+  .kft .a { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 10px; min-width: 0; }
+  .kft .a b { font-size: 14px; font-weight: 800; color: #c9ced6; }
+  .kft .a span { font-size: 14px; font-weight: 900; }
+  /* «Забрано и оплачено» (r1, деньги кассы) и «Забрано, но не оплачено» (r2, по счёту) [владелец 13.10.2026] — подпись переносится,
+     сумма — нет: на телефоне 360 px «5 123,40 €» не выталкивает себя за край. */
+  .kft .r1, .kft .r2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+  .kft .l { min-width: 0; font-size: 13px; font-weight: 800; color: #c9ced6; }
+  .kft .l i { font-style: normal; font-weight: 700; white-space: nowrap; }   /* «· 6 заказов» не рвётся [Фейбл «кассир», круг 2б, LOW-2] */
+  .kft .s { flex: none; font-weight: 900; line-height: 1.05; white-space: nowrap; }
+  .kft .r1 .s { font-size: 26px; color: #8fe3b0; }
+  .kft .r2 { margin-top: 4px; }
+  .kft .r2 .s { font-size: 18px; color: #fcd34d; }
+  /* Чек заказа — над подробностями; телефон — снизу, компьютер — по центру */
+  #krc { position: fixed; inset: 0; z-index: 37; display: none; align-items: flex-end; justify-content: center; background: rgba(17,24,39,.5); }
+  #krc.on { display: flex; }
+  .rcb { display: flex; flex-direction: column; width: 100%; max-height: 92%; background: var(--card); border-radius: 20px 20px 0 0; overflow: hidden;
+         padding-bottom: env(safe-area-inset-bottom); }
+  .rch { flex: none; padding: 14px 18px 12px; text-align: center; border-bottom: 2px dashed #d5d9e0; }
+  .rch .k { font-size: 12px; font-weight: 800; letter-spacing: .2em; padding-left: .2em; color: var(--mute); }
+  .rch .no { font-size: 32px; font-weight: 900; line-height: 1.1; color: var(--blue); word-break: break-word; }
+  .rch .nk { font-size: 19px; font-weight: 800; word-break: break-word; }
+  .rch .mt { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--mute); }
+  .rch .stt { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 8px; font-size: 14px; font-weight: 800; background: var(--okbg); color: var(--ok); }
+  .rch .stt.p { background: var(--warnbg); color: var(--warn); }
+  .rch .wr { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--warn); }
+  .rcl { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 18px; }
+  .rci { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-bottom: 1px dotted #c9ced6; }
+  .rci .a { font-size: 15px; font-weight: 800; line-height: 1.25; word-break: break-word; }
+  .rci .p { font-size: 16px; font-weight: 900; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rci .c { grid-column: 1 / -1; font-size: 12px; color: var(--mute); word-break: break-word; }
+  .rci .c b.i { color: var(--ok); } .rci .c b.r { color: var(--warn); }
+  .rci.off .a, .rci.off .p { color: var(--mute); }
+  .rci.off .p { text-decoration: line-through; }
+  .rcn { padding: 14px 0; color: var(--mute); font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .rcf { flex: none; padding: 12px 18px 14px; border-top: 2px dashed #d5d9e0; }
+  .rcf .t { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .rcf .t span { font-size: 17px; font-weight: 800; }
+  .rcf .t b { font-size: 30px; font-weight: 900; color: var(--ok); white-space: nowrap; }
+  .rcf .iv { margin-top: 2px; text-align: right; font-size: 13px; font-weight: 700; color: var(--oktx); }
+  .rcf .x { display: block; width: 100%; height: 52px; margin-top: 12px; border: 0; border-radius: 14px; background: var(--ink); color: #fff;
+            font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
+  @media (min-width: 900px) {
+    :root { --kd: 56px; --kbh: 96px; }
+    #kd { position: static; grid-column: 1; grid-row: 4; height: var(--kd); padding: 0 14px 0 22px; column-gap: 10px;   /* 10, а не 12: шрифт Мака шире — «· 230 вещей» при «104 заказа · 5 123,40 €» не влезал на 6 px (гейт 38 (о)) */
+          grid-template-columns: auto minmax(0, max-content) minmax(0, 1fr) auto auto; grid-template-areas: "l l g c i" "n t g s i"; }
+    #kd .l, #kd .c { font-size: 13px; } #kd .n { font-size: 20px; } #kd .t { display: block; } #kd .s { font-size: 26px; }
+    #kd .n, #kd .t { align-self: baseline; }
+    #kst { height: min(88vh, 900px); }
+    .ksh { padding: 12px 24px; } .ksh h2 { font-size: 26px; } .ksh .at { font-size: 15px; }
+    .ksh .cl { height: 48px; padding: 0 16px; font-size: 17px; } .ksh .cl span { display: inline; }
+    .kch { height: 170px; max-width: 760px; margin: 14px 24px 0; padding: 12px 16px 10px; gap: 16px; }
+    .kbar .v, .kbar .d { font-size: 15px; } .kbar .b { max-width: 96px; }
+    .kdt { padding: 14px 24px 0; } .kdt b { display: inline; font-size: 20px; } .kdt span { margin-left: 12px; font-size: 16px; }
+    .klst { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; padding: 10px 24px; }
+    .kt { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; gap: 4px; }
+    .kt .no { font-size: 23px; } .kt .nk { font-size: 17px; } .kt .k2 { font-size: 14px; }
+    .kt .kb { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 8px; text-align: left; }   /* суммы не за край [«кассир», 2б, LOW-3] */
+    .kt .sm { font-size: 23px; } .kt .iv { font-size: 13px; }
+    .kft { margin: 6px 24px 18px; padding: 12px 22px; }
+    .kft .a b { font-size: 17px; } .kft .a span { font-size: 18px; }
+    .kft .l { font-size: 16px; } .kft .r1 .s { font-size: 36px; } .kft .r2 .s { font-size: 22px; }
+    #krc { align-items: center; padding: 32px; }
+    .rcb { max-width: 560px; max-height: 100%; border-radius: 18px; padding-bottom: 0; }
+    .rch { padding: 18px 24px 14px; } .rch .k { font-size: 14px; } .rch .no { font-size: 40px; } .rch .nk { font-size: 22px; } .rch .mt { font-size: 14px; }
+    .rcl { padding: 4px 24px; } .rci .a { font-size: 17px; } .rci .p { font-size: 19px; } .rci .c { font-size: 14px; }
+    .rcf { padding: 14px 24px 20px; } .rcf .t span { font-size: 20px; } .rcf .t b { font-size: 38px; } .rcf .iv { font-size: 15px; }
+    .rcf .x { height: 56px; font-size: 20px; }
+  }
+  /* Низкое окно компьютера: полоса и столбики ниже — место списку заказов в подробностях [Фейбл «кассир», круг 1 v6.15, LOW-5]. */
+  @media (max-height: 860px) and (min-width: 900px) {
+    :root { --kd: 48px; --kbh: 52px; }
+    #kd .n { font-size: 18px; } #kd .s { font-size: 22px; }
+    .kch { height: 116px; }
+  }
 </style>
 </head>
 <body>
@@ -405,6 +562,10 @@
   <button type="button" data-d="7">7</button><button type="button" data-d="8">8</button><button type="button" data-d="9">9</button>
   <button type="button" class="del" data-d="del">⌫</button><button type="button" data-d="0">0</button><button type="button" class="go" data-d="go">Найти</button>
 </div>
+<button id="kd" type="button" aria-haspopup="dialog" aria-controls="kst" aria-label="Забрано сегодня — подробности"><span class="l">Забрано сегодня</span><span class="n" id="kdn">…</span><span class="t" id="kdt"></span><span class="g"></span><span class="c" id="kdc"></span><span class="s" id="kds"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
+<div id="kbg"></div>
+<section id="kst" role="dialog" aria-modal="true" aria-label="Забранные заказы"></section>
+<div id="krc"></div>
 <div id="dlg"></div>
 <div id="zoom"><img id="zimg" alt=""></div>
 <div id="deny"></div>
@@ -412,7 +573,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.14 · 06.10.2026';   // v6.14 — поиск одними цифрами всегда списком [владелец 06.10.2026]
+  var VER = 'v6.15 · 13.10.2026';   // v6.15 — полоса «Забрано сегодня» и подробности за три дня [владелец 13.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -607,7 +768,9 @@
           window[L.cb] = function () {};                   // поздний ответ после таймаута или другого запроса — молча
           if (L.s.parentNode) L.s.parentNode.removeChild(L.s);
         });
-        if (d && d.error === 'no_key') denied();
+        // 📊 Отказ двери «Забрано сегодня» кассу не запирает: склад без этой двери (страница выложена раньше склада, откат склада) отвечает
+        // no_key только ей — отзыв ключа решают двери списка (kstFetch зовёт sync) [Фейбл «кассир», круг 1 v6.15, MED-2].
+        if (d && d.error === 'no_key' && action !== 'kassa_stat') denied();
         resolve(d || null);
       }
       function leg(i, prm) {
@@ -686,6 +849,7 @@
     var db = DB; DB = null;
     idbWipeClients(db);
     closeDlg();
+    kstReset();                                  // 📊 ники клиентов «Забрано сегодня» — тоже вон (живут только в памяти вкладки)
     showDeny(pend);
   }
 
@@ -2104,6 +2268,8 @@
     }
     wqDrop(j);
     spRow(j, r, outcomeText(r));
+    // 📊 Выдача легла (вся или часть) — «Забрано сегодня» спросит склад заново: строка журнала уже есть [v6.15].
+    if (j.action === 'kassa_give' && (r.ok || Number(r.wrote) > 0)) kstSoon();
     var pre = j.tries > 1 ? 'Проверка: ' : '';
     if (j.action === 'kassa_give' && r.ok) {
       WQ_DONE = WQ_DONE.filter(function (d) { return Date.now() - d.at < WQ_DONE_FOR; });
@@ -2521,6 +2687,7 @@
   function give(mode, takeIdx, force) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || !m.open.length || DENIED || !cardInScope() || (!force && draftOn())) return false;
+    if (KST.open) return false;     // 📊 подробности «Забрано сегодня» открыты — карточка позади не выдаётся ничем [Кодекс HIGH-2, круг 1 v6.15]
     if (mode === 'all' && ((!force && tooFresh()) || checkHold() || invHold())) return false;
     lastActivity = Date.now();
     var h = CUR.h, rows = m.open.slice();
@@ -2598,6 +2765,324 @@
     afterWrite(hint, { text: '⏳ «Нет» снимается в таблице — вещь уже в заказе ' + hint + ', можно выдавать.', cls: 'info', q: 1, n: params.n });
   }
 
+  // ── 📊 «ЗАБРАНО СЕГОДНЯ» (v6.15, 13.10.2026) ─────────────────────────────────────────────────────────────────────────────────
+  // [владелец 13.10.2026: «Сделаем проще — всегда на экране (компа и мобилы) должна висеть краткая инфа: забрано сегодня заказов
+  // кол-во и общая сумма. А при нажатии на это окно уже подробная инфа»; «Выводи заказ, общая сумма. В заказ можно зайти (тогда
+  // откроются в попапе подробности). Снизу общая сумма»; вид — вариант C; «статистику указывай только за последние 3 дня (сегодня
+  // включая)»]. Цифры — со склада (kassa_stat: «Лог кассы» всех касс магазина, разбор в kassa.js), а не из памяти этой кассы: выдачи
+  // телефона и компьютера — одна касса магазина. Полосу освежаем: при открытии кассы; после каждой своей легшей выдачи (через 1,5 с);
+  // раз в 2 мин, пока кассир работает (раз в 10 мин — пока касса стоит без дела; при открытых подробностях — раз в минуту); при
+  // возврате в кассу. Цена на складе — чтение кэша: ответ лежит там до следующей записи журнала.
+  // ⛔️ Только чтение и показ: выдачу, деньги и экран кассира эта часть не трогает. В памяти браузера не хранится — ники клиентов только
+  // в памяти вкладки, отказ ключа их стирает (kstReset).
+  var KST = { days: null, today: '', got: 0, tried: 0, seq: 0, applied: 0, busy: 0, err: '', lists: {}, open: false, sel: '', rc: null, soon: null };
+  // Ответ ждём, как список закупок: Google в плохие дни довозил ответ на 10–114-й секунде [Фейбл «кассир», круг 1 v6.15, LOW-9].
+  var WAIT_STAT = 150000, STAT_ACTIVE = 120000, STAT_OPEN = 60000, STAT_IDLE = 600000, STAT_FRESH = 30000;
+  var WD_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'], WD_LONG = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+  var MON_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  // День склада «гггг-мм-дд» (часовой пояс Склада) → подписи. Число дня и месяца — из самой строки, не из часов телефона.
+  function kdDate(k) { var p = String(k || '').split('-'); return new Date(+p[0], +p[1] - 1, +p[2], 12); }
+  function kdDD(k) { var p = String(k || '').split('-'); return p.length === 3 ? p[2] + '.' + p[1] : ''; }
+  function kdIdx(k) { if (!KST.days || !k) return -1; for (var i = 0; i < KST.days.length; i++) if (KST.days[i][0] === k) return i; return -1; }
+  function kdName(k) { var i = kdIdx(k); return i === 0 ? 'Сегодня' : i === 1 ? 'Вчера' : WD_SHORT[kdDate(k).getDay()] + ' ' + kdDD(k); }
+  function kdLong(k) {
+    var d = kdDate(k), i = kdIdx(k), w = WD_LONG[d.getDay()] + ', ' + d.getDate() + ' ' + MON_GEN[d.getMonth()];
+    return i === 0 ? 'Сегодня, ' + w : i === 1 ? 'Вчера, ' + w : w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  function kdShort(k) { var i = kdIdx(k); return (i === 0 ? 'сегодня' : i === 1 ? 'вчера' : WD_LONG[kdDate(k).getDay()]) + ', ' + kdDD(k); }
+  function kdOrders(n) { n = Number(n) || 0; return n + ' ' + plural(n, 'заказ', 'заказа', 'заказов'); }
+  function kdHm(t) { var d = new Date(Number(t) || 0), p = function (x) { return (x < 10 ? '0' : '') + x; }; return p(d.getHours()) + ':' + p(d.getMinutes()); }
+  function kdSvg(path) {                 // значок — постоянная разметка, без данных клиента
+    var ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg'), p = document.createElementNS(ns, 'path');
+    [['viewBox', '0 0 24 24'], ['fill', 'none'], ['stroke', 'currentColor'], ['stroke-width', '2.6'], ['stroke-linecap', 'round'],
+     ['stroke-linejoin', 'round'], ['aria-hidden', 'true']].forEach(function (a) { s.setAttribute(a[0], a[1]); });
+    p.setAttribute('d', path); s.appendChild(p);
+    return s;
+  }
+  // Полоса: сегодня по складу. Ответа ещё не было — «…»; склад не ответил, а цифр нет вовсе — «—» (прежние цифры не стираем).
+  // Сумма — деньги, взятые на кассе («забрано и оплачено»); забранное по счёту в неё не входит — оно отдельной строкой в итоге дня
+  // [владелец 13.10.2026: «забрано и оплачено (тут сумма кассы) и забрано но не оплачено: тут инвойсы»]. День: [день, выдач, вещей,
+  // сумма, по счёту, на кассе, выдач с оплатой на кассе, выдач по счёту] (два последних — склад с 13.10.2026), суммы — в центах.
+  function renderKd() {
+    var b = $('kd');
+    if (!b) return;
+    var d = KST.days && KST.days[0], has = !!d;
+    $('kdn').textContent = has ? kdOrders(d[1]) : (KST.err && !KST.busy ? '—' : '…');
+    $('kdt').textContent = has ? things(Number(d[2]) || 0) : '';
+    $('kds').textContent = has ? eur(Number(d[5]) || 0) : '';
+    $('kdc').textContent = has ? 'на кассе' : '';                          // подпись — только при сумме
+    b.className = (!has && KST.busy) ? 'wait' : '';
+    b.setAttribute('aria-label', 'Забрано сегодня: ' + (has ? kdOrders(d[1]) + ', оплачено на кассе ' + eur(Number(d[5]) || 0) : 'загружается') + '. Подробности');
+  }
+  // Вопрос складу: day — список этого дня (из трёх), '' — только итоги трёх дней. Ответы, пришедшие не по порядку, итогов не откатывают.
+  async function kstFetch(day, attempt) {
+    if (DENIED) return;
+    var seq = ++KST.seq;
+    KST.busy++; KST.tried = Date.now();
+    renderKd(); if (KST.open) renderKst();
+    var r = null;
+    try { r = await jsonp('kassa_stat', day ? { day: day } : {}, WAIT_STAT); } catch (e) { r = null; }
+    KST.busy--;
+    if (DENIED) return;
+    if (r && r.net && !attempt) { await sleep(2000); if (!DENIED) return kstFetch(day, 1); return; }   // «404» Google — ещё раз
+    if (!r || !r.ok) {
+      // no_key этой двери кассу не запирает (jsonp): так отвечает и склад без двери «Забрано сегодня» — страница выложена раньше склада,
+      // откат склада [Фейбл «кассир», круг 1 v6.15, MED-2]. Но ники клиентов из памяти вкладки — вон СРАЗУ, а отозван ли сам ключ, решают
+      // двери списка: спрашиваем их тут же, не чаще освежения (SYNC_EVERY). Касса без дела освежает только полосу — без этого ники
+      // «Забрано сегодня» висели бы на незапертой кассе, пока кассир не вернётся к работе, часами [Кодекс, круг 2 v6.15, MED-1].
+      if (r && r.error === 'no_key') {
+        kstReset(); KST.err = 'no_key'; renderKd();
+        if (Date.now() - lastSyncAt > SYNC_EVERY) sync();
+        return;
+      }
+      // Запоздавший неудачный ответ после свежего удачного — не «не обновилось» [Фейбл «кассир», круг 1 v6.15, LOW-9].
+      if (seq > KST.applied) KST.err = !r ? 'нет ответа' : r.net ? 'сбой Google' : String(r.error || 'ошибка');
+      // Ночью сменился день — этого дня у склада больше нет: спрашиваем итоги заново (список выбранного дня — следом, renderKst).
+      if (r && r.error === 'bad_day' && day) { delete KST.lists[day]; if (KST.sel === day) KST.sel = ''; KST.days = null; kstFetch(''); }
+      renderKd(); if (KST.open) renderKst();
+      return;
+    }
+    KST.err = '';
+    if (seq > KST.applied && Array.isArray(r.days) && r.days.length) {
+      KST.applied = seq; KST.days = r.days; KST.today = String(r.today || r.days[0][0]); KST.got = Date.now();
+      Object.keys(KST.lists).forEach(function (k) { if (kdIdx(k) < 0) delete KST.lists[k]; });   // день ушёл из трёх — его список вон
+      if (KST.open && kdIdx(KST.sel) < 0) { KST.sel = KST.today; KST.rc = null; renderRc(); }
+    }
+    if (r.list && r.list.d && kdIdx(r.list.d) >= 0) {
+      var was = KST.lists[r.list.d];
+      if (!was || seq > was.seq) KST.lists[r.list.d] = { seq: seq, got: Date.now(), rows: Array.isArray(r.list.rows) ? r.list.rows : [] };
+    }
+    renderKd();
+    if (KST.open) {
+      renderKst();
+      // Подробности открыли раньше, чем пришли дни (или итог дня ушёл вперёд списка, или пришёл список ДРУГОГО дня, а выбран уже этот
+      // [Кодекс, круг 1 v6.15, LOW-3]), — список выбранного дня спрашиваем заново. Только после ответа НЕ про выбранный день: ответ про
+      // него самого новых вопросов не рождает — иначе расхождение крутило бы запросы по кругу.
+      if (day !== KST.sel && KST.sel && kstStale(KST.sel) && !KST.busy) kstFetch(KST.sel);
+    }
+  }
+  // Список дня устарел: его нет, или он не сходится с итогом дня из более свежего ответа (новая выдача: полоса уже «2 заказа», а
+  // список, спрошенный полминуты назад, — про один) — спросить заново.
+  function kstStale(k) {
+    var L = KST.lists[k], i = kdIdx(k), d = i >= 0 ? KST.days[i] : null, s = 0;
+    if (!L || !d) return true;
+    L.rows.forEach(function (r) { s += Number(r && r[7]) || 0; });
+    return L.rows.length !== (Number(d[1]) || 0) || s !== (Number(d[3]) || 0);
+  }
+  function kstDue() {
+    if (KST.busy || DENIED) return false;
+    var every = Date.now() - lastActivity < ACTIVE_FOR ? (KST.open ? STAT_OPEN : STAT_ACTIVE) : STAT_IDLE;
+    return Date.now() - KST.tried > (KST.got ? every : 60000);
+  }
+  function kstSoon() {
+    if (KST.soon) clearTimeout(KST.soon);
+    KST.soon = setTimeout(function () { KST.soon = null; kstFetch(KST.open ? KST.sel : ''); }, 1500);
+  }
+  function kstReset() {
+    KST.days = null; KST.today = ''; KST.lists = {}; KST.rc = null; KST.err = ''; KST.got = 0;
+    if (KST.soon) { clearTimeout(KST.soon); KST.soon = null; }
+    kstClose(); renderKd();
+  }
+  // Подробности открыты — касса за ними глуха и для клавиатуры: Tab/Shift+Tab не доходит до «Забрала всё» карточки позади, Enter не пишет
+  // выдачу невидимого заказа [Кодекс HIGH-2, Фейбл «кассир» LOW-6, круг 1 v6.15]. Браузер без inert — держит проверка KST.open в give()/openPart().
+  function kstInert(on) {
+    ['top', 'main', 'acts', 'pad', 'kd'].forEach(function (id) { var e = $(id); if (!e) return; if (on) e.setAttribute('inert', ''); else e.removeAttribute('inert'); });
+  }
+  function kstOpen() {
+    if (DENIED || KST.open) return;
+    lastActivity = Date.now();
+    KST.open = true; KST.rc = null; KST.sel = KST.today || '';
+    kstInert(true);
+    $('kbg').className = 'on'; $('kst').className = 'on';
+    renderKst();
+    try { var cl = $('kst').querySelector('.cl'); if (cl) cl.focus(); } catch (e) {}
+    var L = KST.sel ? KST.lists[KST.sel] : null;
+    if (!KST.busy && (!L || kstStale(KST.sel) || Date.now() - L.got > STAT_FRESH)) kstFetch(KST.sel);
+  }
+  // byKey — закрыла клавиша набора (компьютер): курсор в поле ставит сам обработчик клавиш, с защитой от отложенного выделения
+  // (иначе вторая цифра заменяла бы первую — «1321» → «321» [Фейбл, круг 2, CRIT-1, разбор у keyFocus]).
+  function kstClose(byKey) {
+    if (!KST.open) return;
+    KST.open = false; KST.rc = null;
+    kstInert(false);
+    $('kbg').className = ''; $('kst').className = ''; $('kst').textContent = ''; $('kst').removeAttribute('data-sel');
+    renderRc();
+    // Курсор — в поле; набранный на карточке следующий номер не выделяем: цифра после «Свернуть» его дописывает, а не заменяет
+    // [Фейбл «кассир», круг 1 v6.15, LOW-7] (как у клавиши набора, разбор у keyFocus).
+    if (!byKey && DESK.matches && !dlgOpen()) {
+      var n = $('num');
+      keyFocus = true;
+      try { n.focus(); if (draftOn()) { var L0 = n.value.length; n.setSelectionRange(L0, L0); } else n.select(); } catch (e) {}
+      keyFocus = false;
+    }
+  }
+  function kstPick(k) {
+    if (!KST.open || kdIdx(k) < 0) return;
+    lastActivity = Date.now();
+    KST.sel = k; KST.rc = null; renderRc();
+    renderKst();
+    var L = KST.lists[k];
+    if (!L || kstStale(k) || Date.now() - L.got > STAT_FRESH) kstFetch(k);
+  }
+  // Перерисовка не роняет фокус клавиатуры на body: он остаётся на той же кнопке (или на «Свернуть») [Фейбл «кассир», круг 1 v6.15, LOW-6].
+  function renderKst() {
+    var box = $('kst'), ae = document.activeElement;
+    var fk = KST.open && ae && ae !== box && box.contains(ae) ? (ae.getAttribute('data-f') || 'cl') : '';
+    kstDraw();
+    if (!fk || !KST.open) return;
+    var fe = null;
+    [].forEach.call(box.querySelectorAll('[data-f]'), function (x) { if (!fe && x.getAttribute('data-f') === fk) fe = x; });
+    try { (fe || box.querySelector('.cl')).focus({ preventScroll: true }); } catch (e) {}
+  }
+  // Подробности: шапка, три столбика (позавчера → сегодня), заказы выбранного дня, итог дня внизу.
+  function kstDraw() {
+    var box = $('kst');
+    if (!KST.open) return;
+    var ol = box.querySelector('.klst'), keep = ol && box.getAttribute('data-sel') === (KST.sel || '') ? ol.scrollTop : 0;
+    box.textContent = '';
+    box.setAttribute('data-sel', KST.sel || '');
+    var hd = el('div', 'ksh');
+    hd.appendChild(el('h2', null, 'Забранные заказы'));
+    hd.appendChild(el('span', 'at' + (KST.busy ? ' blink' : ''), KST.busy ? 'обновляю…' : KST.err ? 'не обновилось' : (KST.got ? 'на ' + kdHm(KST.got) : '')));
+    var cl = el('button', 'cl'); cl.type = 'button'; cl.setAttribute('aria-label', 'Свернуть'); cl.setAttribute('data-f', 'cl');
+    cl.appendChild(el('span', null, 'Свернуть')); cl.appendChild(kdSvg('M6 9l6 6 6-6'));
+    cl.onclick = function () { kstClose(); };
+    hd.appendChild(cl);
+    box.appendChild(hd);
+    var retry = function (w, day) {
+      var rb = el('button', 'sw2', 'Загрузить ещё раз'); rb.type = 'button'; rb.setAttribute('data-f', 'r');
+      rb.onclick = function () { lastActivity = Date.now(); if (!KST.busy) kstFetch(day); };
+      w.appendChild(rb);
+    };
+    if (!KST.days) {
+      var w0 = el('div', 'kemp' + (KST.busy ? ' blink' : ''), KST.busy || !KST.err ? 'Загружаю…' : 'Склад не ответил.');
+      if (!KST.busy && KST.err) retry(w0, '');
+      var l0 = el('div', 'klst'); l0.appendChild(w0); box.appendChild(l0);
+      return;
+    }
+    var ch = el('div', 'kch'), max = 1, H = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--kbh')) || 72;
+    KST.days.forEach(function (d) { if ((Number(d[5]) || 0) > max) max = Number(d[5]); });   // столбик — деньги кассы, как полоса
+    KST.days.slice().reverse().forEach(function (d) {
+      var on = d[0] === KST.sel, b = el('button', 'kbar' + (on ? ' on' : ''));
+      b.type = 'button'; b.setAttribute('data-f', 'b' + d[0]);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.setAttribute('aria-label', kdName(d[0]) + ' (' + kdDD(d[0]) + '): ' + kdOrders(d[1]) + ', оплачено на кассе ' + eur(Number(d[5]) || 0));
+      b.appendChild(el('span', 'v', eur(Number(d[5]) || 0)));
+      var bar = el('span', 'b'); bar.style.height = Math.max(6, Math.round(H * Math.max(0, Number(d[5]) || 0) / max)) + 'px'; b.appendChild(bar);
+      b.appendChild(el('span', 'd', kdName(d[0])));
+      b.onclick = function () { kstPick(d[0]); };
+      ch.appendChild(b);
+    });
+    box.appendChild(ch);
+    var dd = KST.days[kdIdx(KST.sel)] || null;
+    var t = el('div', 'kdt');
+    t.appendChild(el('b', null, kdLong(KST.sel)));
+    if (dd) t.appendChild(el('span', null, kdOrders(dd[1]) + ' · ' + things(Number(dd[2]) || 0)));
+    box.appendChild(t);
+    var lst = el('div', 'klst'), L = KST.lists[KST.sel];
+    if (!L) {
+      var w = el('div', 'kemp' + (KST.busy ? ' blink' : ''), KST.busy || !KST.err ? 'Загружаю заказы…' : 'Заказы дня не загрузились.');
+      if (!KST.busy && KST.err) retry(w, KST.sel);
+      lst.appendChild(w);
+    } else if (!L.rows.length) lst.appendChild(el('div', 'kemp', 'В этот день выдач не было.'));
+    else L.rows.forEach(function (r) { if (Array.isArray(r)) lst.appendChild(kstTile(r)); });
+    box.appendChild(lst);
+    if (keep) lst.scrollTop = keep;
+    if (dd) {
+      // Итог дня — двумя строками [владелец 13.10.2026]: «Забрано и оплачено» — деньги кассы; «Забрано, но не оплачено» — по счёту.
+      var ft = el('div', 'kft'), a = el('div', 'a');
+      a.appendChild(el('b', null, 'Итого за ' + kdShort(KST.sel)));
+      a.appendChild(el('span', null, kdOrders(dd[1]) + ' · ' + things(Number(dd[2]) || 0)));
+      ft.appendChild(a);
+      ft.appendChild(kstSumRow('r1', 'Забрано и оплачено', dd[6], dd[5]));
+      ft.appendChild(kstSumRow('r2', 'Забрано, но не оплачено', dd[7], dd[4]));
+      box.appendChild(ft);
+    }
+  }
+  // Строка итога дня: подпись, число выдач (склад до 13.10.2026 его не присылал — без него) и сумма.
+  function kstSumRow(cls, label, n, cents) {
+    var r = el('div', cls), l = el('span', 'l', label);
+    // Пробел — вне <i>: место переноса между подписью и «· N заказов», а не внутри подписи («Забрано и / оплачено · 6 заказов»)
+    // [Фейбл «вид», заплатка после круга 2б, LOW-1].
+    if (typeof n === 'number') { l.appendChild(document.createTextNode(' ')); l.appendChild(el('i', null, '· ' + kdOrders(n))); }
+    r.appendChild(l); r.appendChild(el('span', 's', eur(Number(cents) || 0)));
+    return r;
+  }
+  // Выдача: [мс, №, ник, закупка, что, выдано, в заказе, сумма, по счёту, в магазине, без цены, кто, вещи] — данные клиентов только текстом.
+  function kstTile(r) {
+    var what = String(r[4] || ''), part = /^часть/.test(what);
+    var t = el('button', 'kt'); t.type = 'button'; t.setAttribute('data-f', 't' + Number(r[0]) + '_' + String(r[1] || ''));
+    var a = el('span', 'ka'), k1 = el('span', 'k1'), k2 = el('span', 'k2');
+    k1.appendChild(el('span', 'no', String(r[1] || '—'))); k1.appendChild(el('span', 'nk', String(r[2] || '')));
+    k2.appendChild(el('span', null, kdHm(r[0])));
+    k2.appendChild(part ? el('span', 'pt', 'часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0)) : el('span', null, things(Number(r[5]) || 0)));
+    if (/ПРОВЕРЬТЕ/.test(what)) k2.appendChild(el('span', 'kw', '⚠️ проверить'));
+    a.appendChild(k1); a.appendChild(k2); t.appendChild(a);
+    // Крупно — деньги кассы, зелёным; забранное по счёту — «по счёту X €», как в чеке (в итоге дня это «Забрано, но не оплачено»).
+    // Заказ целиком по счёту — крупно его сумма по счёту, жёлтым, а не зелёный «0,00 €» [Фейбл «кассир», круг 2б v6.15, LOW-5].
+    var b = el('span', 'kb'), st = Number(r[9]) || 0, iv = Number(r[8]) || 0;
+    if (st <= 0 && iv > 0) { b.appendChild(el('span', 'sm ivx', eur(iv))); b.appendChild(el('span', 'iv', 'по счёту')); }
+    else {
+      b.appendChild(el('span', 'sm', eur(st)));
+      if (iv > 0) b.appendChild(el('span', 'iv', 'по счёту ' + eur(iv)));
+    }
+    t.appendChild(b);
+    t.onclick = function () { lastActivity = Date.now(); KST.rc = r; renderRc(); };
+    return t;
+  }
+  // Чек выдачи: что забрала (и что нет), итог, по счёту. Состав — из колонки «Вещи» «Лога кассы» (выдачи с v6.15 / склада 13.10.2026).
+  function renderRc() {
+    var w = $('krc');
+    if (!KST.open || !KST.rc) { w.className = ''; w.textContent = ''; return; }
+    var r = KST.rc, what = String(r[4] || ''), part = /^часть/.test(what), it = (r[12] && typeof r[12] === 'object') ? r[12] : null;
+    w.textContent = '';
+    var box = el('div', 'rcb');
+    box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Заказ ' + String(r[1] || ''));
+    var h = el('div', 'rch');
+    h.appendChild(el('div', 'k', 'ЗАКАЗ'));
+    h.appendChild(el('div', 'no', String(r[1] || '—')));
+    h.appendChild(el('div', 'nk', String(r[2] || '')));
+    h.appendChild(el('div', 'mt', [String(r[3] || ''), 'выдан ' + kdDD(KST.sel) + ' в ' + kdHm(r[0]), String(r[11] || '')].filter(Boolean).join(' · ')));
+    h.appendChild(el('span', 'stt' + (part ? ' p' : ''), part ? 'Забрала часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0) : 'Забрала всё'));
+    if (/ПРОВЕРЬТЕ/.test(what)) h.appendChild(el('div', 'wr', '⚠️ Пока шла запись, лист сдвинулся — строки этого заказа надо проверить в таблице.'));
+    box.appendChild(h);
+    var l = el('div', 'rcl'), invs = {};
+    if (it && Array.isArray(it.g)) {
+      it.g.forEach(function (x) { if (Array.isArray(x)) { l.appendChild(rcLine(x, false)); if (x[5]) invs[String(x[5])] = 1; } });
+      if (Number(it.cut) > it.g.length) l.appendChild(el('div', 'rcn', 'И ещё ' + things(Number(it.cut) - it.g.length) + ' — весь состав в журнал не поместился.'));
+      (Array.isArray(it.r) ? it.r : []).forEach(function (x) { if (Array.isArray(x)) l.appendChild(rcLine(x, true)); });
+    } else l.appendChild(el('div', 'rcn', 'Состав этой выдачи не записан.'));   // выдача до v6.15 или строка, дописанная журналом позже (без «Вещей»)
+    box.appendChild(l);
+    var f = el('div', 'rcf'), tt = el('div', 't');
+    tt.appendChild(el('span', null, 'Итого · ' + things(Number(r[5]) || 0)));
+    tt.appendChild(el('b', null, eur(Number(r[7]) || 0)));
+    f.appendChild(tt);
+    var iv = Object.keys(invs);
+    if (Number(r[8]) > 0) f.appendChild(el('div', 'iv', 'из них по счёту' + (iv.length ? ' ' + iv.join(', ') : '') + ': ' + eur(Number(r[8]))));
+    if (Number(r[10]) > 0) f.appendChild(el('div', 'iv', 'без цены: ' + things(Number(r[10]))));
+    var x = el('button', 'x', 'Закрыть'); x.type = 'button';
+    x.onclick = function () { KST.rc = null; renderRc(); };
+    f.appendChild(x);
+    box.appendChild(f);
+    w.appendChild(box);
+    w.className = 'on';
+    try { x.focus(); } catch (e) {}
+  }
+  // Строка чека: [№ позиции, название, цвет, размер, центы | null, счёт?]; не забрала — серым, цена зачёркнута.
+  function rcLine(x, off) {
+    var d = el('div', 'rci' + (off ? ' off' : ''));
+    d.appendChild(el('span', 'a', (x[0] ? String(x[0]) + ' | ' : '') + (String(x[1] || '') || '—')));
+    d.appendChild(el('span', 'p', (x[4] === null || x[4] === undefined || x[4] === '') ? 'без цены' : eur(Number(x[4]) || 0)));
+    var c = el('span', 'c', [x[2], x[3]].map(function (v) { return String(v == null ? '' : v).trim(); }).filter(Boolean).join(' · '));
+    var tag = off ? el('b', 'r', 'не забрала') : x[5] ? el('b', 'i', 'счёт ' + String(x[5])) : null;
+    if (tag) { if (c.textContent) c.appendChild(document.createTextNode(' · ')); c.appendChild(tag); }
+    d.appendChild(c);
+    return d;
+  }
+  $('kd').onclick = function () { kstOpen(); };
+  $('kbg').onclick = function () { kstClose(); };
+  $('krc').addEventListener('click', function (e) { if (e.target === $('krc')) { KST.rc = null; renderRc(); } });
+
   // ── окна ──────────────────────────────────────────────────────────────────────────────
   function dlgOpen() { return $('dlg').className === 'on'; }
   function closeDlg() {
@@ -2632,6 +3117,7 @@
   function openPart(force, after) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || m.open.length < 2 || (!force && tooFresh()) || checkHold() || invHold() || !cardInScope() || (!force && draftOn())) return;
+    if (KST.open) return;           // 📊 за подробностями «Забрано сегодня» окно не открываем [Кодекс HIGH-2, круг 1 v6.15]
     lastActivity = Date.now();
     var rows = m.open.slice(), on = rows.map(function () { return true; });
     var d = $('dlg'); d.textContent = '';
@@ -2890,7 +3376,7 @@
     else if (CUR) showHome();
   }
   function go() {
-    if (dlgOpen()) return;                       // окно открыто — поиск за ним не запускаем [Фейбл, круг 2, LOW-2]
+    if (dlgOpen() || KST.open) return;           // окно (или «Забрано сегодня») открыто — поиск за ним не запускаем [Фейбл, круг 2, LOW-2]
     pendingSearch = '';
     if (!typed.trim()) return;
     // Enter второй раз по списку из одной строки — открыть её (явный выбор кассира; склад всё равно сверит заказ при
@@ -2937,8 +3423,13 @@
     if (e.key === 'Escape') {
       if (dlgOpen()) { closeDlg(); e.preventDefault(); return; }   // и во время записи [Фейбл, круг 2, MED-3]
       if ($('zoom').style.display === 'flex') { $('zoom').onclick(); return; }
+      // 📊 «Забрано сегодня»: Esc закрывает чек, потом подробности — и только их (карточку на кассе не трогает) [v6.15]
+      if (KST.rc) { KST.rc = null; renderRc(); e.preventDefault(); return; }
+      if (KST.open) { kstClose(); e.preventDefault(); return; }
       e.preventDefault(); newSearch(); return;
     }
+    // 📊 Кассир начал печатать при открытых подробностях — это следующий клиент: подробности закрываем, буква уходит в поиск [v6.15].
+    if (KST.open && DESK.matches && !dlgOpen() && e.key && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) kstClose(true);
     // Кассир печатает, а курсор не в поле (кликнул плитку) — буква уходит в поиск, как и ждёт человек.
     if (DESK.matches && !dlgOpen() && document.activeElement !== numEl && e.key && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       keyFocus = true;
@@ -3033,7 +3524,9 @@
     return true;
   }
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState !== 'visible' || idleBack()) return;
+    if (document.visibilityState !== 'visible') return;
+    if (!DENIED && !KST.busy && Date.now() - KST.got > 60000) kstFetch(KST.open ? KST.sel : '');   // 📊 вернулись в кассу [v6.15]
+    if (idleBack()) return;
     lastActivity = Date.now(); if (Date.now() - lastSyncAt > 60000) sync();
   });
   setInterval(function () {
@@ -3044,6 +3537,7 @@
     if (SPQ.length && !spTimer && !spBusy) spFlush();
     if (WQ.length && !wqBusy && !wqTimer) wqKick(0);
     if (document.visibilityState === 'visible' && Date.now() - lastActivity < ACTIVE_FOR && syncDue()) sync();
+    if (document.visibilityState === 'visible' && kstDue()) kstFetch(KST.open ? KST.sel : '');   // 📊 «Забрано сегодня» [v6.15]
   }, 30000);
 
   // ── старт: сначала всё из памяти телефона, потом фоном — Google ─────────────────────────
@@ -3082,6 +3576,7 @@
     if (DENIED) return;
     renderTbl(); renderSync(); if (!CUR) showHome();
     sync();
+    kstFetch('');                                              // 📊 «Забрано сегодня» — со склада, параллельно со списком [v6.15]
     if (WQ.length) wqKick(0);
   })();
   // Закрыть вкладку, пока склад не подтвердил выдачу, — браузер переспросит [v6.6]: очередь и так в памяти браузера и уйдёт при
