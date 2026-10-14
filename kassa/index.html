@@ -327,6 +327,11 @@
     /* 🔵 [v6.16] кнопки отодвинуты от тёмной полосы [владелец 14.10.2026: «внизу они теперь сливаются с черной полосой»]: ссылка «не оплатила
        на кассе» и зазор 30 px под ней (вариант 3 холста). */
     body.card #acts { padding-bottom: 30px; }
+    /* Кнопки — посередине между заказом (номер, сумма) и тёмной полосой [владелец 14.10.2026: «подними кнопки… и расположи их примерно
+       посередине между номером заказа выше и черной полосой»]: свободная высота левой половины — строке кнопок (заказ — по своему росту,
+       длинный прокручивается), сами кнопки — в её середине; фон и черта справа — во всю высоту, как были. */
+    body.card { grid-template-rows: auto minmax(0, max-content) 1fr auto; }
+    body.card #acts { align-content: center; }
     #noPay { min-height: 48px; font-size: 21px; text-underline-offset: 5px; }
     #pad, #abc { display: none; }
     .chk { font-size: 14px; }
@@ -483,6 +488,22 @@
              border: 0; border-radius: 12px; background: var(--soft); color: var(--ink); font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
   .ksh .cl span { display: none; }
   .ksh .cl svg { width: 22px; height: 22px; }
+  .ksh .kx { flex: none; order: 2; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; margin: -2px -6px -2px 0;
+             padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--ink); cursor: pointer; }
+  .ksh .kx svg { width: 32px; height: 32px; }
+  .ksh .kx:hover { background: var(--soft); }
+  .ksh .kbr { display: none; }
+  /* Телефон: с крестиком «Забранные заказы» не влезали в строку и ломались надвое — первым рядом название, «Свернуть» и крестик, вторым — дни
+     и «обновляю…» справа; на 320 px статус прячем (дни важнее), название — в одну строку. */
+  @media (max-width: 899px) {
+    #kst .ksh h2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #kst .ksh .kx { width: 44px; height: 44px; margin: 0 -4px 0 0; }
+    #kst .ksh .kbr { display: block; order: 3; flex: 0 0 100%; height: 0; }
+    #kst .kdy, #kst .ksh .at { margin-top: -8px; }    /* пустой ряд переноса даёт второй промежуток — снимаем его [Фейбл LOW-3] */
+    #kst .kdy { order: 4; flex: 1 0 auto; }
+    #kst .ksh .at { order: 5; margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @media (max-width: 359px) { #kst .ksh .at:not(.err) { display: none; } #kst .ksh h2 { font-size: 19px; } }   /* «не обновилось» — видно и тут [Фейбл LOW-2] */
   /* Дни — маленькими кнопками в шапке [владелец 14.10.2026: «переключалки дней вынеси в самый верх, в шапку - эта инфа второстепенная»]:
      телефон — второй строкой шапки, компьютер — в её строке. */
   .ksh { flex-wrap: wrap; row-gap: 8px; }
@@ -573,6 +594,7 @@
     #kst { height: min(88vh, 900px); }
     .ksh { padding: 12px 24px; } .ksh h2 { font-size: 26px; } .ksh .at { font-size: 15px; }
     .ksh .cl { height: 48px; padding: 0 16px; font-size: 17px; } .ksh .cl span { display: inline; }
+    .ksh .kx { width: 56px; height: 56px; margin: -6px -12px -6px 8px; } .ksh .kx svg { width: 38px; height: 38px; }
     /* Узкий компьютер (до 1400 px: ноутбук 1366, 1366 со 125 %) — дни вторым рядом, как на телефоне [Фейбл «кассир» MED-2, круг 1 v6.16]: в
        одну строку «Сегодня» уходила за край шапки. Шире 1400 — одной строкой (ниже). */
     .ksh h2 { flex: 1 1 auto; }
@@ -596,7 +618,7 @@
   }
   @media (min-width: 1400px) {
     .ksh { flex-wrap: nowrap; } .ksh h2 { flex: 0 1 auto; margin-right: 6px; } .kdy { order: 1; flex: 0 1 auto; }
-    .ksh .at { order: 2; margin-left: auto; } .ksh .cl { order: 3; }
+    .ksh .at { order: 2; margin-left: auto; } .ksh .cl { order: 3; } .ksh .kx { order: 3; }
   }
   /* Низкое окно компьютера: полоса и столбики ниже — место списку заказов в подробностях [Фейбл «кассир», круг 1 v6.15, LOW-5]. */
   @media (max-height: 860px) and (min-width: 900px) {
@@ -636,7 +658,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.16 · 14.10.2026';   // v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.17 · 14.10.2026';   // v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -3028,11 +3050,18 @@
       });
       hd.appendChild(dy);
     }
-    hd.appendChild(el('span', 'at' + (KST.busy ? ' blink' : ''), KST.busy ? 'обновляю…' : KST.err ? 'не обновилось' : (KST.got ? 'на ' + kdHm(KST.got) : '')));
+    hd.appendChild(el('span', 'at' + (KST.busy ? ' blink' : KST.err ? ' err' : ''), KST.busy ? 'обновляю…' : KST.err ? 'не обновилось' : (KST.got ? 'на ' + kdHm(KST.got) : '')));
     var cl = el('button', 'cl'); cl.type = 'button'; cl.setAttribute('aria-label', 'Свернуть'); cl.setAttribute('data-f', 'cl');
     cl.appendChild(el('span', null, 'Свернуть')); cl.appendChild(kdSvg('M6 9l6 6 6-6'));
     cl.onclick = function () { kstClose(); };
     hd.appendChild(cl);
+    // Большой крестик в углу окна — тоже сворачивает; «Свернуть» — левее, рядом [владелец 14.10.2026: «свернуть чуть подвинь левее, а в углу
+    // этого окна расположи большой крестик, который также будет сворачивать это окно»]
+    var kx = el('button', 'kx'); kx.type = 'button'; kx.setAttribute('aria-label', 'Закрыть'); kx.setAttribute('data-f', 'kx');
+    kx.appendChild(kdSvg('M6 6l12 12M18 6L6 18'));
+    kx.onclick = function () { kstClose(); };
+    hd.appendChild(kx);
+    hd.appendChild(el('div', 'kbr'));     // перенос строки шапки на телефоне: название, «Свернуть» и крестик — первым рядом, дни и «обновляю…» — вторым
     box.appendChild(hd);
     var retry = function (w, day) {
       var rb = el('button', 'sw2', 'Загрузить ещё раз'); rb.type = 'button'; rb.setAttribute('data-f', 'r');
@@ -3716,6 +3745,23 @@
     if (idleBack()) return;
     lastActivity = Date.now(); if (Date.now() - lastSyncAt > 60000) sync();
   });
+  // 🎨 [v6.17] Кнопки выдачи на компьютере — посередине свободного места: шапка открытой карточки выросла без перерисовки (строка «✓ … —
+  // записано в таблицу», полоса отказа, «склад не подтверждает…») или сжалась — кнопки сдвинулись под курсором. На 0,7 с они глохнут, как
+  // после освежения карточки: иначе щелчок, нацеленный в «Не забрала всё…», попадал в «Забрала всё» и сразу писал выдачу [Фейбл, внутренний
+  // круг v6.17, MED-1]. Новая карточка (другой CUR) паузы не получает — открыл её сам кассир.
+  (function () {
+    if (typeof ResizeObserver !== 'function') return;
+    var seen = null, top0 = null;
+    var watch = function () {
+      var a = $('giveAll');
+      if (!a || !DESK.matches || !CUR || CUR.kind !== 'card' || !CUR.model) { seen = null; return; }
+      var t = Math.round(a.getBoundingClientRect().top);
+      if (seen === CUR && top0 !== null && Math.abs(t - top0) >= 2) { CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); renderActs(CUR.model); }
+      seen = CUR; top0 = t;
+    };
+    var ro = new ResizeObserver(watch);
+    ro.observe($('head')); ro.observe($('top'));
+  })();
   setInterval(function () {
     if (DENIED) return;
     idleBack();
