@@ -37,8 +37,7 @@
           --warn: #9a5b00; --warnbg: #fff4e0; --warnline: #e8a33d; --bad: #b00020; --badbg: #fde6e9;
           --blue: #1a73e8; --bluebg: #eef3fe;
           --caret: #9aa3b2;     /* мигающий курсор поля — светло-серый, как подсказка [владелец 30.09.2026, v6.11] */
-          --kd: 50px;           /* 📊 высота полосы «Забрано сегодня» на телефоне (v6.15) */
-          --kbh: 72px; }        /* 📊 высота самого высокого столбика дня в подробностях */
+          --kd: 50px; }         /* 📊 высота полосы «Забрано сегодня» на телефоне (v6.15) */
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -89,6 +88,13 @@
   .btn:disabled { opacity: .38; cursor: default; }
   #giveAll { background: var(--ok); color: #fff; }
   #givePart { background: #fff; color: #b3700f; border: 3px solid var(--warnline); }
+  /* 🔵 «не оплатила на кассе» (v6.16) [владелец 14.10.2026, вариант 3 холста: «Вар 3 делаем (только убери троеточие после "на кассе" и "Не"
+     пиши с мал буквы "не"»]: ссылка под кнопками выдачи открывает окно с синей «Забрала всё, но не оплатила». Нечего выдавать (экран «после
+     выдачи») — ссылки не видно, место за ней остаётся: кнопки не прыгают. */
+  #noPay { grid-column: 1 / -1; justify-self: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent;
+           color: #1a56c4; font: inherit; font-size: 18px; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+  #noPay:disabled { opacity: .38; cursor: default; }
+  #noPay.off { visibility: hidden; }
   #pad { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 16px 10px;
          border-top: 1px solid var(--line); background: #fafafa; }
   #pad button { font-size: 28px; font-weight: 700; height: 56px; border: 0; border-radius: 12px;
@@ -110,12 +116,16 @@
   .sumb .r { color: var(--ok); font-size: 42px; font-weight: 900; line-height: 1.1; }
   .sumb .iv { color: var(--oktx); font-size: 15px; font-weight: 600; margin-top: 4px; }
   .sumb .np { color: var(--warn); font-size: 15px; font-weight: 700; margin-top: 4px; }
+  /* 🔵 «Забрала всё, но не оплатила» (v6.16) — экран «после выдачи» и итог склада синим: эти деньги не кассы. */
+  .sumb.nopay { background: #e8f0fe; border-color: #c6d7fb; }
+  .sumb.nopay .l, .sumb.nopay .iv { color: #174ea6; } .sumb.nopay .r { color: var(--blue); }
   .note { background: var(--soft); border-radius: 12px; padding: 8px 12px; color: var(--mute); font-size: 15px; font-weight: 600; margin-top: 10px; }
   .ban { border-radius: 12px; padding: 10px 12px; font-size: 17px; font-weight: 700; margin: 10px 0 0; line-height: 1.35; }
   .ban.bad { background: var(--badbg); color: var(--bad); }
   .ban.warn { background: var(--warnbg); color: var(--warn); }
   .ban.info { background: var(--soft); color: var(--ink); font-weight: 600; font-size: 16px; }
   .ban.ok { background: var(--okbg); color: var(--ok); }
+  .ban.ok.nopay { background: #e8f0fe; color: #174ea6; }
   /* «Сверяю…» — не полоса, а тихая строка [владелец 28.09.2026: «не надо жёлтым, а светло-серым маленьким шрифтом, без фоновой
      подложки, и пусть просто мигает»]. «Не сверен» (сверка не удалась) — по-прежнему жёлтой полосой: это уже предупреждение. */
   .chk { color: #9aa3b2; font-size: 13px; font-weight: 600; margin: 8px 0 0; animation: chkblink 1.4s ease-in-out infinite; }
@@ -211,6 +221,21 @@
   .dlgft .btn { height: 62px; padding: 0 22px; font-size: 21px; }
   .dlgft .ok { background: var(--ok); color: #fff; } .dlgft .no { background: #fff; color: var(--mute); border: 3px solid #d6dbe3; }
   .dlgft .okw { background: #b3700f; color: #fff; }
+  /* Окно «не оплатила на кассе?» (v6.16): синяя кнопка записи, «Назад» рядом (компьютер) или под ней (телефон, окно у верха экрана). */
+  .dlgbox.npay { max-width: 700px; }
+  .dlgft.npf { justify-content: flex-end; }
+  .dlgft .okb { background: var(--blue); color: #fff; }
+  .dlgft .s b.u { color: var(--blue); }
+  /* 🔵 «не оплатила на кассе» в окне «Не забрала всё…» — переключатель; включён — синим [Кодекс HIGH-2, круг 1 v6.16] */
+  .npt { min-height: 44px; padding: 0 12px; border: 2px solid transparent; border-radius: 10px; background: transparent; color: #1a56c4;
+         font: inherit; font-size: 17px; font-weight: 800; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+  .npt.on { background: #e8f0fe; border-color: var(--blue); text-decoration: none; }
+  .npt.on::before { content: '✓ '; }
+  .dlgft .npr { flex: 0 0 100%; display: flex; margin: -4px 0 -2px; }
+  @media (max-width: 359px) { .dlgft .okb .npx { display: none; } }   /* 320 px: «…, не оплатила» резалось — синяя кнопка и так «не оплатила» */
+  /* …и ссылкой под кнопками окна «Заказ не отмечен» [Фейбл «кассир» MED-3] */
+  .lvnp { align-self: center; min-height: 40px; padding: 0 12px; border: 0; background: transparent; color: #1a56c4; font: inherit; font-size: 17px;
+          font-weight: 800; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
   /* Окно «Заказ не отмечен» (п.3 v6.7): три кнопки справа; на телефоне — одна под другой во всю ширину */
   .dlgft.lv { justify-content: flex-end; }
   .dlgft .lvpart { background: #fff; color: #b3700f; border: 3px solid var(--warnline); }
@@ -254,7 +279,9 @@
     /* Карточка: кнопки выдачи — над местом ряда «⌫ 0 Найти», под ними пусто, как было под «Новым поиском» [Фейбл «сценарий»,
        круг 1 v6.1, MED-1]: без кнопки «Новый поиск» «Забрала всё» легла ровно туда, где палец кассира ищет «⌫» и «Найти», и
        тап вслепую по карточке, открывшейся самой (отложенный поиск), писал выдачу. Над рядом «7 8 9» их держит пауза 0,7 с. */
-    body.card #acts { padding-bottom: 70px; }
+    /* 🔵 [v6.16] Было «padding-bottom: 70px». В этом месте — ссылка «не оплатила на кассе» (44 px + промежуток 8): кнопки выдачи — на прежней высоте над местом ряда
+       «⌫ 0 Найти», под ссылкой пусто, как было. Тап вслепую по «0» откроет только окно (у верха экрана, подвал глух 0,5 с) — ничего не пишет. */
+    body.card #acts { padding-bottom: 18px; }
     /* Тап по полю на карточке — цифры внизу, карточка остаётся на экране [владелец 28.09.2026: «ставлю курсор в окно поиска,
        меня просто выкидывает на главную страницу! почему нельзя оставаться там же»]. Кнопки выдачи спрятаны, пока цифры
        открыты: набирается следующий номер, а на экране ещё прежний клиент. */
@@ -297,6 +324,10 @@
     #out { grid-column: 2; grid-row: 1 / span 4; overflow-y: auto; padding: 18px 22px 28px; }
     #acts, body.card #acts { grid-column: 1; grid-row: 3; grid-template-columns: 1fr; gap: 12px; padding: 12px 22px 20px;
                              background: var(--card); border-top: 0; border-right: 1px solid var(--line); }
+    /* 🔵 [v6.16] кнопки отодвинуты от тёмной полосы [владелец 14.10.2026: «внизу они теперь сливаются с черной полосой»]: ссылка «не оплатила
+       на кассе» и зазор 30 px под ней (вариант 3 холста). */
+    body.card #acts { padding-bottom: 30px; }
+    #noPay { min-height: 48px; font-size: 21px; text-underline-offset: 5px; }
     #pad, #abc { display: none; }
     .chk { font-size: 14px; }
     #tbl { height: 48px; font-size: 20px; }
@@ -364,6 +395,9 @@
     .dlgft .s { font-size: 22px; } .dlgft .s b { font-size: 44px; }
     .dlgft .btn { height: 80px; padding: 0 34px; font-size: 28px; }
     .dlgft.lv .btn { padding: 0 24px; font-size: 24px; }
+    /* «не оплатила на кассе?» — обе кнопки в одну строку (окно 700 px) */
+    .dlgbox.npay h3 { font-size: 28px; }
+    .dlgft.npf { flex-wrap: nowrap; } .dlgft.npf .btn { height: 72px; padding: 0 26px; font-size: 24px; }
   }
   @media (max-width: 899px) {
     .dlgft.lv { flex-direction: column; align-items: stretch; }
@@ -376,6 +410,15 @@
        [Фейбл «кассир», круг 2б v6.15, LOW-1]. */
     .dlgft.lv .btn { font-size: 18px; }
     #dlg:has(.dlgft.lv) { align-items: flex-start; padding-top: calc(6px + env(safe-area-inset-top)); }
+    /* 🔵 «не оплатила на кассе?» [v6.16] — тоже у верха: синяя кнопка — первой, «Назад» под ней, во всю ширину. */
+    .dlgft.npf { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
+    .dlgft.npf .btn { height: 56px; padding: 0 10px; font-size: 18px; }   /* «Забрала всё, но не оплатила» — одной строкой и на 360 px */
+    /* Кнопки окна — сразу под заголовком, текст — под ними [Фейбл «кассир» LOW-1, круг 1 v6.16]: на 320×568 и Safari с панелями синяя
+       ложилась на ряд «1 2 3» главного экрана — два тапа вслепую писали выдачу «не оплатила». */
+    .dlgbox.npay .dlgft.npf { order: 1; border-top: 0; padding-top: 0; } .dlgbox.npay .sub { order: 2; }
+    /* «Не забрала всё…» с «не оплатила» — сумма и «Назад» одним рядом, как до v6.16 [Фейбл «кассир» MED-2, круг 2 v6.16] */
+    .dlgft .s .npx { display: none; }
+    #dlg:has(.dlgft.npf) { align-items: flex-start; padding-top: calc(6px + env(safe-area-inset-top)); }
   }
   /* Низкое окно кассы (1366×768 без масштаба, 1920×1080 со 150 % — окно ~650 px): левая половина плотнее, иначе сумма к оплате
      уходила под кнопки [Фейбл «сценарий», круг 1 v6, MED-2]. До 860 px — и 1366×768 во весь экран, 1440×900 / 1600×900 с
@@ -389,8 +432,11 @@
     #num:placeholder-shown { font-size: 21px; }
     #find { width: 44px; height: 44px; right: 8px; }
     #find svg { width: 24px; height: 24px; }
-    .btn { height: 64px; font-size: 25px; }
+    /* 🔵 [v6.16] ссылка «не оплатила на кассе» и зазор под ней — на 24 px ниже кнопки (56, а не 64) и уже ссылка: иначе на 1366×650 кнопки
+       накрывали «Ещё заказ …» под суммой (раздел 10 (н) гейта). */
+    .btn { height: 56px; font-size: 24px; }
     #acts, body.card #acts { gap: 8px; padding: 8px 22px 12px; }
+    #noPay { min-height: 32px; font-size: 18px; }
     .hdr .lbl { font-size: 15px; }
     .hdr .no { font-size: 44px; }
     .hdr .nick { font-size: 26px; margin-top: 2px; }
@@ -437,22 +483,26 @@
              border: 0; border-radius: 12px; background: var(--soft); color: var(--ink); font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
   .ksh .cl span { display: none; }
   .ksh .cl svg { width: 22px; height: 22px; }
-  .kch { flex: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; height: 140px;
-         margin: 10px 16px 0; padding: 10px 12px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
-  .kbar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; min-width: 0;
-          margin: 0; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
-  .kbar .v { font-size: 13px; font-weight: 700; color: var(--mute); white-space: nowrap; }
-  .kbar .b { display: block; width: 100%; max-width: 64px; border-radius: 8px 8px 3px 3px; background: #c5d5f3; }
-  .kbar .d { font-size: 13px; font-weight: 700; color: var(--mute); white-space: nowrap; }
-  .kbar.on .v { color: var(--blue); font-weight: 900; }
-  .kbar.on .b { background: var(--blue); }
-  .kbar.on .d { color: var(--ink); font-weight: 900; }
+  /* Дни — маленькими кнопками в шапке [владелец 14.10.2026: «переключалки дней вынеси в самый верх, в шапку - эта инфа второстепенная»]:
+     телефон — второй строкой шапки, компьютер — в её строке. */
+  .ksh { flex-wrap: wrap; row-gap: 8px; }
+  .kdy { order: 3; flex: 1 0 100%; display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .kdy::-webkit-scrollbar { display: none; }
+  .kdc { flex: none; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 17px; background: var(--card); color: var(--mute);
+         font: inherit; font-size: 14px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+  .kdc.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .ksh h2 { order: 0; } .ksh .at { order: 1; } .ksh .cl { order: 2; }
+  /* Список отстаёт от итога дня — крутилка «Обновляю данные…» вместо него [владелец 14.10.2026] */
+  .kld { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 36px 8px; color: var(--mute); font-size: 17px; font-weight: 800; }
+  .ksp { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 3px solid #d6dbe3; border-top-color: var(--blue); animation: kspin .9s linear infinite; }
+  @keyframes kspin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .ksp { animation: none; } }
   .kdt { flex: none; padding: 10px 16px 0; }
   .kdt b { display: block; font-size: 16px; font-weight: 900; }
   .kdt span { font-size: 13px; font-weight: 700; color: var(--mute); }
   .klst { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: grid; grid-template-columns: minmax(0, 1fr);
           gap: 6px; align-content: start; padding: 8px 16px; }
-  .kt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; width: 100%; margin: 0; padding: 10px 12px;
+  .kt { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; width: 100%; margin: 0; padding: 10px 12px 10px 42px;
         border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
   .kt .k1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
   .kt .no { flex: none; font-size: 19px; font-weight: 900; color: var(--blue); }
@@ -462,8 +512,11 @@
   .kt .kw { color: var(--warn); font-weight: 800; }
   .kt .kb { text-align: right; }
   .kt .sm { display: block; font-size: 19px; font-weight: 900; color: var(--ok); white-space: nowrap; }
-  .kt .iv { display: block; margin-top: 1px; font-size: 12px; font-weight: 700; color: var(--warn); white-space: nowrap; }   /* «по счёту» */
-  .kt .sm.ivx { color: var(--warn); }
+  .kt .iv { display: block; margin-top: 1px; font-size: 12px; font-weight: 700; color: var(--mute); white-space: nowrap; }   /* «не оплачено» — серым */
+  .kt .sm.ivx { color: #8a919c; }
+  /* № карточки на экране — левый верхний угол [владелец 14.10.2026: «дай порядковый номер карточек (можно в верхнем левом углу)»] */
+  .kt .kn { position: absolute; left: 8px; top: 8px; min-width: 26px; height: 24px; padding: 0 5px; border-radius: 8px; background: var(--soft);
+            color: var(--mute); font-size: 13px; font-weight: 900; line-height: 24px; text-align: center; font-variant-numeric: tabular-nums; }
   .kemp { padding: 18px 4px; color: var(--mute); font-size: 16px; font-weight: 600; }
   .kemp .sw2 { margin-left: 8px; }
   .kft { flex: none; margin: 4px 16px 12px; padding: 10px 14px; border-radius: 14px; background: var(--ink); color: #fff; }
@@ -478,7 +531,7 @@
   .kft .s { flex: none; font-weight: 900; line-height: 1.05; white-space: nowrap; }
   .kft .r1 .s { font-size: 26px; color: #8fe3b0; }
   .kft .r2 { margin-top: 4px; }
-  .kft .r2 .s { font-size: 18px; color: #fcd34d; }
+  .kft .r2 .s { font-size: 18px; color: #a9b0bc; }   /* «Забрано, но не оплачено» — серым [владелец 14.10.2026] */
   /* Чек заказа — над подробностями; телефон — снизу, компьютер — по центру */
   #krc { position: fixed; inset: 0; z-index: 37; display: none; align-items: flex-end; justify-content: center; background: rgba(17,24,39,.5); }
   #krc.on { display: flex; }
@@ -491,6 +544,7 @@
   .rch .mt { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--mute); }
   .rch .stt { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 8px; font-size: 14px; font-weight: 800; background: var(--okbg); color: var(--ok); }
   .rch .stt.p { background: var(--warnbg); color: var(--warn); }
+  .rch .stt.u { margin-left: 6px; background: var(--soft); color: var(--mute); }
   .rch .wr { margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--warn); }
   .rcl { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 18px; }
   .rci { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 0; border-bottom: 1px dotted #c9ced6; }
@@ -506,10 +560,12 @@
   .rcf .t span { font-size: 17px; font-weight: 800; }
   .rcf .t b { font-size: 30px; font-weight: 900; color: var(--ok); white-space: nowrap; }
   .rcf .iv { margin-top: 2px; text-align: right; font-size: 13px; font-weight: 700; color: var(--oktx); }
+  .rcf .iv.u { color: var(--mute); }
+  .rcf .t b.u { color: #8a919c; }   /* «не оплатила на кассе» — итог чека серым, как в итоге дня */
   .rcf .x { display: block; width: 100%; height: 52px; margin-top: 12px; border: 0; border-radius: 14px; background: var(--ink); color: #fff;
             font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
   @media (min-width: 900px) {
-    :root { --kd: 56px; --kbh: 96px; }
+    :root { --kd: 56px; }
     #kd { position: static; grid-column: 1; grid-row: 4; height: var(--kd); padding: 0 14px 0 22px; column-gap: 10px;   /* 10, а не 12: шрифт Мака шире — «· 230 вещей» при «104 заказа · 5 123,40 €» не влезал на 6 px (гейт 38 (о)) */
           grid-template-columns: auto minmax(0, max-content) minmax(0, 1fr) auto auto; grid-template-areas: "l l g c i" "n t g s i"; }
     #kd .l, #kd .c { font-size: 13px; } #kd .n { font-size: 20px; } #kd .t { display: block; } #kd .s { font-size: 26px; }
@@ -517,11 +573,14 @@
     #kst { height: min(88vh, 900px); }
     .ksh { padding: 12px 24px; } .ksh h2 { font-size: 26px; } .ksh .at { font-size: 15px; }
     .ksh .cl { height: 48px; padding: 0 16px; font-size: 17px; } .ksh .cl span { display: inline; }
-    .kch { height: 170px; max-width: 760px; margin: 14px 24px 0; padding: 12px 16px 10px; gap: 16px; }
-    .kbar .v, .kbar .d { font-size: 15px; } .kbar .b { max-width: 96px; }
+    /* Узкий компьютер (до 1400 px: ноутбук 1366, 1366 со 125 %) — дни вторым рядом, как на телефоне [Фейбл «кассир» MED-2, круг 1 v6.16]: в
+       одну строку «Сегодня» уходила за край шапки. Шире 1400 — одной строкой (ниже). */
+    .ksh h2 { flex: 1 1 auto; }
+    .kdc { height: 38px; font-size: 15px; }
     .kdt { padding: 14px 24px 0; } .kdt b { display: inline; font-size: 20px; } .kdt span { margin-left: 12px; font-size: 16px; }
     .klst { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; padding: 10px 24px; }
-    .kt { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; gap: 4px; }
+    .kt { grid-template-columns: minmax(0, 1fr); padding: 12px 14px 12px 46px; gap: 4px; }
+    .kt .kn { left: 10px; top: 12px; }
     .kt .no { font-size: 23px; } .kt .nk { font-size: 17px; } .kt .k2 { font-size: 14px; }
     .kt .kb { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 8px; text-align: left; }   /* суммы не за край [«кассир», 2б, LOW-3] */
     .kt .sm { font-size: 23px; } .kt .iv { font-size: 13px; }
@@ -535,11 +594,14 @@
     .rcf { padding: 14px 24px 20px; } .rcf .t span { font-size: 20px; } .rcf .t b { font-size: 38px; } .rcf .iv { font-size: 15px; }
     .rcf .x { height: 56px; font-size: 20px; }
   }
+  @media (min-width: 1400px) {
+    .ksh { flex-wrap: nowrap; } .ksh h2 { flex: 0 1 auto; margin-right: 6px; } .kdy { order: 1; flex: 0 1 auto; }
+    .ksh .at { order: 2; margin-left: auto; } .ksh .cl { order: 3; }
+  }
   /* Низкое окно компьютера: полоса и столбики ниже — место списку заказов в подробностях [Фейбл «кассир», круг 1 v6.15, LOW-5]. */
   @media (max-height: 860px) and (min-width: 900px) {
-    :root { --kd: 48px; --kbh: 52px; }
+    :root { --kd: 48px; }
     #kd .n { font-size: 18px; } #kd .s { font-size: 22px; }
-    .kch { height: 116px; }
   }
 </style>
 </head>
@@ -555,6 +617,7 @@
 <div id="acts">
   <button id="giveAll" class="btn" type="button" disabled>✅ Забрала всё</button>
   <button id="givePart" class="btn" type="button" disabled>Не забрала всё…</button>
+  <button id="noPay" class="off" type="button" aria-haspopup="dialog" disabled>не оплатила на кассе</button>
 </div>
 <div id="pad">
   <button type="button" data-d="1">1</button><button type="button" data-d="2">2</button><button type="button" data-d="3">3</button>
@@ -573,7 +636,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.15 · 13.10.2026';   // v6.15 — полоса «Забрано сегодня» и подробности за три дня [владелец 13.10.2026]
+  var VER = 'v6.16 · 14.10.2026';   // v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -642,6 +705,11 @@
   // 💻 Новую ссылку «Касса» вставили в ЭТУ ЖЕ вкладку [Фейбл 28.09.2026, круг 2]: меняется только хвост после «#», и
   // страница не перезагружается — касса так и ходила бы с прежним ключом. Перезагружаемся сами (своих «#» касса не ставит).
   window.addEventListener('hashchange', function () { try { location.reload(); } catch (e) {} });
+  // 🏪 Слово выдачи ЭТОГО ключа в кол. B — «zabrala» или «zabrala Dz70» (компьютер кассы магазина) [владелец 14.10.2026]. Говорит склад в ответе
+  // kassa_tables; касса рисует выданное им же (applyGiven), как его принесёт свежая выжимка, — иначе первая же сверка после выдачи с
+  // компьютера Dz70 говорила бы «данные заказа обновились». Помним в браузере: выдача может случиться раньше первого ответа склада.
+  var KMARK = (function () { var m = lsGet('kassa_mark'); return /^zabrala( [A-Za-z0-9]{2,8})?$/.test(m) ? m : 'zabrala'; })();
+  function kmarkSet(m) { m = String(m || ''); if (!/^zabrala( [A-Za-z0-9]{2,8})?$/.test(m) || m === KMARK) return; KMARK = m; lsSet('kassa_mark', m === 'zabrala' ? '' : m); }
 
   // ── память телефона (IndexedDB): список закупок и выжимки ─────────────────────────────
   var DB = null;
@@ -935,6 +1003,7 @@
       if (!packOnly && !DENIED && (Date.now() - tt0 > SP_SLOW || !tr || tr.net || !tr.ok)) spAdd([tt0, 'список закупок', '', '', '', Date.now() - tt0, '', '', '', '',
         tr ? (tr.net ? 'не дошёл (сбой Google)' : tr.ok ? 'пришёл' : 'ошибка: ' + String(tr.error || '?')) : 'нет ответа', '']);
       if (tr && tr.net) tr = null;                           // Google так и не доставил — как молчание
+      if (tr && tr.ok && typeof tr.mark === 'string') kmarkSet(tr.mark);   // 🏪 слово выдачи этого ключа [v6.16]
       if (DENIED) return;
       if (tr || packOnly) answered++;
       if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
@@ -1644,11 +1713,11 @@
   // Пока ответа нет — кнопки выдачи серые, но не дольше 5 с (как у «Сверяю…»); дальше — как было до v6.4 (вещь в магазине).
   var INVC = {}, INVF = {};           // ответы склада (tid|ник|№ → { at, r }) и летящие вопросы
   var INV_FOR = 120000, INV_ERR_FOR = 30000, INV_HOLD = 5000, WAIT_INV = 45000;
-  // Спрашивать ли склад: есть вещь к выдаче без пометки счёта с ценой И (вещь с пометкой счёта ИЛИ уже выданная вещь заказа).
-  function invNeed(m) {
-    if (!m || !m.no || !m.open.some(function (r) { return !invOf(r.mark) && cents(r.price) !== null; })) return false;
-    return m.open.some(function (r) { return !!invOf(r.mark); }) || m.givenSel.some(function (r) { return !!r.no; });
-  }
+  // ⛔️ [v6.16] СЧЁТ ЗАКАЗА КАССА БОЛЬШЕ НЕ СПРАШИВАЕТ [владелец 14.10.2026: «Эту систему с инвойсами отключаем, проверяем оплату по факту»]:
+  // деньги по счёту не делятся (обычная выдача — вся на кассе, «не оплатила на кассе» — вся мимо кассы), значит, ни вопроса kassa_inv, ни
+  // паузы кнопок до 5 с у заказа со счётом. Машинка ниже стоит без дела: invChk всегда '', invX ни у одной вещи. Плитка по-прежнему
+  // показывает пометку «счёт R6-…» — это слово кол. B, по нему кассир и спросит клиентку, платила ли она.
+  function invNeed(m) { return false; }
   function invKeyOf(tid, m) { return tid + '|' + m.c[0] + '|' + nk(m.no); }
   function itemKey(P, r) { return JSON.stringify(itemOf(P, r)); }
   // Ответ склада → вещи карточки: из одинаковых по всем приметам — первые по порядку (как выдача считает vi).
@@ -1788,8 +1857,8 @@
     movedBanner(bans);
     // Итог записи ДРУГОГО заказа (кассир ушёл искать дальше, пока склад писал) — полосой и здесь, ~1 мин: карточку
     // может пересобрать освежение, и вставленная раньше полоса пропала бы вместе со старым экраном.
-    if (LAST && !LAST.shown && LAST.tok !== (h.t.id + '|' + c[0] + '|' + qKey(q)) && Date.now() - LAST.at < 60000) bans.appendChild(el('div', 'ban ' + LAST.cls, LAST.text));
-    if (flash) bans.appendChild(el('div', 'ban ' + (flash.cls || 'ok'), flash.text));
+    if (LAST && !LAST.shown && LAST.tok !== (h.t.id + '|' + c[0] + '|' + qKey(q)) && Date.now() - LAST.at < 60000) bans.appendChild(el('div', 'ban ' + LAST.cls + (LAST.cls === 'ok' && LAST.flash && LAST.flash.blue ? ' nopay' : ''), LAST.text));
+    if (flash) bans.appendChild(el('div', 'ban ' + (flash.cls || 'ok') + (flash.blue && flash.cls === 'ok' ? ' nopay' : ''), flash.text));
     if (banner) bans.appendChild(el('div', 'ban warn', banner));
     if (checking) bans.appendChild(el('div', 'chk', 'Сверяю с таблицей — список на ' + hhmm(h.pk.t) + '…'));
     else if (!searchVerified()) bans.appendChild(el('div', 'ban warn', '⚠️ Список на ' + hhmm(oldestT()) + ' не сверен с таблицей — сверьте серию номера и ник.'));
@@ -1873,32 +1942,21 @@
     // Левая половина: сумма, пометки, предупреждения.
     var sb = el('div', 'sumb');
     if (after) {
-      sb.appendChild(el('div', 'l', 'Выдано · ' + things(after.n)));
+      // «Забрала всё, но не оплатила» — синим [v6.16]: эти деньги не кассы, они уходят в «Забрано, но не оплачено».
+      if (after.unpaid) sb.className = 'sumb nopay';
+      sb.appendChild(el('div', 'l', (after.unpaid ? 'Выдано, не оплачено на кассе · ' : 'Выдано · ') + things(after.n)));
       sb.appendChild(el('div', 'r', eur(after.sum)));
-      if (after.inv) sb.appendChild(el('div', 'iv', 'по счёту: ' + eur(after.inv) + ' · в магазине: ' + eur(after.store)));
+      if (after.unpaid) sb.appendChild(el('div', 'iv', 'в «Забрано, но не оплачено»'));
       if (after.np) sb.appendChild(el('div', 'np', 'без цены: ' + things(after.np)));
       hd.appendChild(sb);
     } else {
       sb.appendChild(el('div', 'l', 'Сумма · ' + things(m.open.length)));
       sb.appendChild(el('div', 'r', eur(m.sum)));
-      // «в магазине» — то, что пойдёт в статистику магазина (без вещей по счёту) [Фейбл «сценарий», В2]
-      if (m.inv) sb.appendChild(el('div', 'iv', 'из них по счёту ' + m.invNos.join(', ') + ': ' + eur(m.inv) + ' · в магазине: ' + eur(m.sum - m.inv)));
-      // Ждём ответ про счёт: первые 5 с — тихая строка (кнопки серые), дальше — жёлтая полоса: кнопки уже живые, а вещь без пометки,
-      // может, в счёте [Фейбл «сценарий», круг 1 v6.4, MED-2].
-      var invLong = m.invChk === 'wait' && m.invNos.length && CUR.invAt && Date.now() - CUR.invAt >= INV_HOLD;
-      if (m.invChk === 'wait' && m.invNos.length && !invLong) sb.appendChild(el('div', 'chk', 'Сверяю со счётом ' + m.invNos.join(', ') + '…'));
-      m.invAdd.forEach(function (r) { sb.appendChild(el('div', 'iv', '✓ ' + invLabel(P, r) + ' — есть в счёте ' + r.invX + ' (в таблице без пометки): по счёту')); });
+      // Деление «по счёту / в магазине» с v6.16 не показываем [владелец 14.10.2026: «проверяем оплату по факту»]: вся сумма — к оплате на
+      // кассе; клиентка оплатила счёт раньше — «не оплатила на кассе». Пометку «счёт R6-…» кассир видит на плитке. Полос «счёт сверяется» и
+      // «проверьте счёт» (v6.4–v6.15) больше нет: касса счёт не спрашивает (invNeed).
       if (m.np) sb.appendChild(el('div', 'np', 'без цены: ' + things(m.np) + ' — в сумме их нет'));
       if (m.open.length) hd.appendChild(sb);
-      if (invLong) bans.appendChild(el('div', 'ban warn', '⚠️ Счёт заказа ещё сверяется: вещь без пометки счёта может быть уже в нём. ' +
-        'Проверьте счёт, прежде чем брать за неё деньги.'));
-      // Одна полоса на всё, а не по полосе на вещь [Фейбл «сценарий», круг 1 v6.4, LOW-3]: иначе кассир перестаёт их читать.
-      var wMaybe = m.invWarn.filter(function (w) { return w.kind === 'maybe'; }), wFail = m.invWarn.filter(function (w) { return w.kind !== 'maybe'; });
-      var wList = function (ws) { return ws.map(function (w) { return invLabel(P, w.r); }).join(', '); };
-      if (wMaybe.length) bans.appendChild(el('div', 'ban warn', '⚠️ Без пометки счёта: ' + wList(wMaybe) + ' — а в счёте ' + uniq(wMaybe.map(function (w) { return w.inv; })).join(', ') +
-        ' есть строк' + (wMaybe.length > 1 ? 'и' : 'а') + ' на ту же цену. Проверьте счёт: если вещ' + (wMaybe.length > 1 ? 'и' : 'ь') + ' в нём, в магазине не брать.'));
-      if (wFail.length) bans.appendChild(el('div', 'ban warn', '⚠️ Без пометки счёта: ' + wList(wFail) + ' — а счёт ' + uniq(wFail.map(function (w) { return w.inv; })).join(', ') +
-        ' касса не открыла. Проверьте счёт: если вещ' + (wFail.length > 1 ? 'и' : 'ь') + ' в нём, в магазине не брать.'));
     }
     // Второй собранный заказ клиента — слева, на виду, одной кнопкой [Фейбл «сценарий», MED-1: справа он уезжал за край,
     // и клиент уходил без второго заказа].
@@ -2118,6 +2176,11 @@
     a.disabled = n < 1 || pause;
     b.disabled = n < 2 || pause;
     a.textContent = n > 0 ? '✅ Забрала всё' + (n > 1 ? ' (' + n + ')' : '') : '✅ Забрала всё';
+    // 🔵 «не оплатила на кассе» [v6.16] — молчит вместе с «Забрала всё»; видна, пока у заказа на экране есть вещи к выдаче (набор следующего
+    // номера её не прячет — только гасит, как кнопки).
+    var c = $('noPay');
+    c.disabled = n < 1 || pause;
+    c.className = (m && !after && m.open.length) ? '' : 'off';
   }
   function itemOf(P, r) { return [String(r.it[0] || ''), String(r.it[1] || ''), String(r.it[2] || ''), String(r.it[3] || ''), r.price, itemName(P, r.it)]; }
   function newOp() {
@@ -2274,8 +2337,15 @@
     if (j.action === 'kassa_give' && r.ok) {
       WQ_DONE = WQ_DONE.filter(function (d) { return Date.now() - d.at < WQ_DONE_FOR; });
       WQ_DONE.push({ action: j.action, tid: j.tid, nick: j.nick, no: j.no, keys: j.keys, g0: j.g0, cnt: j.cnt, t0: j.t0, at: Date.now() });
+      if (typeof r.mark === 'string') kmarkSet(r.mark);   // 🏪 слово склада — и из ответа выдачи [Кодекс LOW-6, Фейбл «гонки» LOW-5]
       var f = giveFlash(r, j.no, Number(r.wrote) || j.cnt);
       f.text = pre + f.text;
+      // Нажата «не оплатила», а склад ответил без np (склад старше страницы: выкладка не в том порядке, откат склада) — деньги легли кассой.
+      // Сказать сразу, жёлтой полосой с «×» [Фейбл «гонки» LOW-7, круг 1 v6.16].
+      if (j.unpaid && Number(r.np) !== 1) {
+        f.text += '. ⚠️ Склад не понял «не оплатила» — сумма легла как оплаченная на кассе. Скажите владельцу: заказ ' + j.no + ', ' + eur(Number(r.store != null ? r.store : r.sum) || 0) + '.';
+        f.cls = 'warn';
+      }
       finishWrite(j.tok, j.no, f, j.label, ordOf(j.tid, j.nick, j.no), j.n);
       wqSameCard(j);
       return;
@@ -2375,18 +2445,12 @@
     if (CUR && CUR.kind === 'card' && CUR.h && CUR.h.t.id === j.tid && CUR.sel.nick === j.nick && cardTok() !== j.tok && !dlgOpen()) invShow(true);
     refreshView();
   }
-  // Деньги выданного — как окно «Какие вещи забрала?» (redraw): по счёту — пометка R6-… или вещь, найденная складом в самом счёте.
-  function localSums(m, rows) {
-    var ik = {}, used = {}, sum = 0, inv = 0, np = 0;
-    m.open.forEach(function (r) { if (r.invX) { var k = itemKey(m.P, r); ik[k] = (ik[k] || 0) + 1; } });
-    rows.forEach(function (r) {
-      var cc = cents(r.price);
-      if (cc === null) { np++; return; }
-      sum += cc;
-      if (invOf(r.mark)) inv += cc;
-      else { var k = itemKey(m.P, r); if ((used[k] || 0) < (ik[k] || 0)) { used[k] = (used[k] || 0) + 1; inv += cc; } }
-    });
-    return { n: rows.length, sum: sum, inv: inv, store: sum - inv, np: np };
+  // Деньги выданного — тем же правилом, что у склада (kassaSums_, v6.16): «не оплатила на кассе» (unpaid) — вся сумма мимо кассы, иначе вся на
+  // кассе. np — вещей без цены.
+  function localSums(m, rows, unpaid) {
+    var sum = 0, np = 0;
+    rows.forEach(function (r) { var cc = cents(r.price); if (cc === null) np++; else sum += cc; });
+    return { n: rows.length, sum: sum, inv: unpaid ? sum : 0, store: unpaid ? 0 : sum, np: np, unpaid: unpaid ? 1 : 0 };
   }
   // Выданное из очереди (и выданное за последние 5 мин: выжимку склад мог собрать до нашей записи) — выданным и в этой выжимке.
   // ⛔️ Только если выжимка записи ещё НЕ видит: выданных в заказе меньше, чем было до нажатия + выдано [иначе из двух одинаковых
@@ -2532,7 +2596,7 @@
   // Строка итога записи: [нажатие, что, закупка, клиент, №, всего, в очереди, склад, этапы, попытки, итог, код операции].
   function spRow(j, r, outcome) {
     var what = j.action === 'kassa_unnet' ? 'снять «нет»' + (j.what ? ': ' + j.what : '')
-      : (j.mode === 'part' ? 'выдача: часть ' + j.cnt + ' из ' + j.tot : 'выдача: всё' + (j.cnt ? ' (' + j.cnt + ')' : ''));
+      : (j.mode === 'part' ? 'выдача: часть ' + j.cnt + ' из ' + j.tot : 'выдача: всё' + (j.cnt ? ' (' + j.cnt + ')' : '')) + (j.unpaid ? ', не оплатила' : '');
     // Попытки — последние (у долгого задания главное — чем кончилось), если не влезают в 200 знаков.
     var lg = (j.legs || []).join(' | ');
     if (lg.length > 200) lg = '…' + lg.slice(-199);
@@ -2542,18 +2606,21 @@
   // Итог выдачи словами — и для ответа на нажатие, и для досылки. Деньги — по ответу склада.
   function giveFlash(r, no, n) {
     if (r && r.ok) {
-      var t = '✅ Выдано: ' + things(n) + ' · ' + eur(Number(r.sum) || 0);
-      if (Number(r.inv)) t += ' (по счёту ' + eur(Number(r.inv)) + ', в магазине ' + eur(Number(r.store) || 0) + ')';
+      // «Забрала всё, но не оплатила» (np склада) — синим, вся сумма в «Забрано, но не оплачено» [владелец 14.10.2026]. Деньги по счёту с v6.16
+      // не делим: обычная выдача — вся сумма на кассе.
+      var up = Number(r.np) === 1;
+      var t = (up ? '✅ Выдано, не оплачено на кассе: ' : '✅ Выдано: ') + things(n) + ' · ' + eur(Number(r.sum) || 0) + (up ? ' — в «Забрано, но не оплачено»' : '');
       if (r.noprice) t += ' · без цены: ' + r.noprice;
       if (r.moved) t += '. ⚠️ Строки таблицы сдвинулись во время записи — пусть владелец проверит заказ.';
       if (r.repeat) t += ' (повтор — склад узнал и второй раз не записал)';
-      return { text: t + logSay(r, no), cls: (r.moved || r.log === false || r.log === 'later') ? 'warn' : 'ok',
-               done: { n: n, sum: Number(r.sum) || 0, inv: Number(r.inv) || 0, store: Number(r.store) || 0, np: Number(r.noprice) || 0 } };
+      return { text: t + logSay(r, no), cls: (r.moved || r.log === false || r.log === 'later') ? 'warn' : 'ok', blue: up ? 1 : 0,
+               done: { n: n, sum: Number(r.sum) || 0, inv: Number(r.inv) || 0, store: Number(r.store) || 0, np: Number(r.noprice) || 0, unpaid: up ? 1 : 0 } };
     }
     // Записалась часть: деньги и журнал за неё — так же честно, как за целую выдачу [Кодекс, круг 2, HIGH-6].
     if (r && Number(r.wrote) > 0) {
       return { text: '⚠️ Записано только ' + things(Number(r.wrote)) + ' из ' + (Number(r.wrote) + (Number(r.failed) || 0)) +
-        ' · ' + eur(Number(r.sum) || 0) + ' — остальное склад не подтвердил. Обновляю список — проверьте, что осталось, и отметьте ещё раз только то, что клиент забрал' + logSay(r, no), cls: 'warn' };
+        ' · ' + eur(Number(r.sum) || 0) + ' — остальное склад не подтвердил. Обновляю список — проверьте, что осталось, и отметьте ещё раз только то, что клиент забрал' +
+        (Number(r.np) === 1 ? ' — через «не оплатила на кассе»' : '') + logSay(r, no), cls: 'warn' };   // [Фейбл «кассир» LOW-2]
     }
     if (r && r.changed) {
       return { text: (r.total === 0 && r.given) ? '⚠️ Этот заказ уже выдан (другая касса, таблица или ваша прошлая попытка, на которую не пришёл ответ). Ничего не записано.'
@@ -2565,8 +2632,9 @@
   // Журнал кассы (деньги «Статистики») не лёг — сказать владельцу в обоих случаях: отложенную строку склад держит в
   // памяти не дольше 6 ч, и Google может выронить её раньше [Кодекс, круг 2, HIGH-3].
   function logSay(r, no) {
-    if (r.log === 'later') return '. ⚠️ Журнал кассы не ответил — склад попробует дописать сумму сам, но скажите владельцу: заказ ' + no + ', ' + eur(Number(r.store) || 0) + '.';
-    if (r.log === false) return '. ⚠️ Сумма не записалась в журнал кассы — скажите владельцу: заказ ' + no + ', ' + eur(Number(r.store) || 0) + '.';
+    var amt = Number(r.np) === 1 ? eur(Number(r.sum) || 0) + ', не оплатила на кассе' : eur(Number(r.store) || 0);
+    if (r.log === 'later') return '. ⚠️ Журнал кассы не ответил — склад попробует дописать сумму сам, но скажите владельцу: заказ ' + no + ', ' + amt + '.';
+    if (r.log === false) return '. ⚠️ Сумма не записалась в журнал кассы — скажите владельцу: заказ ' + no + ', ' + amt + '.';
     return r.ok ? '' : '.';
   }
   function failText(r) {
@@ -2631,7 +2699,7 @@
     else if (!seen) { stickySet(STICKY.concat([{ text: text, cls: flash.cls, tok: tok, ord: ord }])); LAST.shown = true; }
     if (mine) afterWrite(no, (n && flash.cls === 'bad') ? null : flash);
     // renderSticky — итог мог снять временную «склад не подтверждает…» [Фейбл, круг 2 v6.6, LOW: висела рядом с «✓ записано»].
-    else if (flash.cls === 'ok') { renderSticky(); var hd = $('head'); if (hd) hd.insertBefore(bgOk ? el('div', 'wqok', '✓ ' + (lb || 'выдача') + (flash.un ? ': «нет» снято' : '') + ' — записано в таблицу') : el('div', 'ban ok', text), hd.firstChild); }
+    else if (flash.cls === 'ok') { renderSticky(); var hd = $('head'); if (hd) hd.insertBefore(bgOk ? el('div', 'wqok', '✓ ' + (lb || 'выдача') + (flash.un ? ': «нет» снято' : '') + (flash.blue ? ': не оплатила на кассе' : '') + ' — записано в таблицу') : el('div', 'ban ok' + (flash.blue ? ' nopay' : ''), text), hd.firstChild); }
     else renderSticky();
     setTimeout(invLater, 0);   // ответ про счёт, пришедший во время записи (п.3)
   }
@@ -2642,7 +2710,7 @@
     rows.forEach(function (r) {
       st[r.k] = String(st[r.k] || 'n').toUpperCase();
       var it = c[2][r.k];
-      if (Array.isArray(it)) it[3] = 'd:zabrala';
+      if (Array.isArray(it)) it[3] = 'd:' + KMARK;        // 🏪 «d:zabrala Dz70» — как у склада (kassaRowInfo_: 'd:' + кол. B) [v6.16]
     });
     c[3] = st.join('');
   }
@@ -2683,8 +2751,10 @@
   // которую склад поставит при снятии, выдаче в очереди поправит unnetPatch [v6.7; до v6.7 выдача ждала словами «через несколько секунд»].
   // force — нажато из окна «Заказ не отмечен» (п.3 v6.7): кассир уже набрал следующий номер (draftOn), а окно названо этим заказом —
   // его и выдаём; пауза 0,7 с после показа карточки не нужна (у окна своя, 0,5 с). Паузы сверки и счёта (≤ 5 с) — и тут в силе.
+  // unpaid — «Забрала всё, но не оплатила» (окно ссылки «не оплатила на кассе», v6.16): склад пишет то же «zabrala», а деньги выдачи —
+  // в «Забрано, но не оплачено» (np=1) [владелец 14.10.2026].
   // true — выдача ушла в очередь.
-  function give(mode, takeIdx, force) {
+  function give(mode, takeIdx, force, unpaid) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || !m.open.length || DENIED || !cardInScope() || (!force && draftOn())) return false;
     if (KST.open) return false;     // 📊 подробности «Забрано сегодня» открыты — карточка позади не выдаётся ничем [Кодекс HIGH-2, круг 1 v6.15]
@@ -2696,17 +2766,8 @@
     if (mode === 'part' && take.length === rows.length) { mode = 'all'; take = []; }
     var params = { src: h.t.id, nick: m.c[0], no: m.no, mode: mode, a: JSON.stringify(a) };
     if (mode === 'part') params.t = take.join(',');
-    // Вещи без пометки, найденные в самом счёте (п.3), — складу: в «Лог кассы» они идут по счёту, а не в магазин.
-    var vi = [];
-    rows.forEach(function (r, i) { if (r.invX) vi.push(i + ':' + r.invX); });
-    if (vi.length) params.vi = vi.join(',');
-    // «Снять «нет»» этой клиентки ещё в очереди или только что записано (WQ_DONE), а годного ответа про счёт у карточки нет (invChk 'wait'):
-    // пока «нет» не записано, счёт не спрашиваем (склад сверяет со счётом только вещи с номером), а запись могла лечь, пока открыто окно, —
-    // ответ сброшен или отложен окном. Счёт спросит сама очередь перед отправкой этой выдачи, когда «нет» уже в таблице (wqInv). Иначе вещь из
-    // оплаченного счёта ложилась в «Лог кассы» магазином [Кодекс, круг 2 v6.8, HIGH; Фейбл «деньги», круг 2 v6.8, MED-1 — окно «Не забрала
-    // всё…»; LOW-1 обеих линз — окно «Заказ не отмечен»]. И выдача из окна «Заказ не отмечен» (force): окно переходит к заказу и выдаёт его
-    // в том же щелчке — ответа про счёт у заказа, которого кассир не открывал, ещё нет [Фейбл «сценарий», круг 1 v6.9, MED-2].
-    var invq = m.invChk === 'wait' && (force || WQ.concat(WQ_DONE).some(function (x) { return x.action === 'kassa_unnet' && x.tid === h.t.id && x.nick === m.c[0]; }));
+    params.np = unpaid ? '1' : '0';                     // [v6.16] без np склад считает по-старому, по счёту (касса до v6.16) — шлём всегда
+    // vi (вещи, найденные в самом счёте) и вопрос про счёт перед отправкой (invq) — до v6.16; с v6.16 деньги по счёту не делятся (invNeed).
     params.n = newOp();
     var tok = cardTok(), label = m.c[0] + ' ' + m.no;
     closeDlg();
@@ -2718,9 +2779,10 @@
     var need = {};
     keys.forEach(function (k) { need[k] = (need[k] || 0) + 1; });
     var done = rows.filter(function (x) { var k = itemKey(m.P, x); if (need[k] > 0) { need[k]--; return true; } return false; });
-    var loc = localSums(m, done);
+    var loc = localSums(m, done, unpaid);
     wqAdd({ n: params.n, action: 'kassa_give', params: params, tid: h.t.id, tname: h.t.name, nick: m.c[0], no: m.no, label: label, tok: tok,
-            keys: keys, g0: m.givenSel.length, mode: mode, cnt: done.length, tot: rows.length, t0: Date.now(), due: 0, tries: 0, legs: [], invq: invq ? 1 : 0 });
+            keys: keys, g0: m.givenSel.length, mode: mode, cnt: done.length, tot: rows.length, t0: Date.now(), due: 0, tries: 0, legs: [], invq: 0,
+            unpaid: unpaid ? 1 : 0 });
     applyGiven(m, done);     // сразу — как их покажет свежая выжимка (и overlayPack — любую, пришедшую до записи)
     if (CUR.lv) CUR.lv.done[nk(m.no)] = 1;                // заказ отмечен (п.3): окно «Заказ не отмечен» про него больше не спросит
     afterWrite(m.no, { text: WQ_TXT, cls: 'info', done: loc, q: 1, n: params.n });
@@ -2775,7 +2837,7 @@
   // возврате в кассу. Цена на складе — чтение кэша: ответ лежит там до следующей записи журнала.
   // ⛔️ Только чтение и показ: выдачу, деньги и экран кассира эта часть не трогает. В памяти браузера не хранится — ники клиентов только
   // в памяти вкладки, отказ ключа их стирает (kstReset).
-  var KST = { days: null, today: '', got: 0, tried: 0, seq: 0, applied: 0, busy: 0, err: '', lists: {}, open: false, sel: '', rc: null, soon: null };
+  var KST = { days: null, today: '', got: 0, tried: 0, seq: 0, applied: 0, busy: 0, err: '', lists: {}, open: false, sel: '', rc: null, soon: null, reAt: 0 };
   // Ответ ждём, как список закупок: Google в плохие дни довозил ответ на 10–114-й секунде [Фейбл «кассир», круг 1 v6.15, LOW-9].
   var WAIT_STAT = 150000, STAT_ACTIVE = 120000, STAT_OPEN = 60000, STAT_IDLE = 600000, STAT_FRESH = 30000;
   var WD_SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'], WD_LONG = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
@@ -2821,7 +2883,10 @@
     KST.busy++; KST.tried = Date.now();
     renderKd(); if (KST.open) renderKst();
     var r = null;
-    try { r = await jsonp('kassa_stat', day ? { day: day } : {}, WAIT_STAT); } catch (e) { r = null; }
+    // Компьютер — неделя (nd=7) [владелец 14.10.2026: «На компе показывай в статистике инфу забранного за последнюю неделю»], телефон — три дня.
+    var q = day ? { day: day } : {};
+    if (DESK.matches) q.nd = 7;
+    try { r = await jsonp('kassa_stat', q, WAIT_STAT); } catch (e) { r = null; }
     KST.busy--;
     if (DENIED) return;
     if (r && r.net && !attempt) { await sleep(2000); if (!DENIED) return kstFetch(day, 1); return; }   // «404» Google — ещё раз
@@ -2856,9 +2921,10 @@
     if (KST.open) {
       renderKst();
       // Подробности открыли раньше, чем пришли дни (или итог дня ушёл вперёд списка, или пришёл список ДРУГОГО дня, а выбран уже этот
-      // [Кодекс, круг 1 v6.15, LOW-3]), — список выбранного дня спрашиваем заново. Только после ответа НЕ про выбранный день: ответ про
-      // него самого новых вопросов не рождает — иначе расхождение крутило бы запросы по кругу.
-      if (day !== KST.sel && KST.sel && kstStale(KST.sel) && !KST.busy) kstFetch(KST.sel);
+      // [Кодекс, круг 1 v6.15, LOW-3]), — список выбранного дня спрашиваем заново. Ответ про сам выбранный день, после которого список всё ещё
+      // отстаёт (итог дня пришёл из более позднего ответа), — тоже, но не чаще раза в 10 с: иначе расхождение крутило бы запросы по кругу, а
+      // кассир смотрел бы на «Обновляю данные…» до минутного освежения [v6.16].
+      if (KST.sel && kstStale(KST.sel) && !KST.busy && (day !== KST.sel || Date.now() - KST.reAt > 10000)) { if (day === KST.sel) KST.reAt = Date.now(); kstFetch(KST.sel); }
     }
   }
   // Список дня устарел: его нет, или он не сходится с итогом дня из более свежего ответа (новая выдача: полоса уже «2 заказа», а
@@ -2891,7 +2957,7 @@
   function kstOpen() {
     if (DENIED || KST.open) return;
     lastActivity = Date.now();
-    KST.open = true; KST.rc = null; KST.sel = KST.today || '';
+    KST.open = true; KST.rc = null; KST.sel = KST.today || ''; KST.toEnd = 1;   // «Сегодня» — к последним выдачам (снизу) [Фейбл «кассир» LOW-4]
     kstInert(true);
     $('kbg').className = 'on'; $('kst').className = 'on';
     renderKst();
@@ -2919,7 +2985,7 @@
   function kstPick(k) {
     if (!KST.open || kdIdx(k) < 0) return;
     lastActivity = Date.now();
-    KST.sel = k; KST.rc = null; renderRc();
+    KST.sel = k; KST.rc = null; KST.toEnd = kdIdx(k) === 0 ? 1 : 0; renderRc();
     renderKst();
     var L = KST.lists[k];
     if (!L || kstStale(k) || Date.now() - L.got > STAT_FRESH) kstFetch(k);
@@ -2934,15 +3000,34 @@
     [].forEach.call(box.querySelectorAll('[data-f]'), function (x) { if (!fe && x.getAttribute('data-f') === fk) fe = x; });
     try { (fe || box.querySelector('.cl')).focus({ preventScroll: true }); } catch (e) {}
   }
-  // Подробности: шапка, три столбика (позавчера → сегодня), заказы выбранного дня, итог дня внизу.
+  // Подробности: шапка (название, дни, «на ЧЧ:ММ», «Свернуть»), заказы выбранного дня — от ранних к поздним, с порядковым номером, итог дня
+  // внизу. ⭐ [владелец 14.10.2026: «внутри статистики Забрано сегодня: переключалки дней вынеси в самый верх, в шапку - эта инфа второстепенная»;
+  // «дай порядковый номер карточек (можно в верхнем левом углу), это просто порядковый номер отображения карточки на экране»; «карточки отображай
+  // от ранних к поздним»] — столбики дней v6.15 убраны: дни — маленькими кнопками в шапке (компьютер — неделя, телефон — три дня).
   function kstDraw() {
     var box = $('kst');
     if (!KST.open) return;
-    var ol = box.querySelector('.klst'), keep = ol && box.getAttribute('data-sel') === (KST.sel || '') ? ol.scrollTop : 0;
+    var ol = box.querySelector('.klst'), same = !!ol && box.getAttribute('data-sel') === (KST.sel || ''), keep = same ? ol.scrollTop : 0;
+    // Кассир стоял у конца списка (или список был короче окна) — и после освежения у конца: новая выдача ложится внизу, иначе её не видно,
+    // а полоса уже с её суммой [Фейбл «кассир» MED-1, круг 2 v6.16 — та самая жалоба владельца]. Пролистал вверх — остаётся, где был.
+    var atEnd = same && ol.scrollHeight - ol.scrollTop - ol.clientHeight < 8;
     box.textContent = '';
     box.setAttribute('data-sel', KST.sel || '');
     var hd = el('div', 'ksh');
     hd.appendChild(el('h2', null, 'Забранные заказы'));
+    if (KST.days) {
+      var dy = el('div', 'kdy');
+      dy.setAttribute('role', 'group'); dy.setAttribute('aria-label', 'День');
+      KST.days.slice().reverse().forEach(function (d) {                     // слева направо — от раннего дня к сегодня
+        var on = d[0] === KST.sel, b = el('button', 'kdc' + (on ? ' on' : ''), kdName(d[0]));
+        b.type = 'button'; b.setAttribute('data-f', 'b' + d[0]);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.setAttribute('aria-label', kdName(d[0]) + ' (' + kdDD(d[0]) + '): ' + kdOrders(d[1]) + ', оплачено на кассе ' + eur(Number(d[5]) || 0));
+        b.onclick = function () { kstPick(d[0]); };
+        dy.appendChild(b);
+      });
+      hd.appendChild(dy);
+    }
     hd.appendChild(el('span', 'at' + (KST.busy ? ' blink' : ''), KST.busy ? 'обновляю…' : KST.err ? 'не обновилось' : (KST.got ? 'на ' + kdHm(KST.got) : '')));
     var cl = el('button', 'cl'); cl.type = 'button'; cl.setAttribute('aria-label', 'Свернуть'); cl.setAttribute('data-f', 'cl');
     cl.appendChild(el('span', null, 'Свернуть')); cl.appendChild(kdSvg('M6 9l6 6 6-6'));
@@ -2960,36 +3045,44 @@
       var l0 = el('div', 'klst'); l0.appendChild(w0); box.appendChild(l0);
       return;
     }
-    var ch = el('div', 'kch'), max = 1, H = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--kbh')) || 72;
-    KST.days.forEach(function (d) { if ((Number(d[5]) || 0) > max) max = Number(d[5]); });   // столбик — деньги кассы, как полоса
-    KST.days.slice().reverse().forEach(function (d) {
-      var on = d[0] === KST.sel, b = el('button', 'kbar' + (on ? ' on' : ''));
-      b.type = 'button'; b.setAttribute('data-f', 'b' + d[0]);
-      b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      b.setAttribute('aria-label', kdName(d[0]) + ' (' + kdDD(d[0]) + '): ' + kdOrders(d[1]) + ', оплачено на кассе ' + eur(Number(d[5]) || 0));
-      b.appendChild(el('span', 'v', eur(Number(d[5]) || 0)));
-      var bar = el('span', 'b'); bar.style.height = Math.max(6, Math.round(H * Math.max(0, Number(d[5]) || 0) / max)) + 'px'; b.appendChild(bar);
-      b.appendChild(el('span', 'd', kdName(d[0])));
-      b.onclick = function () { kstPick(d[0]); };
-      ch.appendChild(b);
-    });
-    box.appendChild(ch);
     var dd = KST.days[kdIdx(KST.sel)] || null;
     var t = el('div', 'kdt');
     t.appendChild(el('b', null, kdLong(KST.sel)));
     if (dd) t.appendChild(el('span', null, kdOrders(dd[1]) + ' · ' + things(Number(dd[2]) || 0)));
     box.appendChild(t);
-    var lst = el('div', 'klst'), L = KST.lists[KST.sel];
-    if (!L) {
-      var w = el('div', 'kemp' + (KST.busy ? ' blink' : ''), KST.busy || !KST.err ? 'Загружаю заказы…' : 'Заказы дня не загрузились.');
-      if (!KST.busy && KST.err) retry(w, KST.sel);
+    var lst = el('div', 'klst'), L = KST.lists[KST.sel], stale = !!L && kstStale(KST.sel);
+    // От ранних к поздним, номер — порядок на экране (1 — самая ранняя выдача дня).
+    var tiles = function () {
+      L.rows.filter(function (r) { return Array.isArray(r); }).sort(function (a, b) { return (Number(a[0]) || 0) - (Number(b[0]) || 0); })
+        .forEach(function (r, i) { lst.appendChild(kstTile(r, i + 1)); });
+    };
+    // ⭐ Список отстаёт от итога дня (полоса уже видит новую выдачу, а список спрошен раньше) — его не показываем, пока не придёт свежий:
+    // кассир не нашёл бы в нём последнего заказа [владелец 14.10.2026: «иногда она обновляется и не видно последнего забранного товара, хотя
+    // внизу на черной полосе уже сумма отмечена… Там надо тогда выводить лоудинг и надпись "обновляю данные", чтобы было понятно, что надо
+    // подождать»]. Склад не ответил — прежний список под полосой «не обновился» с «Загрузить ещё раз».
+    if (L && !stale) {
+      if (!L.rows.length) lst.appendChild(el('div', 'kemp', 'В этот день выдач не было.'));
+      else tiles();
+    } else if (KST.busy || (!L && !KST.err)) {
+      var ld = el('div', 'kld');
+      ld.setAttribute('role', 'status');
+      ld.appendChild(el('span', 'ksp'));
+      ld.appendChild(el('span', 'blink', L ? 'Обновляю данные…' : 'Загружаю заказы…'));
+      lst.appendChild(ld);
+    } else if (L) {
+      var wn = el('div', 'kemp', '⚠️ Список не обновился — последней выдачи в нём может не быть. ');
+      retry(wn, KST.sel);
+      lst.appendChild(wn);
+      tiles();
+    } else {
+      var w = el('div', 'kemp', 'Заказы дня не загрузились.');
+      retry(w, KST.sel);
       lst.appendChild(w);
-    } else if (!L.rows.length) lst.appendChild(el('div', 'kemp', 'В этот день выдач не было.'));
-    else L.rows.forEach(function (r) { if (Array.isArray(r)) lst.appendChild(kstTile(r)); });
+    }
     box.appendChild(lst);
-    if (keep) lst.scrollTop = keep;
     if (dd) {
-      // Итог дня — двумя строками [владелец 13.10.2026]: «Забрано и оплачено» — деньги кассы; «Забрано, но не оплачено» — по счёту.
+      // Итог дня — двумя строками [владелец 13.10.2026]: «Забрано и оплачено» — деньги кассы; «Забрано, но не оплачено» — выдачи «не оплатила на
+      // кассе» (с v6.16 по факту; строки до 14.10.2026 — по счёту), сумма — серым [владелец 14.10.2026].
       var ft = el('div', 'kft'), a = el('div', 'a');
       a.appendChild(el('b', null, 'Итого за ' + kdShort(KST.sel)));
       a.appendChild(el('span', null, kdOrders(dd[1]) + ' · ' + things(Number(dd[2]) || 0)));
@@ -2998,6 +3091,10 @@
       ft.appendChild(kstSumRow('r2', 'Забрано, но не оплачено', dd[7], dd[4]));
       box.appendChild(ft);
     }
+    // Карточки — от ранних к поздним [владелец], а открыли «Сегодня» — видны последние (внизу): ради них полосу и открывают. Когда список дня
+    // впервые нарисован, и при освежении, если кассир стоял у конца; пролистал вверх — прокрутку держим. После итога дня: он отнимает высоту.
+    if ((KST.toEnd || atEnd) && L && !stale && L.rows.length && kdIdx(KST.sel) === 0) { KST.toEnd = 0; lst.scrollTop = lst.scrollHeight; }
+    else if (keep) lst.scrollTop = keep;
   }
   // Строка итога дня: подпись, число выдач (склад до 13.10.2026 его не присылал — без него) и сумма.
   function kstSumRow(cls, label, n, cents) {
@@ -3008,23 +3105,30 @@
     r.appendChild(l); r.appendChild(el('span', 's', eur(Number(cents) || 0)));
     return r;
   }
-  // Выдача: [мс, №, ник, закупка, что, выдано, в заказе, сумма, по счёту, в магазине, без цены, кто, вещи] — данные клиентов только текстом.
-  function kstTile(r) {
+  // Выдача «не оплатила на кассе» (v6.16): склад приписывает к «Что» « · не оплатила» (KASSA_NOPAY_TAIL).
+  var NOPAY_RE = / · не оплатила/;
+  // С этого часа склад пишет состав выдачи (v580 выложен 13.10.2026 ~23:30, Рига) — 14.10.2026 00:00 по Риге (UTC+3).
+  var ITEMS_SINCE = Date.UTC(2026, 9, 13, 21, 0, 0);
+  // Выдача: [мс, №, ник, закупка, что, выдано, в заказе, сумма, не на кассе, на кассе, без цены, кто, вещи] — данные клиентов только текстом.
+  // no — порядковый номер карточки на экране (левый верхний угол) [владелец 14.10.2026].
+  function kstTile(r, no) {
     var what = String(r[4] || ''), part = /^часть/.test(what);
     var t = el('button', 'kt'); t.type = 'button'; t.setAttribute('data-f', 't' + Number(r[0]) + '_' + String(r[1] || ''));
+    t.appendChild(el('span', 'kn', String(no || '')));
     var a = el('span', 'ka'), k1 = el('span', 'k1'), k2 = el('span', 'k2');
     k1.appendChild(el('span', 'no', String(r[1] || '—'))); k1.appendChild(el('span', 'nk', String(r[2] || '')));
     k2.appendChild(el('span', null, kdHm(r[0])));
     k2.appendChild(part ? el('span', 'pt', 'часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0)) : el('span', null, things(Number(r[5]) || 0)));
     if (/ПРОВЕРЬТЕ/.test(what)) k2.appendChild(el('span', 'kw', '⚠️ проверить'));
     a.appendChild(k1); a.appendChild(k2); t.appendChild(a);
-    // Крупно — деньги кассы, зелёным; забранное по счёту — «по счёту X €», как в чеке (в итоге дня это «Забрано, но не оплачено»).
-    // Заказ целиком по счёту — крупно его сумма по счёту, жёлтым, а не зелёный «0,00 €» [Фейбл «кассир», круг 2б v6.15, LOW-5].
-    var b = el('span', 'kb'), st = Number(r[9]) || 0, iv = Number(r[8]) || 0;
-    if (st <= 0 && iv > 0) { b.appendChild(el('span', 'sm ivx', eur(iv))); b.appendChild(el('span', 'iv', 'по счёту')); }
+    // Крупно — деньги кассы, зелёным. «Не оплатила на кассе» (и строка до 14.10.2026 целиком по счёту) — крупно её сумма СЕРЫМ, «не оплачено»
+    // [владелец 14.10.2026: «забрано но не оплачено - эту сумму серым»], а не зелёный «0,00 €» [Фейбл «кассир», круг 2б v6.15, LOW-5];
+    // часть не на кассе у строки до 14.10.2026 — мелко серым.
+    var b = el('span', 'kb'), st = Number(r[9]) || 0, iv = Number(r[8]) || 0, up = NOPAY_RE.test(what);
+    if (up || (st <= 0 && iv > 0)) { b.appendChild(el('span', 'sm ivx', eur(up ? (Number(r[7]) || 0) : iv))); b.appendChild(el('span', 'iv', 'не оплачено')); }
     else {
       b.appendChild(el('span', 'sm', eur(st)));
-      if (iv > 0) b.appendChild(el('span', 'iv', 'по счёту ' + eur(iv)));
+      if (iv > 0) b.appendChild(el('span', 'iv', 'не оплачено ' + eur(iv)));
     }
     t.appendChild(b);
     t.onclick = function () { lastActivity = Date.now(); KST.rc = r; renderRc(); };
@@ -3044,6 +3148,8 @@
     h.appendChild(el('div', 'nk', String(r[2] || '')));
     h.appendChild(el('div', 'mt', [String(r[3] || ''), 'выдан ' + kdDD(KST.sel) + ' в ' + kdHm(r[0]), String(r[11] || '')].filter(Boolean).join(' · ')));
     h.appendChild(el('span', 'stt' + (part ? ' p' : ''), part ? 'Забрала часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0) : 'Забрала всё'));
+    var up = NOPAY_RE.test(what);
+    if (up) h.appendChild(el('span', 'stt u', 'не оплатила на кассе'));                        // [v6.16] — серым, как в итоге дня
     if (/ПРОВЕРЬТЕ/.test(what)) h.appendChild(el('div', 'wr', '⚠️ Пока шла запись, лист сдвинулся — строки этого заказа надо проверить в таблице.'));
     box.appendChild(h);
     var l = el('div', 'rcl'), invs = {};
@@ -3051,14 +3157,18 @@
       it.g.forEach(function (x) { if (Array.isArray(x)) { l.appendChild(rcLine(x, false)); if (x[5]) invs[String(x[5])] = 1; } });
       if (Number(it.cut) > it.g.length) l.appendChild(el('div', 'rcn', 'И ещё ' + things(Number(it.cut) - it.g.length) + ' — весь состав в журнал не поместился.'));
       (Array.isArray(it.r) ? it.r : []).forEach(function (x) { if (Array.isArray(x)) l.appendChild(rcLine(x, true)); });
-    } else l.appendChild(el('div', 'rcn', 'Состав этой выдачи не записан.'));   // выдача до v6.15 или строка, дописанная журналом позже (без «Вещей»)
+    }
+    // Без состава: выдачи до выкладки склада v580 (13.10.2026, ночь) — состав тогда не записывался вовсе [владелец 14.10.2026: «у каждой написано:
+    // Состав этой выдачи не записан»]; позже — строка, дописанная журналом из отложенных (без «Вещей»).
+    else l.appendChild(el('div', 'rcn', Number(r[0]) < ITEMS_SINCE ? 'Состав выдач до 14.10 касса не записывала — он есть у выдач с 14.10.' : 'Состав этой выдачи не записан.'));
     box.appendChild(l);
     var f = el('div', 'rcf'), tt = el('div', 't');
     tt.appendChild(el('span', null, 'Итого · ' + things(Number(r[5]) || 0)));
-    tt.appendChild(el('b', null, eur(Number(r[7]) || 0)));
+    tt.appendChild(el('b', up ? 'u' : null, eur(Number(r[7]) || 0)));
     f.appendChild(tt);
     var iv = Object.keys(invs);
-    if (Number(r[8]) > 0) f.appendChild(el('div', 'iv', 'из них по счёту' + (iv.length ? ' ' + iv.join(', ') : '') + ': ' + eur(Number(r[8]))));
+    // Не на кассе — серым: «не оплатила» (v6.16) или, у строки до 14.10.2026, по счёту.
+    if (Number(r[8]) > 0) f.appendChild(el('div', 'iv u', 'не оплачено на кассе' + (!up && iv.length ? ' (счёт ' + iv.join(', ') + ')' : '') + ': ' + eur(Number(r[8]))));
     if (Number(r[10]) > 0) f.appendChild(el('div', 'iv', 'без цены: ' + things(Number(r[10]))));
     var x = el('button', 'x', 'Закрыть'); x.type = 'button';
     x.onclick = function () { KST.rc = null; renderRc(); };
@@ -3095,6 +3205,9 @@
   // Окно открыто — фокус ни на чём: случайная клавиша не закроет ни окно, ни заказ, а Enter/пробел не «щёлкнут» вещь
   // или кнопку, на которой фокус остался [Фейбл «сценарий» HIGH-2, «гонки» MED-5].
   var dlgAt = 0;
+  // Глухота ТОЛЬКО подвала после переключателя «не оплатила» — своя метка, не dlgAt: dlgAt глушит и галочки окна, открытого из «Заказ не
+  // отмечен», — снятие галочки через 0,3 с после переключателя терялось, и выдача уходила лишней вещью [Кодекс CRIT, перепроверка круга 2 v6.16].
+  var ftAt = 0;
   // Нажатие на карточке (вещь, фото, «Снять «нет»», кнопки выдачи — и серые, «Открыть этот заказ», палец по вещам) — кассир с ней работает:
   // окно «Заказ не отмечен» спросит и в первые 7 с с её показа (v6.10, v6.13). Ловим начало нажатия, а не только click: серая кнопка click не
   // рождает, касание с движением пальца — тоже [Кодекс, круг 1 v6.10, HIGH: нажал серую «Забрала всё», ушёл за 2 с — окна не было]; click —
@@ -3127,28 +3240,40 @@
     var lst = el('div', 'lst');
     var ft = el('div', 'dlgft'), s = el('div', 's'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
     no.type = 'button'; ok.type = 'button';
-    // Вещи, найденные складом в самом счёте (п.3), — по ключу вещи, как считает выдача (vi): из одинаковых «по счёту» столько,
-    // сколько их в счёте, какие бы из них кассир ни отметил.
-    var ik = {};
-    rows.forEach(function (r) { if (r.invX) { var k = itemKey(m.P, r); ik[k] = (ik[k] || 0) + 1; } });
+    // 🔵 «не оплатила на кассе» — и для части заказа [Кодекс HIGH-2, круг 1 v6.16]: клиентка оплатила счёт раньше и забрала не всё — без
+    // переключателя отданное легло бы деньгами кассы. Включено — запись синяя, сумма уходит в «Забрано, но не оплачено» (np=1).
+    var unpaid = false, npt = el('button', 'npt', 'не оплатила на кассе');
+    npt.type = 'button'; npt.setAttribute('aria-pressed', 'false');
+    npt.onclick = function () {
+      if (force && Date.now() - dlgAt < 500) return;
+      lastActivity = Date.now();
+      unpaid = !unpaid; npt.className = 'npt' + (unpaid ? ' on' : ''); npt.setAttribute('aria-pressed', unpaid ? 'true' : 'false');
+      // Подвал глух 0,5 с [Фейбл «кассир» MED-3 / LOW-1, круг 2 v6.16]: кнопка записи меняет ширину, и второй щелчок двойного по
+      // переключателю попадал в «Записать»; второй тап двойного выключал его обратно. Галочки — не глушим (ftAt, а не dlgAt).
+      ftAt = Date.now();
+      redraw();
+    };
+    // Сумма отмеченного — вся к оплате на кассе: деление «по счёту» с v6.16 не делаем [владелец 14.10.2026: «проверяем оплату по факту»].
     function redraw() {
-      var n = 0, sum = 0, inv = 0, np = 0, used = {};
+      var n = 0, sum = 0, np = 0;
       rows.forEach(function (r, i) {
         if (!on[i]) return;
         n++;
         var cc = cents(r.price);
         if (cc === null) { np++; return; }
         sum += cc;
-        if (invOf(r.mark)) inv += cc;
-        else { var k = itemKey(m.P, r); if ((used[k] || 0) < (ik[k] || 0)) { used[k] = (used[k] || 0) + 1; inv += cc; } }
       });
       s.textContent = '';
+      // Хвосты «не оплачено» — span'ами: на телефоне их прячет CSS (синяя сумма и включённый переключатель говорят то же), иначе строка суммы
+      // выталкивала «Назад» в свой ряд, а текст синей на 320 px резался [Фейбл «кассир» MED-2, круг 2 v6.16]
       s.appendChild(document.createTextNode('Забрала ' + n + ' из ' + rows.length));
-      s.appendChild(el('b', null, eur(sum)));
-      if (inv) s.appendChild(document.createTextNode('из них по счёту: ' + eur(inv)));
-      if (np) s.appendChild(document.createTextNode((inv ? ' · ' : '') + 'без цены: ' + np));
+      if (unpaid) s.appendChild(el('span', 'npx', ' · не оплачено на кассе'));
+      s.appendChild(el('b', unpaid ? 'u' : null, eur(sum)));
+      if (np) s.appendChild(document.createTextNode('без цены: ' + np));
       ok.disabled = n === 0;
+      ok.className = 'btn ' + (unpaid ? 'okb' : 'ok');
       ok.textContent = n === rows.length ? '✅ Записать: забрала всё' : '✅ Записать: забрала ' + n;
+      if (unpaid) ok.appendChild(el('span', 'npx', ', не оплатила'));
     }
     rows.forEach(function (r, i) {
       var b = el('button', 'ck on'); b.type = 'button';
@@ -3187,13 +3312,62 @@
         return;
       }
       var take = []; on.forEach(function (v, i) { if (v) take.push(i); });
-      if (take.length && give('part', take, force) && after) after();
+      if (take.length && give('part', take, force, unpaid) && after) after();
     };
-    ft.appendChild(s); ft.appendChild(no); ft.appendChild(ok);
+    // Переключатель — своей строкой над суммой и кнопками [Фейбл «кассир» MED-2, круг 2 v6.16]: между суммой и «Назад» он разбивал ряд, и на
+    // телефоне подвал вырастал до четырёх рядов — список вещей SE-размера сжимался до одной вещи.
+    var npr = el('div', 'npr'); npr.appendChild(npt);
+    ft.appendChild(npr); ft.appendChild(s); ft.appendChild(no); ft.appendChild(ok);
     box.appendChild(lst); box.appendChild(ft);
     d.appendChild(box);
     dlgShow();
     redraw();
+  }
+  // ── 🔵 «НЕ ОПЛАТИЛА НА КАССЕ» (v6.16, 14.10.2026) ──────────────────────────────────────────────────────────────────────────────────
+  // [владелец: «Эту систему с инвойсами отключаем, проверяем оплату по факту. Таких клиентов процентов 5 (кто забрал в магазине, но на кассе не
+  // оплатил, тк ранее оплатил инвойс). Надо под кнопками ввести новый линк - типа Не оплатил… Если работник отдал товар такому клиенту, то жмет
+  // линк, возникает ниже кнопка (к примеру синего цвета): Все забрал, но не оплатил. Товар отмечается как забран, но в дневной статистике эта
+  // сумма идет в Забрано но не оплачено»; вид — вариант 3 холста: ссылка открывает окно с синей кнопкой]. Пишет то же, что «Забрала всё»
+  // (zabrala всем вещам заказа), только деньги выдачи склад кладёт в «Забрано, но не оплачено» (np=1).
+  // Окно — про ЭТОТ заказ и ЭТОТ состав, как «Не забрала всё…»: сменился — закрываем, ничего не пишем. Кнопки подвала глухи 0,5 с (двойной тап
+  // по ссылке); на телефоне окно у верха экрана — синяя кнопка не встаёт под палец, что жал «Найти» внизу. Сверка карточки держит кнопку, как
+  // кнопки выдачи (не дольше 5 с с показа карточки).
+  // force, after — открыто из окна «Заказ не отмечен» (как openPart): кассир уже набрал следующий номер; записал — after (поиск набранного).
+  function openNoPay(force, after) {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    if (!m || !m.open.length || (!force && tooFresh()) || !cardInScope() || (!force && draftOn()) || KST.open) return;
+    lastActivity = Date.now();
+    var d = $('dlg'); d.textContent = '';
+    var box = el('div', 'dlgbox npay');
+    box.appendChild(el('h3', null, 'Заказ ' + m.no + ' — не оплатила на кассе?'));
+    box.appendChild(el('div', 'sub', m.c[0] + ' · ' + things(m.open.length) + ' · ' + eur(m.sum) + '. Оплатила раньше — по счёту. Вещи отметим «забрала», ' +
+      'а сумма уйдёт в «Забрано, но не оплачено».'));
+    var ft = el('div', 'dlgft npf'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn okb', 'Забрала всё, но не оплатила');
+    no.type = 'button'; ok.type = 'button';
+    ft.appendChild(no); ft.appendChild(ok);                 // телефон: синяя — первой (column-reverse)
+    no.onclick = function () { closeDlg(); };
+    var dtok = cardTok(), dno = m.no, nsnap = m.open.map(function (r) { return itemKey(m.P, r); }).join('\n');
+    var ht = null;
+    var hold = function () {
+      var h = checkHold();
+      ok.disabled = h;
+      if (h && !ht) ht = setInterval(function () { if (!d.contains(ok) || !hold()) { clearInterval(ht); ht = null; } }, 300);
+      return h;
+    };
+    ok.onclick = function () {
+      if (cardTok() !== dtok || !CUR.model || CUR.model.no !== dno) { closeDlg(); return; }
+      if (nsnap !== CUR.model.open.map(function (r) { return itemKey(CUR.model.P, r); }).join('\n')) {
+        closeDlg();
+        afterWrite(dno, { text: '⚠️ Состав заказа изменился, пока было открыто окно, — проверьте его и отметьте ещё раз.', cls: 'warn' });
+        return;
+      }
+      if (hold()) return;
+      if (give('all', [], !!force, true) && after) after();
+    };
+    box.appendChild(ft);
+    d.appendChild(box);
+    dlgShow();
+    hold();
   }
   function askUnnet(r) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
@@ -3283,6 +3457,9 @@
     ft.appendChild(skip);
     if (u.n > 1) ft.appendChild(part);
     ft.appendChild(all);
+    // 🔵 «не оплатила на кассе» — и отсюда [Фейбл «кассир» MED-3, круг 1 v6.16]: клиентка оплатила счёт раньше, кассир забыл отметить и
+    // набрал следующий номер. Без ссылки отданное легло бы деньгами кассы (v6.15 сам делил по счёту).
+    var npl = el('button', 'lvnp', 'не оплатила на кассе'); npl.type = 'button';
     // ⛔️ Окно — про ЭТОТ заказ и ЭТОТ состав: пока оно открыто, карточку могли пересобрать (итог записи, свежая выжимка) — тогда окно
     // закрываем, ничего не пишем; кассир нажмёт поиск ещё раз и увидит окно уже по новой карточке.
     var dtok = cardTok(), dsnap = openKeys(m, key);
@@ -3328,7 +3505,15 @@
       closeDlg();
       openPart(true, next);
     };
+    npl.onclick = function () {
+      if (Date.now() - dlgAt < 500) return;              // как кнопки подвала: двойной тап по «Найти» сюда не попадает
+      if (!same() || !toOrder()) { changed(); return; }
+      if (hold()) return;
+      closeDlg();
+      openNoPay(true, next);
+    };
     box.appendChild(ft);
+    box.appendChild(npl);
     d.appendChild(box);
     dlgShow();
     hold();
@@ -3336,16 +3521,18 @@
 
   $('giveAll').onclick = function () { give('all', []); };
   $('givePart').onclick = function () { openPart(); };
+  $('noPay').onclick = function () { openNoPay(); };
   // Щелчок в тёмный фон закрывает окно — но не второй щелчок двойного по кнопке, открывшей его [Фейбл «сценарий», MED-4].
   $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg') && Date.now() - dlgAt > 500) closeDlg(); });
   // ⛔️ Первые 0,5 с кнопки подвала окна глухи [Фейбл, круг 2, HIGH-1]: на телефоне второй тап двойного по «Не забрала
   // всё…» попадал в «✅ Записать: забрала всё» — и отказанные вещи получали zabrala. Ловим до кнопок (фаза перехвата).
   // Галочки не глушим: снятая по ошибке видна сразу («Забрала 4 из 5»), а быстрый кассир не теряет нажатие.
   $('dlg').addEventListener('click', function (e) {
-    if (Date.now() - dlgAt < 500 && e.target.closest && e.target.closest('#dlg .dlgft')) { e.stopPropagation(); e.preventDefault(); }
+    if ((Date.now() - dlgAt < 500 || Date.now() - ftAt < 500) && e.target.closest && e.target.closest('#dlg .dlgft')) { e.stopPropagation(); e.preventDefault(); }
   }, true);
-  // Галочка не забирает фокус при щелчке: иначе Enter/пробел потом «щёлкали» её ещё раз.
-  $('dlg').addEventListener('mousedown', function (e) { var b = e.target.closest ? e.target.closest('.ck') : null; if (b) e.preventDefault(); });
+  // Галочка и переключатель «не оплатила» не забирают фокус при щелчке: иначе Enter/пробел потом «щёлкали» их ещё раз (переключатель
+  // молча выключался — и сумма ложилась «оплачено на кассе») [Фейбл «кассир» LOW-1, круг 2 v6.16].
+  $('dlg').addEventListener('mousedown', function (e) { var b = e.target.closest ? e.target.closest('.ck, .npt') : null; if (b) e.preventDefault(); });
 
   // ── ввод: поле (компьютер), кнопки-цифры и «Аа» (телефон) ─────────────────────────────
   var numEl = $('num'), abcOn = false;
