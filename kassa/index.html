@@ -658,7 +658,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.17 · 14.10.2026';   // v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.18 · 15.10.2026';   // v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -2060,6 +2060,19 @@
     cancSec(o, m.loose.filter(function (r) { return !isW(r); }));
     appendInfo(o);
     renderActs(after ? null : m);
+    // 🎨 [v6.17] Кнопки на компьютере — посередине свободного места. Перерисовка ТОЙ ЖЕ карточки с другой шапкой (полоса «Данные заказа
+    // обновились», «Сверяю…» → «не сверен», отказ своей записи) сдвигает их под курсором — та же пауза 0,7 с [Фейбл, перепроверка v6.17,
+    // MED-1]. Новая карточка (поиск кассира) — без паузы. Точка отсчёта — у карточки (gaTop): её сверяет и сторож роста шапки ниже.
+    CUR.gaTop = gaTopNow();
+    if (keep && prev.gaTop != null && CUR.gaTop != null && Math.abs(CUR.gaTop - prev.gaTop) >= 2 && !dlgOpen()) {
+      CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); renderActs(after ? null : m);
+    }
+  }
+  // Верх «Забрала всё» на компьютере (на телефоне кнопки липнут к низу — не двигаются); нет карточки — null.
+  function gaTopNow() {
+    var a = $('giveAll');
+    if (!a || !DESK.matches || !document.body.classList.contains('card')) return null;
+    return Math.round(a.getBoundingClientRect().top);
   }
 
   // ── 🎨 плашка цвета — словарь и правила «Собрать заказ» (web-app.js, PCOL / pickColorStyle) ─────────
@@ -3748,16 +3761,16 @@
   // 🎨 [v6.17] Кнопки выдачи на компьютере — посередине свободного места: шапка открытой карточки выросла без перерисовки (строка «✓ … —
   // записано в таблицу», полоса отказа, «склад не подтверждает…») или сжалась — кнопки сдвинулись под курсором. На 0,7 с они глохнут, как
   // после освежения карточки: иначе щелчок, нацеленный в «Не забрала всё…», попадал в «Забрала всё» и сразу писал выдачу [Фейбл, внутренний
-  // круг v6.17, MED-1]. Новая карточка (другой CUR) паузы не получает — открыл её сам кассир.
+  // круг v6.17, MED-1]. Сверяем с точкой отсчёта самой карточки (CUR.gaTop пишет showCard): новая карточка паузы не получает — её открыл
+  // кассир. Открыто окно — не глушим: кнопки под затемнением, а синяя «не оплатила» пишет той же give() и молча глохла бы [перепроверка, LOW-2].
   (function () {
     if (typeof ResizeObserver !== 'function') return;
-    var seen = null, top0 = null;
     var watch = function () {
-      var a = $('giveAll');
-      if (!a || !DESK.matches || !CUR || CUR.kind !== 'card' || !CUR.model) { seen = null; return; }
-      var t = Math.round(a.getBoundingClientRect().top);
-      if (seen === CUR && top0 !== null && Math.abs(t - top0) >= 2) { CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); renderActs(CUR.model); }
-      seen = CUR; top0 = t;
+      if (!CUR || CUR.kind !== 'card' || !CUR.model) return;
+      var t = gaTopNow();
+      if (t == null) return;
+      if (CUR.gaTop != null && Math.abs(t - CUR.gaTop) >= 2 && !dlgOpen()) { CUR.shownAt = Date.now(); pauseLater(CUR.shownAt); renderActs(CUR.model); }
+      CUR.gaTop = t;
     };
     var ro = new ResizeObserver(watch);
     ro.observe($('head')); ro.observe($('top'));
