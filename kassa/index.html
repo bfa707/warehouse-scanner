@@ -119,6 +119,9 @@
   /* 🔵 «Забрала всё, но не оплатила» (v6.16) — экран «после выдачи» и итог склада синим: эти деньги не кассы. */
   .sumb.nopay { background: #e8f0fe; border-color: #c6d7fb; }
   .sumb.nopay .l, .sumb.nopay .iv { color: #174ea6; } .sumb.nopay .r { color: var(--blue); }
+  /* 🚫 «Не забрала ничего» (v6.19) — экран «после выдачи» серым: выдачи не было, денег на кассе нет. */
+  .sumb.none { background: var(--soft); border-color: var(--line); }
+  .sumb.none .l, .sumb.none .r { color: var(--mute); }
   .note { background: var(--soft); border-radius: 12px; padding: 8px 12px; color: var(--mute); font-size: 15px; font-weight: 600; margin-top: 10px; }
   .ban { border-radius: 12px; padding: 10px 12px; font-size: 17px; font-weight: 700; margin: 10px 0 0; line-height: 1.35; }
   .ban.bad { background: var(--badbg); color: var(--bad); }
@@ -221,6 +224,10 @@
   .dlgft .btn { height: 62px; padding: 0 22px; font-size: 21px; }
   .dlgft .ok { background: var(--ok); color: #fff; } .dlgft .no { background: #fff; color: var(--mute); border: 3px solid #d6dbe3; }
   .dlgft .okw { background: #b3700f; color: #fff; }
+  /* 🚫 «Записать: не забрала ничего» (v6.19) — не зелёная: выдачи нет; как «Не забрала всё…». Сумма «0,00 €» над ней — серым. */
+  .dlgft .ok0 { background: #fff; color: #b3700f; border: 3px solid var(--warnline); }
+  .dlgft .s b.z { color: var(--mute); }
+  @media (max-width: 899px) { .dlgft .ok0 { font-size: 18px; padding: 0 10px; } }   /* телефон 360–390 px — одной строкой */
   /* Окно «не оплатила на кассе?» (v6.16): синяя кнопка записи, «Назад» рядом (компьютер) или под ней (телефон, окно у верха экрана). */
   .dlgbox.npay { max-width: 700px; }
   .dlgft.npf { justify-content: flex-end; }
@@ -658,7 +665,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.18 · 15.10.2026';   // v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.19 · 19.10.2026';   // v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего» [владелец 19.10.2026]; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
@@ -1913,8 +1920,13 @@
     // [v6.14] Другой заказ клиентки по одним цифрам открывается строкой списка — память та же через список (back).
     var lvFrom = prev || back;
     var lvKeep = !!(lvFrom && lvFrom.lv && (keep || lvFrom.mine));
-    CUR.lv = lvKeep ? lvFrom.lv : { done: {}, at: Date.now(), touched: 0 };   // at, touched — окно «Заказ не отмечен» молчит первые 7 с (v6.10, v6.13)
-    if (lvKeep && lvFrom.flash && lvFrom.flash.done && lvFrom.no) CUR.lv.done[nk(lvFrom.no)] = 1;
+    CUR.lv = lvKeep ? lvFrom.lv : { done: {}, none: {}, at: Date.now(), touched: 0 };   // at, touched — окно «Заказ не отмечен» молчит первые 7 с (v6.10, v6.13)
+    // 🚫 Экран «не забрала ничего» [v6.19] — в none, а не в done: про другой заказ клиентки окно его не вспомнит, а открытый заново, он сам
+    // снова «не отмечен» (передумала, отдал, не нажал «Забрала всё» — окно спросит) [Кодекс HIGH-2, круг 1 v6.19].
+    if (lvKeep && lvFrom.flash && lvFrom.flash.done && lvFrom.no) (lvFrom.flash.done.none ? (CUR.lv.none = CUR.lv.none || {}) : CUR.lv.done)[nk(lvFrom.no)] = 1;
+    // Отказанный заказ открыт заново обычной карточкой (не экраном «не забрала ничего») — отказ снят: он снова «не отмечен», и окно спросит про
+    // него и с соседнего заказа клиентки (вернулся к A, отдал, не нажал, выдал B, ушёл) [Кодекс HIGH, круг 2 v6.19].
+    if (CUR.lv.none && m.no && !(flash && flash.done && flash.done.none)) delete CUR.lv.none[nk(m.no)];
     // Выдача этого заказа ещё в очереди записей — видно и на заново открытой карточке [v6.6].
     var wqj = m.no ? wqOrder(h.t.id, c[0], m.no) : null;
     if (wqj && !(flash && flash.q)) bans.appendChild(el('div', 'chk', '⏳ Выдача этого заказа ' + (wqj.fly ? 'записывается' : wqj.tries ? 'ждёт повтора' : 'ждёт записи') + ' в таблицу…'));
@@ -1963,7 +1975,13 @@
     var after = flash && flash.done ? flash.done : null;
     // Левая половина: сумма, пометки, предупреждения.
     var sb = el('div', 'sumb');
-    if (after) {
+    if (after && after.none) {
+      // 🚫 «Не забрала ничего» [v6.19] — серым: выдачи не было, в таблицу ничего не записано, денег на кассе нет.
+      sb.className = 'sumb none';
+      sb.appendChild(el('div', 'l', 'Не забрала ничего'));
+      sb.appendChild(el('div', 'r', eur(0)));
+      hd.appendChild(sb);
+    } else if (after) {
       // «Забрала всё, но не оплатила» — синим [v6.16]: эти деньги не кассы, они уходят в «Забрано, но не оплачено».
       if (after.unpaid) sb.className = 'sumb nopay';
       sb.appendChild(el('div', 'l', (after.unpaid ? 'Выдано, не оплачено на кассе · ' : 'Выдано · ') + things(after.n)));
@@ -2209,7 +2227,9 @@
     // Набран следующий запрос (или открыты цифры) — кнопки молчат: на экране ещё прежний клиент [владелец 28.09.2026].
     var n = (m && !after && cardInScope() && !draftOn()) ? m.open.length : 0, pause = !!m && (tooFresh() || checkHold() || invHold());
     a.disabled = n < 1 || pause;
-    b.disabled = n < 2 || pause;
+    // «Не забрала всё…» — и у заказа из одной вещи [владелец 19.10.2026: «если клиент заказал одну вещь, пришел, но не забрал ее. Сейчас
+    // невозможно выбрать — забрал не все»; до v6.19 — от двух вещей]: в окне снимают галочку — «не забрала ничего» (giveNone).
+    b.disabled = n < 1 || pause;
     a.textContent = n > 0 ? '✅ Забрала всё' + (n > 1 ? ' (' + n + ')' : '') : '✅ Забрала всё';
     // 🔵 «не оплатила на кассе» [v6.16] — молчит вместе с «Забрала всё»; видна, пока у заказа на экране есть вещи к выдаче (набор следующего
     // номера её не прячет — только гасит, как кнопки).
@@ -2699,7 +2719,10 @@
     // экране «после выдачи» стояла сумма чужого заказа. Иначе — как чужому экрану: отказ полосой с «×».
     // Заказ задания — по ord (закупка|ник|№ на момент нажатия), а не по no ответа: «снять нет» отвечает заказом, куда встала вещь,
     // и итог досылки из рамки 9-731 на карточке 9-730 иначе уходил серой строкой «записано» [Фейбл «деньги», круг 2 v6.6, MED-1].
-    if (n && mine) mine = !!(CUR && CUR.model && ord && ord === ordOf(CUR.sel.tid, CUR.sel.nick, CUR.model.no) && !(CUR.flash && CUR.flash.q && CUR.flash.n && CUR.flash.n !== n));
+    if (n && mine) mine = !!(CUR && CUR.model && ord && ord === ordOf(CUR.sel.tid, CUR.sel.nick, CUR.model.no) && !(CUR.flash && CUR.flash.q && CUR.flash.n && CUR.flash.n !== n)
+      // 🚫 …и не экран «не забрала ничего» [Кодекс HIGH-1, круг 1 v6.19]: поздний ответ «снять нет» (или прошлой выдачи) этого заказа сменял
+      // его своей полосой без done — кнопки выдачи оживали над вещами, от которых клиентка отказалась. Итог — полосой, экран стоит.
+      && !(CUR.flash && CUR.flash.done && CUR.flash.done.none));
     // Удачная фоновая запись, а кассир уже у другого: большой зелёной полосы с суммой прошлого клиента над шапкой следующего не рисуем
     // (её легко принять за деньги текущего) — короткая серая строка без суммы; дальше её не таскаем [Фейбл «деньги», LOW-6].
     // И удачное «снять «нет»» (flash.un, v6.7): кассир уже выдаёт или ищет дальше — «✓ … «нет» снято — записано».
@@ -2821,6 +2844,22 @@
     applyGiven(m, done);     // сразу — как их покажет свежая выжимка (и overlayPack — любую, пришедшую до записи)
     if (CUR.lv) CUR.lv.done[nk(m.no)] = 1;                // заказ отмечен (п.3): окно «Заказ не отмечен» про него больше не спросит
     afterWrite(m.no, { text: WQ_TXT, cls: 'info', done: loc, q: 1, n: params.n });
+    return true;
+  }
+  // 🚫 «НЕ ЗАБРАЛА НИЧЕГО» (v6.19) [владелец 19.10.2026: «если клиент заказал одну вещь, пришел, но не забрал ее. Сейчас невозможно выбрать -
+  // забрал не все»]: в окне «Не забрала всё…» сняты все галочки. Склад не зовём — писать в таблицу нечего: вещи, которые клиентка не забрала,
+  // касса не трогает и при выдаче части («zabrala» — только забранным). Экран — как «после выдачи» (done.none): «Не забрала ничего», вещи серым
+  // «Не забрала — N», кнопки выдачи молчат до нового поиска (передумала — найти заказ ещё раз). Окно «Заказ не отмечен» про этот заказ не
+  // спросит, пока стоит экран и пока кассир у другого заказа клиентки (lv.none); открытый заново — спросит, как любой неотмеченный [Кодекс
+  // HIGH-2, круг 1 v6.19]. В «Забрано сегодня» и «Лог кассы» такой приход не попадает: там только выдачи.
+  // Сторожа — как у give(); true — отмечено (звавший из окна «Заказ не отмечен» ищет набранное дальше).
+  function giveNone(force) {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
+    if (!m || !m.open.length || DENIED || !cardInScope() || (!force && draftOn()) || KST.open) return false;
+    lastActivity = Date.now();
+    closeDlg();
+    if (CUR.lv) (CUR.lv.none = CUR.lv.none || {})[nk(m.no)] = 1;
+    afterWrite(m.no, { text: 'В таблице ничего не меняли — заказ остался к выдаче.', cls: 'info', done: { n: 0, sum: 0, np: 0, none: 1 } });
     return true;
   }
   // ⏳ «СНЯТЬ «НЕТ»» НА ФОНЕ (п.6 v6.7) [владелец 29.09.2026: «снятие net не работает на фоне - кнопки зависли. Что интересно - в таблице
@@ -3269,9 +3308,10 @@
   // Окно «Не забрала всё…» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026]; заголовок —
   // «Снимите галочку с вещей, которые НЕ забрала:» [владелец 29.09.2026, п.5 v6.7; до v6.7 — «Какие вещи забрала?»].
   // force, after — открыто из окна «Заказ не отмечен» (п.3 v6.7): кассир уже набрал следующий номер; записал — after (поиск набранного).
+  // С v6.19 — и у заказа из одной вещи, а сняты все галочки — «Записать: не забрала ничего» (giveNone) [владелец 19.10.2026].
   function openPart(force, after) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || m.open.length < 2 || (!force && tooFresh()) || checkHold() || invHold() || !cardInScope() || (!force && draftOn())) return;
+    if (!m || m.open.length < 1 || (!force && tooFresh()) || checkHold() || invHold() || !cardInScope() || (!force && draftOn())) return;
     if (KST.open) return;           // 📊 за подробностями «Забрано сегодня» окно не открываем [Кодекс HIGH-2, круг 1 v6.15]
     lastActivity = Date.now();
     var rows = m.open.slice(), on = rows.map(function () { return true; });
@@ -3309,10 +3349,17 @@
       // Хвосты «не оплачено» — span'ами: на телефоне их прячет CSS (синяя сумма и включённый переключатель говорят то же), иначе строка суммы
       // выталкивала «Назад» в свой ряд, а текст синей на 320 px резался [Фейбл «кассир» MED-2, круг 2 v6.16]
       s.appendChild(document.createTextNode('Забрала ' + n + ' из ' + rows.length));
-      if (unpaid) s.appendChild(el('span', 'npx', ' · не оплачено на кассе'));
-      s.appendChild(el('b', unpaid ? 'u' : null, eur(sum)));
+      if (unpaid && n) s.appendChild(el('span', 'npx', ' · не оплачено на кассе'));
+      s.appendChild(el('b', !n ? 'z' : unpaid ? 'u' : null, eur(sum)));
       if (np) s.appendChild(document.createTextNode('без цены: ' + np));
-      ok.disabled = n === 0;
+      ok.disabled = false;
+      // 🚫 Сняты все галочки — «не забрала ничего» [v6.19]: склад не зовём (giveNone), «не оплатила» к ней не относится. Кнопка не зелёная —
+      // белая с рыжей рамкой, как «Не забрала всё…»: выдачи нет. До v6.19 кнопка при нуле молчала — заказ из одной вещи отметить было нечем.
+      if (!n) { ok.className = 'btn ok0'; ok.textContent = 'Записать: не забрала ничего'; return; }
+      // 🚫 Одна вещь с галочкой — «забрала всё» из этого окна не пишем [Фейбл «кассир» MED-1, «выдача» LOW-3, круг 1 v6.19]: на телефоне
+      // короткое окно ставит «✅ Записать» ровно туда, где была «Не забрала всё…», и второй тап через 0,5 с выдавал вещь, от которой клиентка
+      // отказалась. Забрала — «✅ Забрала всё» на карточке; здесь — снять галочку.
+      if (rows.length === 1) ok.disabled = true;
       ok.className = 'btn ' + (unpaid ? 'okb' : 'ok');
       ok.textContent = n === rows.length ? '✅ Записать: забрала всё' : '✅ Записать: забрала ' + n;
       if (unpaid) ok.appendChild(el('span', 'npx', ', не оплатила'));
@@ -3354,6 +3401,7 @@
         return;
       }
       var take = []; on.forEach(function (v, i) { if (v) take.push(i); });
+      if (!take.length) { if (giveNone(force) && after) after(); return; }   // 🚫 «не забрала ничего» [v6.19]
       if (take.length && give('part', take, force, unpaid) && after) after();
     };
     // Переключатель — своей строкой над суммой и кнопками [Фейбл «кассир» MED-2, круг 2 v6.16]: между суммой и «Назад» он разбивал ряд, и на
@@ -3457,7 +3505,7 @@
     var fr = m.frames || [];
     for (var i = 0; i < fr.length; i++) {
       var f = fr[i];
-      if (f.key === m.sel || !f.open.length || lv.done[f.key]) continue;
+      if (f.key === m.sel || !f.open.length || lv.done[f.key] || (lv.none && lv.none[f.key])) continue;   // none — «не забрала ничего» [v6.19]
       var sm = 0;
       f.open.forEach(function (r) { var cc = cents(r.price); if (cc !== null) sm += cc; });
       return { m: m, no: f.no, n: f.open.length, sum: sm };
@@ -3497,7 +3545,8 @@
     var all = el('button', 'btn ok lvall', 'Выдали, забрала всё');
     skip.type = part.type = all.type = 'button';
     ft.appendChild(skip);
-    if (u.n > 1) ft.appendChild(part);
+    // «Выдали, но забрала не всё» — и у заказа из одной вещи [владелец 19.10.2026, v6.19; до v6.19 — от двух вещей]: та же кнопка, что на карточке.
+    ft.appendChild(part);
     ft.appendChild(all);
     // 🔵 «не оплатила на кассе» — и отсюда [Фейбл «кассир» MED-3, круг 1 v6.16]: клиентка оплатила счёт раньше, кассир забыл отметить и
     // набрал следующий номер. Без ссылки отданное легло бы деньгами кассы (v6.15 сам делил по счёту).
