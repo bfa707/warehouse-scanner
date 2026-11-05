@@ -170,6 +170,8 @@
   .chip { font-size: 13px; font-weight: 700; border-radius: 8px; padding: 2px 8px; background: var(--soft); color: var(--ink); }
   .chip.ok { background: var(--okbg); color: var(--ok); } .chip.warn { background: var(--warnbg); color: var(--warn); }
   .chip.bad { background: var(--badbg); color: var(--bad); }
+  /* 📦 «упаковано» на вещи — зелёным [владелец 05.11.2026: «Табличку упаковано — сделай зеленым цветом (а не красным)»]; .chip.ok в «Упаковке» коричневый */
+  .chip.done { background: var(--okbg); color: var(--ok); }
   .un { margin-top: 6px; border: 0; border-radius: 10px; background: #b3700f; color: #fff; font-weight: 800; padding: 8px 10px;
         font-size: 15px; cursor: pointer; align-self: flex-start; }
   .un:disabled { opacity: .45; cursor: default; }
@@ -291,6 +293,9 @@
     /* 🔵 [v6.16] Было «padding-bottom: 70px». В этом месте — ссылка «не оплатила на кассе» (44 px + промежуток 8): кнопки выдачи — на прежней высоте над местом ряда
        «⌫ 0 Найти», под ссылкой пусто, как было. Тап вслепую по «0» откроет только окно (у верха экрана, подвал глух 0,5 с) — ничего не пишет. */
     body.card #acts { padding-bottom: 18px; }
+    /* 📦 [v6.23] У упаковщика ссылки «не оплатила» нет, а полоса под кнопками стала кнопкой подробностей: 18 px до «✓ Упаковано» мало —
+       промах вверх по полосе писал бы упаковку [Фейбл «сценарий» v6.23, LOW-4]. На месте ссылки — пусто, кнопки — на высоте кассы. */
+    body.upak.card #acts { padding-bottom: 70px; }
     /* Тап по полю на карточке — цифры внизу, карточка остаётся на экране [владелец 28.09.2026: «ставлю курсор в окно поиска,
        меня просто выкидывает на главную страницу! почему нельзя оставаться там же»]. Кнопки выдачи спрятаны, пока цифры
        открыты: набирается следующий номер, а на экране ещё прежний клиент. */
@@ -684,10 +689,22 @@
         padding: 0 16px env(safe-area-inset-bottom); background: var(--ink); color: #fff; align-items: center; gap: 10px; }
   #ud .l { font-size: 13px; font-weight: 800; color: #c9ced6; white-space: nowrap; }
   #ud .n { font-size: 19px; font-weight: 900; color: #e8cfa8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  body.upak #ud { display: flex; }
+  /* 📊 Полоса — кнопка подробностей [владелец 05.11.2026: «статистику упаковок подобно Кассе (при клике на черную полосу)»] */
+  #ud { margin: 0; border: 0; border-radius: 0; font: inherit; text-align: left; cursor: pointer;
+        grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l i" "n i"; align-content: center; column-gap: 10px; }
+  /* Подпись — мелко над цифрами, стрелка справа на всю высоту: одной строкой со стрелкой «7 заказов · 26 вещей» резалось до «26 ве…»
+     (телефон 390 px, левая половина компьютера) [Фейбл «сценарий» v6.23, MED-1] */
+  #ud .l { grid-area: l; font-size: 12px; line-height: 1.2; }
+  #ud .n { grid-area: n; line-height: 1.2; }
+  #ud svg { grid-area: i; width: 22px; height: 22px; color: #c9ced6; }
+  .kt .kb .uw { display: inline-block; max-width: 38vw; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+               font-size: 15px; font-weight: 900; color: var(--ubrtx); white-space: nowrap; }
+  .kft .r3 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+  .kft .r3 .s { font-size: 16px; color: #e8cfa8; }
+  body.upak #ud { display: grid; }
   @media (min-width: 900px) {
     #ud { position: static; grid-column: 1; grid-row: 4; height: var(--kd); padding: 0 22px; }
-    #ud .l { font-size: 15px; } #ud .n { font-size: 22px; }
+    #ud .l { font-size: 13px; } #ud .n { font-size: 22px; }
     body.upak .it.ut .ph { aspect-ratio: auto; height: 240px; max-height: none; }
     body.upak .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     body.upak .it.ut .nm { font-size: 19px; }
@@ -718,7 +735,7 @@
   <button type="button" class="del" data-d="del">⌫</button><button type="button" data-d="0">0</button><button type="button" class="go" data-d="go">Найти</button>
 </div>
 <button id="kd" type="button" aria-haspopup="dialog" aria-controls="kst" aria-label="Забрано сегодня — подробности"><span class="l">Забрано сегодня</span><span class="n" id="kdn">…</span><span class="t" id="kdt"></span><span class="g"></span><span class="c" id="kdc"></span><span class="s" id="kds"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
-<div id="ud" role="status"><span class="l">Упаковано сегодня</span><span class="n" id="udn">…</span></div>
+<button id="ud" type="button" aria-haspopup="dialog" aria-controls="kst" aria-label="Упаковано сегодня — подробности"><span class="l">Упаковано сегодня</span><span class="n" id="udn">…</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
 <div id="kbg"></div>
 <section id="kst" role="dialog" aria-modal="true" aria-label="Забранные заказы"></section>
 <div id="krc"></div>
@@ -729,7 +746,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.22 · 05.11.2026';   // v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.23 · 05.11.2026';   // v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var ANON = !/iPhone|iPad|iPod|Android/i.test(String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));   // 👥 компьютер — запросы без cookie Google [v6.22]
@@ -2321,7 +2338,8 @@
     if (String(it[2] || '').trim()) { var vs = el('div', 'vr', 'размер: '); vs.appendChild(el('b', null, String(it[2]).replace(/\s*\n\s*/g, ' / '))); tx.appendChild(vs); }
     var chips = el('div', 'chips');
     var ct = r.lockedWait ? CODE_TXT.w : CODE_TXT[r.code];
-    if (r.given) chips.appendChild(el('span', 'chip bad', /unisend/i.test(r.mark) ? 'упаковано' : 'выдано'));
+    var upd = /unisend/i.test(r.mark);   // «упаковано» — зелёным, «выдано» (касса отдала) — красным [владелец 05.11.2026]
+    if (r.given) chips.appendChild(el('span', upd ? 'chip done' : 'chip bad', upd ? 'упаковано' : 'выдано'));
     else if (ct) chips.appendChild(el('span', 'chip ' + ct[1], ct[0]));
     if (r.mark && !invOf(r.mark) && !(r.given && GIVEN_RE.test(r.mark) && r.mark.length < 12)) chips.appendChild(el('span', 'chip' + (GIVEN_RE.test(r.mark) ? ' bad' : ''), r.mark));
     if (r.alt) chips.appendChild(el('span', 'chip warn', ALT_TXT));
@@ -2546,7 +2564,7 @@
       return;
     }
     // 📊 Выдача легла (вся или часть) — «Забрано сегодня» спросит склад заново: строка журнала уже есть [v6.15].
-    if (j.action === 'kassa_give' && (r.ok || Number(r.wrote) > 0)) { if (j.upak) udSoon(); else kstSoon(); }   // 📦 «Упаковано сегодня»
+    if (j.action === 'kassa_give' && (r.ok || Number(r.wrote) > 0)) { if (j.upak) { udSoon(); if (KST.open && UPAK) kstSoon(); else Object.keys(KST.lists).forEach(function (k) { KST.lists[k].got = 0; }); } else kstSoon(); }   // 📦 закрытая шторка — списки дней перечитать при открытии [Кодекс LOW-3]   // 📦 «Упаковано сегодня»
     var pre = j.tries > 1 ? 'Проверка: ' : '';
     if (j.action === 'kassa_give' && r.ok) {
       WQ_DONE = WQ_DONE.filter(function (d) { return Date.now() - d.at < WQ_DONE_FOR; });
@@ -3168,7 +3186,11 @@
   }
   // Вопрос складу: day — список этого дня (из трёх), '' — только итоги трёх дней. Ответы, пришедшие не по порядку, итогов не откатывают.
   async function kstFetch(day, attempt) {
-    if (DENIED || UPAK) return;                  // 📦 у упаковки денег нет — «Забрано сегодня» не спрашиваем
+    // 📦 «Упаковка» [v6.23]: подробности — дверь kassa_upak_stat (что и кто упаковал по дням), полосу освежает udFetch; «Забрано сегодня»
+    // (деньги кассы) упаковщик не спрашивает вовсе.
+    if (DENIED) return;
+    var up = UPAK;
+    if (up && !KST.open && !day) return;
     var seq = ++KST.seq;
     KST.busy++; KST.tried = Date.now();
     renderKd(); if (KST.open) renderKst();
@@ -3176,9 +3198,13 @@
     // Компьютер — неделя (nd=7) [владелец 14.10.2026: «На компе показывай в статистике инфу забранного за последнюю неделю»], телефон — три дня.
     var q = day ? { day: day } : {};
     if (DESK.matches) q.nd = 7;
-    try { r = await jsonp('kassa_stat', q, WAIT_STAT); } catch (e) { r = null; }
+    else if (up) q.nd = 3;   // 📦 телефон — три дня: без nd склад упаковки отвечает только полосой [Кодекс круг 1 v6.23, MED-1]
+    try { r = await jsonp(up ? 'kassa_upak_stat' : 'kassa_stat', q, WAIT_STAT); } catch (e) { r = null; }
     KST.busy--;
-    if (DENIED || UPAK) return;                  // 📦 пока шёл вопрос, склад назвал ключ упаковщика — деньги кассы не берём
+    if (DENIED || UPAK !== up) {                 // 📦 пока шёл вопрос, склад сменил режим ключа — ответ другого режима не берём (деньги кассы — не упаковщику)
+      if (!DENIED && KST.open && !KST.busy) { renderKst(); kstFetch(KST.sel); }   // шторку уже открыли — свой вопрос сразу [Фейбл v6.23, LOW-1]
+      return;
+    }
     if (r && r.net && !attempt) { await sleep(2000); if (!DENIED) return kstFetch(day, 1); return; }   // «404» Google — ещё раз
     if (!r || !r.ok) {
       // no_key этой двери кассу не запирает (jsonp): так отвечает и склад без двери «Забрано сегодня» — страница выложена раньше склада,
@@ -3197,6 +3223,8 @@
       renderKd(); if (KST.open) renderKst();
       return;
     }
+    // Склад до v6.23 (откат): дверь упаковки отвечает только полосой, без дней — подробностей нет, а не вечное «Загружаю…».
+    if (up && !Array.isArray(r.days)) { if (seq > KST.applied) KST.err = 'old'; renderKd(); if (KST.open) renderKst(); return; }
     KST.err = '';
     if (seq > KST.applied && Array.isArray(r.days) && r.days.length) {
       KST.applied = seq; KST.days = r.days; KST.today = String(r.today || r.days[0][0]); KST.got = Date.now();
@@ -3222,11 +3250,12 @@
   function kstStale(k) {
     var L = KST.lists[k], i = kdIdx(k), d = i >= 0 ? KST.days[i] : null, s = 0;
     if (!L || !d) return true;
+    if (UPAK) { L.rows.forEach(function (r) { s += Number(r && r[5]) || 0; }); return L.rows.length !== (Number(d[3]) || 0) || s !== (Number(d[2]) || 0); }   // 📦 строки журнала и вещи дня
     L.rows.forEach(function (r) { s += Number(r && r[7]) || 0; });
     return L.rows.length !== (Number(d[1]) || 0) || s !== (Number(d[3]) || 0);
   }
   function kstDue() {
-    if (KST.busy || DENIED || UPAK) return false;
+    if (KST.busy || DENIED || (UPAK && !KST.open)) return false;   // 📦 полоса упаковщика — udDue/udFetch
     var every = Date.now() - lastActivity < ACTIVE_FOR ? (KST.open ? STAT_OPEN : STAT_ACTIVE) : STAT_IDLE;
     return Date.now() - KST.tried > (KST.got ? every : 60000);
   }
@@ -3242,12 +3271,16 @@
   // Подробности открыты — касса за ними глуха и для клавиатуры: Tab/Shift+Tab не доходит до «Забрала всё» карточки позади, Enter не пишет
   // выдачу невидимого заказа [Кодекс HIGH-2, Фейбл «кассир» LOW-6, круг 1 v6.15]. Браузер без inert — держит проверка KST.open в give()/openPart().
   function kstInert(on) {
-    ['top', 'main', 'acts', 'pad', 'kd'].forEach(function (id) { var e = $(id); if (!e) return; if (on) e.setAttribute('inert', ''); else e.removeAttribute('inert'); });
+    ['top', 'main', 'acts', 'pad', 'kd', 'ud'].forEach(function (id) { var e = $(id); if (!e) return; if (on) e.setAttribute('inert', ''); else e.removeAttribute('inert'); });
   }
   function kstOpen() {
     if (DENIED || KST.open) return;
     lastActivity = Date.now();
-    KST.open = true; KST.rc = null; KST.sel = KST.today || ''; KST.toEnd = 1;   // «Сегодня» — к последним выдачам (снизу) [Фейбл «кассир» LOW-4]
+    // 📦 Пока шторка закрыта, подробности упаковщика не освежаются (полосу ведёт udFetch): сменились сутки или прошло больше 10 мин — прежние дни
+    // вон, иначе шторка открылась бы на дне прошлого открытия («Вчера») [Фейбл «корректность» v6.23, MED-1].
+    if (UPAK && (Date.now() - KST.got > STAT_IDLE || (UD.d && UD.d.today && UD.d.today !== KST.today))) { KST.days = null; KST.lists = {}; KST.today = ''; }
+    $('kst').setAttribute('aria-label', UPAK ? 'Упакованные заказы' : 'Забранные заказы');
+    KST.open = true; KST.rc = null; KST.sel = KST.today || (UPAK && UD.d && UD.d.today) || ''; KST.toEnd = 1;   // «Сегодня» — к последним выдачам (снизу) [Фейбл «кассир» LOW-4]
     kstInert(true);
     $('kbg').className = 'on'; $('kst').className = 'on';
     renderKst();
@@ -3304,7 +3337,7 @@
     box.textContent = '';
     box.setAttribute('data-sel', KST.sel || '');
     var hd = el('div', 'ksh');
-    hd.appendChild(el('h2', null, 'Забранные заказы'));
+    hd.appendChild(el('h2', null, UPAK ? 'Упакованные заказы' : 'Забранные заказы'));
     if (KST.days) {
       var dy = el('div', 'kdy');
       dy.setAttribute('role', 'group'); dy.setAttribute('aria-label', 'День');
@@ -3312,7 +3345,7 @@
         var on = d[0] === KST.sel, b = el('button', 'kdc' + (on ? ' on' : ''), kdName(d[0]));
         b.type = 'button'; b.setAttribute('data-f', 'b' + d[0]);
         b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        b.setAttribute('aria-label', kdName(d[0]) + ' (' + kdDD(d[0]) + '): ' + kdOrders(d[1]) + ', оплачено на кассе ' + eur(Number(d[5]) || 0));
+        b.setAttribute('aria-label', kdName(d[0]) + ' (' + kdDD(d[0]) + '): ' + kdOrders(d[1]) + (UPAK ? ', ' + things(Number(d[2]) || 0) : ', оплачено на кассе ' + eur(Number(d[5]) || 0)));
         b.onclick = function () { kstPick(d[0]); };
         dy.appendChild(b);
       });
@@ -3337,7 +3370,7 @@
       w.appendChild(rb);
     };
     if (!KST.days) {
-      var w0 = el('div', 'kemp' + (KST.busy ? ' blink' : ''), KST.busy || !KST.err ? 'Загружаю…' : 'Склад не ответил.');
+      var w0 = el('div', 'kemp' + (KST.busy ? ' blink' : ''), KST.busy || !KST.err ? 'Загружаю…' : KST.err === 'old' ? 'Подробности упаковки появятся после обновления склада.' : 'Склад не ответил.');
       if (!KST.busy && KST.err) retry(w0, '');
       var l0 = el('div', 'klst'); l0.appendChild(w0); box.appendChild(l0);
       return;
@@ -3351,14 +3384,14 @@
     // От ранних к поздним, номер — порядок на экране (1 — самая ранняя выдача дня).
     var tiles = function () {
       L.rows.filter(function (r) { return Array.isArray(r); }).sort(function (a, b) { return (Number(a[0]) || 0) - (Number(b[0]) || 0); })
-        .forEach(function (r, i) { lst.appendChild(kstTile(r, i + 1)); });
+        .forEach(function (r, i) { lst.appendChild(UPAK ? upTile(r, i + 1) : kstTile(r, i + 1)); });
     };
     // ⭐ Список отстаёт от итога дня (полоса уже видит новую выдачу, а список спрошен раньше) — его не показываем, пока не придёт свежий:
     // кассир не нашёл бы в нём последнего заказа [владелец 14.10.2026: «иногда она обновляется и не видно последнего забранного товара, хотя
     // внизу на черной полосе уже сумма отмечена… Там надо тогда выводить лоудинг и надпись "обновляю данные", чтобы было понятно, что надо
     // подождать»]. Склад не ответил — прежний список под полосой «не обновился» с «Загрузить ещё раз».
     if (L && !stale) {
-      if (!L.rows.length) lst.appendChild(el('div', 'kemp', 'В этот день выдач не было.'));
+      if (!L.rows.length) lst.appendChild(el('div', 'kemp', UPAK ? 'В этот день упаковок не было.' : 'В этот день выдач не было.'));
       else tiles();
     } else if (KST.busy || (!L && !KST.err)) {
       var ld = el('div', 'kld');
@@ -3384,8 +3417,15 @@
       a.appendChild(el('b', null, 'Итого за ' + kdShort(KST.sel)));
       a.appendChild(el('span', null, kdOrders(dd[1]) + ' · ' + things(Number(dd[2]) || 0)));
       ft.appendChild(a);
-      ft.appendChild(kstSumRow('r1', 'Забрано и оплачено', dd[6], dd[5]));
-      ft.appendChild(kstSumRow('r2', 'Забрано, но не оплачено', dd[7], dd[4]));
+      // 📦 У упаковки денег нет — итог дня по упаковщикам: кто сколько заказов и вещей [владелец 05.11.2026: «кто(!) упаковывал»].
+      if (UPAK) {
+        if (L && !stale) upWho(L.rows).forEach(function (w) {
+          var r3 = el('div', 'r3'); r3.appendChild(el('span', 'l', w.n)); r3.appendChild(el('span', 's', kdOrders(w.o) + ' · ' + things(w.i))); ft.appendChild(r3);
+        });
+      } else {
+        ft.appendChild(kstSumRow('r1', 'Забрано и оплачено', dd[6], dd[5]));
+        ft.appendChild(kstSumRow('r2', 'Забрано, но не оплачено', dd[7], dd[4]));
+      }
       box.appendChild(ft);
     }
     // Карточки — от ранних к поздним [владелец], а открыли «Сегодня» — видны последние (внизу): ради них полосу и открывают. Когда список дня
@@ -3435,6 +3475,7 @@
   function renderRc() {
     var w = $('krc');
     if (!KST.open || !KST.rc) { w.className = ''; w.textContent = ''; return; }
+    if (UPAK) { upRc(w, KST.rc); return; }   // 📦 упаковка — без денег
     var r = KST.rc, what = String(r[4] || ''), part = /^часть/.test(what), it = (r[12] && typeof r[12] === 'object') ? r[12] : null;
     w.textContent = '';
     var box = el('div', 'rcb');
@@ -3475,6 +3516,67 @@
     w.className = 'on';
     try { x.focus(); } catch (e) {}
   }
+  // 📦 ПОДРОБНОСТИ УПАКОВКИ [v6.23, владелец 05.11.2026: «статистику упаковок подобно Кассе (при клике на черную полосу), чтобы можно
+  // было посмотреть, что именно и кто(!) упаковывал сегодня, вчера и т.д»] — та же шторка, что «Забранные заказы»; строка склада:
+  // [мс, №, ник, закупка, что, упаковано, в заказе, кто, вещи]. Данные клиентов — только текстом (textContent), в памяти вкладки.
+  function upWhoName(s) { return String(s == null ? '' : s).replace(/💻|📦|📱/g, '').replace(/\s+/g, ' ').trim() || '—'; }
+  // Кто сколько за день: разные заказы (закупка, ник, №) и вещи — по списку дня; больше заказов — выше.
+  function upWho(rows) {
+    var by = Object.create(null), out = [];   // имя ключа «constructor» не ломает итог [Кодекс LOW-4]
+    rows.forEach(function (r) {
+      if (!Array.isArray(r)) return;
+      var k = upWhoName(r[7]), w = by[k] || (by[k] = { n: k, o: 0, i: 0, seen: {} });
+      var ok = String(r[3] || '') + '\u0001' + String(r[2] || '') + '\u0001' + String(r[1] || '').toUpperCase().replace(/\s+/g, '');
+      if (!w.seen[ok]) { w.seen[ok] = 1; w.o++; }
+      w.i += Number(r[5]) || 0;
+    });
+    Object.keys(by).forEach(function (k) { out.push(by[k]); });
+    return out.sort(function (a, b) { return b.o - a.o || b.i - a.i; });
+  }
+  function upTile(r, no) {
+    var what = String(r[4] || ''), part = /^часть/.test(what);
+    var t = el('button', 'kt'); t.type = 'button'; t.setAttribute('data-f', 't' + Number(r[0]) + '_' + String(r[1] || ''));
+    t.appendChild(el('span', 'kn', String(no || '')));
+    var a = el('span', 'ka'), k1 = el('span', 'k1'), k2 = el('span', 'k2');
+    k1.appendChild(el('span', 'no', String(r[1] || '—'))); k1.appendChild(el('span', 'nk', String(r[2] || '')));
+    k2.appendChild(el('span', null, kdHm(r[0])));
+    k2.appendChild(part ? el('span', 'pt', 'часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0)) : el('span', null, things(Number(r[5]) || 0)));
+    if (/ПРОВЕРЬТЕ/.test(what)) k2.appendChild(el('span', 'kw', '⚠️ проверить'));
+    a.appendChild(k1); a.appendChild(k2); t.appendChild(a);
+    var b = el('span', 'kb'); b.appendChild(el('span', 'uw', upWhoName(r[7]))); t.appendChild(b);
+    t.onclick = function () { lastActivity = Date.now(); KST.rc = r; renderRc(); };
+    return t;
+  }
+  // Состав упаковки — строкой журнала «101 Джемпер melns M; 102 Платье zils S» (kassaUpakItems_ на складе).
+  function upRc(w, r) {
+    var what = String(r[4] || ''), part = /^часть/.test(what);
+    w.textContent = '';
+    var box = el('div', 'rcb');
+    box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Заказ ' + String(r[1] || ''));
+    var h = el('div', 'rch');
+    h.appendChild(el('div', 'k', 'ЗАКАЗ'));
+    h.appendChild(el('div', 'no', String(r[1] || '—')));
+    h.appendChild(el('div', 'nk', String(r[2] || '')));
+    h.appendChild(el('div', 'mt', [String(r[3] || ''), 'упакован ' + kdDD(KST.sel) + ' в ' + kdHm(r[0])].filter(Boolean).join(' · ')));
+    h.appendChild(el('div', 'mt', 'Упаковал(а): ' + upWhoName(r[7])));
+    h.appendChild(el('span', 'stt' + (part ? ' p' : ''), part ? 'Упаковано часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0) : 'Упаковано всё'));
+    if (/ПРОВЕРЬТЕ/.test(what)) h.appendChild(el('div', 'wr', '⚠️ Пока шла запись, лист сдвинулся — строки этого заказа надо проверить в таблице.'));
+    box.appendChild(h);
+    var l = el('div', 'rcl'), its = String(r[8] || '').split(/;\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (its.length) its.forEach(function (x) { var d = el('div', 'rci'); d.appendChild(el('span', 'a', x)); l.appendChild(d); });
+    else l.appendChild(el('div', 'rcn', 'Состав этой упаковки не записан.'));
+    box.appendChild(l);
+    var f = el('div', 'rcf'), tt = el('div', 't');
+    tt.appendChild(el('span', null, 'Итого · ' + things(Number(r[5]) || 0)));
+    f.appendChild(tt);
+    var x = el('button', 'x', 'Закрыть'); x.type = 'button';
+    x.onclick = function () { KST.rc = null; renderRc(); };
+    f.appendChild(x);
+    box.appendChild(f);
+    w.appendChild(box);
+    w.className = 'on';
+    try { x.focus(); } catch (e) {}
+  }
   // Строка чека: [№ позиции, название, цвет, размер, центы | null, счёт?]; не забрала — серым, цена зачёркнута.
   function rcLine(x, off) {
     var d = el('div', 'rci' + (off ? ' off' : ''));
@@ -3487,6 +3589,7 @@
     return d;
   }
   $('kd').onclick = function () { kstOpen(); };
+  $('ud').onclick = function () { kstOpen(); };   // 📦 подробности упаковки [v6.23]
   $('kbg').onclick = function () { kstClose(); };
   $('krc').addEventListener('click', function (e) { if (e.target === $('krc')) { KST.rc = null; renderRc(); } });
 
@@ -3839,7 +3942,8 @@
     upakApply();
     if (CUR && CUR.kind === 'card' && CUR.h) showCard(CUR.h, CUR.q, CUR.banner || null, CUR.fromList, CUR.no, CUR.flash, CUR.who);
     else if (!CUR) showHome();
-    if (on) { kstReset(); udFetch(); } else kstFetch('');   // 📦 «Забрано сегодня» первого запуска (ники, суммы) — вон из памяти вкладки
+    kstReset();                                   // подробности другого режима (ники, суммы / упаковки) — вон из памяти вкладки
+    if (on) udFetch(); else kstFetch('');   // 📦 «Забрано сегодня» первого запуска (ники, суммы) — вон из памяти вкладки
   }
   function upakApply() {
     document.body.classList.toggle('upak', UPAK);
@@ -4010,6 +4114,8 @@
     var n = $('udn');
     if (!n) return;
     n.textContent = UD.d ? kdOrders(Number(UD.d.orders) || 0) + ' · ' + things(Number(UD.d.items) || 0) : (UD.err && !UD.busy ? '—' : '…');
+    var b = $('ud');
+    if (b) b.setAttribute('aria-label', 'Упаковано сегодня: ' + (UD.d ? kdOrders(Number(UD.d.orders) || 0) + ', ' + things(Number(UD.d.items) || 0) : 'загружается') + '. Подробности');
   }
   function udDue() {
     if (!UPAK || UD.busy || DENIED) return false;
