@@ -30,6 +30,8 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://script.google.com">
+<!-- 👥 Компьютер (v6.22) ходит к складу без cookie — соединение без cookie браузер держит отдельно, греем и его [Фейбл «транспорт», LOW-1] -->
+<link rel="preconnect" href="https://script.google.com" crossorigin>
 
 <style>
   :root { --ink: #18202c; --mute: #6b7280; --line: #e3e7ee; --bg: #f4f6f9; --card: #ffffff; --soft: #f3f4f6;
@@ -727,9 +729,10 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.21 · 04.11.2026';   // v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.22 · 05.11.2026';   // v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
+  var ANON = !/iPhone|iPad|iPod|Android/i.test(String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));   // 👥 компьютер — запросы без cookie Google [v6.22]
   var MAXLEN = 40;                // поле: номер (до 6 цифр, «9-1770») или ник
   var PADLEN = 6;                 // кнопками-цифрами: номер — до 4 цифр, с серией — 5; шестая — запас
   // ⭐ ОСВЕЖЕНИЕ ПО ХОДУ РАБОТЫ [Кодекс, круг 1, HIGH-4]: касса, открытая с утра, иначе весь день искала
@@ -962,6 +965,11 @@
         // Скрипт загрузился, а ответа в нём нет (Google отдал страницу вместо JSONP: старый адрес, сбой) — это тоже «не
         // доставлено», и ждать 150 с незачем [Фейбл «сценарий», HIGH-3]. JSONP зовёт callback ДО onload.
         s.onload = function () { setTimeout(function () { end({ ok: false, net: 1 }, true); }, 0); };
+        // 👥 НА КОМПЬЮТЕРЕ — БЕЗ COOKIE GOOGLE [v6.22, живой случай владельца 05.11.2026: в Chrome вошли в несколько Google-аккаунтов — Google уводил запрос
+        // на /macros/u/1/ и отдавал «Sorry, unable to open the file», склад запроса не видел, касса «грузилась» вечно]. crossOrigin anonymous — запрос без
+        // cookie, как у браузера без входа в Google: склад пускает по ключу, cookie ему не нужны; оба ответа Google (302 и echo) отдают
+        // Access-Control-Allow-Origin: * (проверено 05.11.2026). Телефоны — как было.
+        if (ANON) s.crossOrigin = 'anonymous';
         s.src = jsonpUrl(action, prm, cb);
         document.head.appendChild(s);
       }
