@@ -691,7 +691,8 @@
   #ud .n { font-size: 19px; font-weight: 900; color: #e8cfa8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   /* 📊 Полоса — кнопка подробностей [владелец 05.11.2026: «статистику упаковок подобно Кассе (при клике на черную полосу)»] */
   #ud { margin: 0; border: 0; border-radius: 0; font: inherit; text-align: left; cursor: pointer;
-        grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l i" "n i"; align-content: center; column-gap: 10px; }
+        grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l i" "n i"; align-content: center; column-gap: 10px;
+        row-gap: 0; }   /* gap 10px прежней flex-вёрстки в сетке — ещё и между строками: в полосе 48 px (1366×768) срезал низ цифр [Фейбл круг 2, LOW-3] */
   /* Подпись — мелко над цифрами, стрелка справа на всю высоту: одной строкой со стрелкой «7 заказов · 26 вещей» резалось до «26 ве…»
      (телефон 390 px, левая половина компьютера) [Фейбл «сценарий» v6.23, MED-1] */
   #ud .l { grid-area: l; font-size: 12px; line-height: 1.2; }
@@ -746,7 +747,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.23 · 05.11.2026';   // v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.24 · 05.11.2026';   // v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var ANON = !/iPhone|iPad|iPod|Android/i.test(String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));   // 👥 компьютер — запросы без cookie Google [v6.22]
@@ -3250,6 +3251,7 @@
   function kstStale(k) {
     var L = KST.lists[k], i = kdIdx(k), d = i >= 0 ? KST.days[i] : null, s = 0;
     if (!L || !d) return true;
+    if (UPAK && !L.got) return true;   // 📦 своя упаковка при закрытой шторке (got = 0) — «Обновляю данные…», а не прежний список как текущий [Фейбл круг 2, LOW-2]
     if (UPAK) { L.rows.forEach(function (r) { s += Number(r && r[5]) || 0; }); return L.rows.length !== (Number(d[3]) || 0) || s !== (Number(d[2]) || 0); }   // 📦 строки журнала и вещи дня
     L.rows.forEach(function (r) { s += Number(r && r[7]) || 0; });
     return L.rows.length !== (Number(d[1]) || 0) || s !== (Number(d[3]) || 0);
@@ -3280,7 +3282,7 @@
     // вон, иначе шторка открылась бы на дне прошлого открытия («Вчера») [Фейбл «корректность» v6.23, MED-1].
     if (UPAK && (Date.now() - KST.got > STAT_IDLE || (UD.d && UD.d.today && UD.d.today !== KST.today))) { KST.days = null; KST.lists = {}; KST.today = ''; }
     $('kst').setAttribute('aria-label', UPAK ? 'Упакованные заказы' : 'Забранные заказы');
-    KST.open = true; KST.rc = null; KST.sel = KST.today || (UPAK && UD.d && UD.d.today) || ''; KST.toEnd = 1;   // «Сегодня» — к последним выдачам (снизу) [Фейбл «кассир» LOW-4]
+    KST.open = true; KST.rc = null; KST.sel = KST.today || (UPAK && UD.d && UD.d.today && Date.now() - UD.got < 60000 ? UD.d.today : '');   // полоса старше минуты (утро после сна) — день не её, а склада [Фейбл круг 2, LOW-1] KST.toEnd = 1;   // «Сегодня» — к последним выдачам (снизу) [Фейбл «кассир» LOW-4]
     kstInert(true);
     $('kbg').className = 'on'; $('kst').className = 'on';
     renderKst();
