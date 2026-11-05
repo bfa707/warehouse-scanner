@@ -590,6 +590,14 @@
   .rci.off .a, .rci.off .p { color: var(--mute); }
   .rci.off .p { text-decoration: line-through; }
   .rcn { padding: 14px 0; color: var(--mute); font-size: 15px; font-weight: 600; line-height: 1.4; }
+  /* 📦 [v6.25, «Упаковка» v2 п.2] чек упаковки: мини-фото у вещи, ниже — что в заказе ещё не упаковано (серым) */
+  .rci.rcu { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+  .rcu .rph { width: 40px; height: 50px; border-radius: 6px; background: var(--soft) center/cover no-repeat; }
+  .rcu .nu { font-size: 12px; font-weight: 800; color: var(--mute); background: var(--soft); border-radius: 6px; padding: 3px 7px; white-space: nowrap; }
+  .rcu.off .rph { filter: grayscale(1); opacity: .6; }
+  .rcs { padding: 12px 0 2px; font-size: 13px; font-weight: 800; color: var(--mute); }
+  .rcs.ok { color: var(--ok); }
+  @media (min-width: 900px) { .rcu .rph { width: 48px; height: 60px; } .rcs { font-size: 14px; } }
   .rcf { flex: none; padding: 12px 18px 14px; border-top: 2px dashed #d5d9e0; }
   .rcf .t { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   .rcf .t span { font-size: 17px; font-weight: 800; }
@@ -650,7 +658,10 @@
                      color: var(--ubrtx); border: 1px solid var(--ubrline); font-size: 15px; font-weight: 800; white-space: nowrap; }
   body.upak #kd, body.upak #noPay { display: none; }
   body.upak #giveAll { background: var(--ubr); }
-  body.upak #givePart { color: var(--ink); border-color: #d6dbe3; }
+  /* 📦 v6.25 [«Упаковка» v2 п.3, владелец 05.11.2026: «Кнопку Упаковано не все можно не отображать»] — одна «✓ Упаковано» во всю ширину:
+     в посылку уходят только отмеченные вещи, и всегда через окно «Упаковано K из N» (openUpakAsk). */
+  body.upak #givePart { display: none; }
+  body.upak.card #acts { grid-template-columns: 1fr; }
   body.upak .sumb.upk { background: var(--ubrbg); border-color: var(--ubrline); }
   body.upak .sumb.upk .l { color: var(--ubrtx); }
   body.upak .sumb.upk .r { color: var(--ubr); }
@@ -685,6 +696,57 @@
   body.upak .dlgft .s { color: var(--ubrtx); }
   .dlgbox.uask { max-width: 640px; }
   .dlgft.uaf { justify-content: flex-end; }
+  /* 📦 v6.25 окно «Упаковано K из N» [«Упаковка» v2 п.4, владелец 05.11.2026: «там надо тоже отображать что упаковано - но с мини фотками (для
+     наглядности)»; выбор по макету — «Окно Упаковано Вариант Б»: список строками]: сначала вещи в посылку (коричневая рамка, «✓ в посылку»),
+     за ними — что остаётся (серым, «остаётся»). Фото — те же, что у карточки (уже в кэше браузера): складу ни одного запроса. Вещей много —
+     список прокручивается, подвал на месте. */
+  .dlgbox.uok { max-width: 900px; }
+  .ulst { overflow-y: auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .urw { display: flex; align-items: center; gap: 12px; border: 3px solid var(--ubr2); background: var(--ubrbg); border-radius: 14px;
+         padding: 6px 12px 6px 6px; min-width: 0; }
+  .urw .p { position: relative; width: 56px; height: 70px; flex: none; border-radius: 8px; background: var(--soft) center/cover no-repeat; }
+  .urw .p .nph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: #aaa; font-size: 11px; }
+  .urw .t { min-width: 0; flex: 1 1 auto; font-size: 17px; font-weight: 800; line-height: 1.2; word-break: break-word; }
+  .urw .t small { display: block; color: var(--mute); font-size: 14px; font-weight: 600; margin-top: 3px; }
+  .urw .c { flex: none; font-size: 14px; font-weight: 800; color: #fff; background: var(--ubr); border-radius: 8px; padding: 5px 10px; white-space: nowrap; }
+  .urw.r { border-color: var(--line); background: #fff; }
+  .urw.r .p { filter: grayscale(1); opacity: .6; }
+  .urw.r .t { color: var(--mute); }
+  .urw.r .c { color: var(--mute); background: var(--soft); }
+  /* ↩️ [v6.25, v2 п.5] «Изменить упаковку…» — ссылкой под «✓ Упаковано» (как «не оплатила» у кассы): только у заказа с упакованными вещами */
+  #unPak { display: none; }
+  body.upak #unPak.on { display: block; grid-column: 1 / -1; justify-self: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px;
+                        background: transparent; color: var(--ubr); font: inherit; font-size: 18px; font-weight: 800; text-decoration: underline;
+                        text-underline-offset: 4px; cursor: pointer; }
+  body.upak #unPak:disabled { opacity: .38; cursor: default; }
+  .rch .stt.un { background: var(--soft); color: var(--mute); }
+  .rcf .op { display: block; width: 100%; height: 52px; margin-top: 12px; border: 3px solid var(--ubr2); border-radius: 14px; background: #fff;
+             color: var(--ubrtx); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer; }
+  .kt .pt.un { color: var(--mute); }
+  /* 👤 [v6.25, v2 п.1] кто пакует — строка под закупкой (только у упаковки); окно «Кто пакует?» — поле кода */
+  #uwho { display: none; }
+  body.upak #uwho[hidden] { display: none; }   /* склад кодов не сверяет (без wk) — строки нет; иначе display:flex ниже перебивал hidden [Фейбл r2 LOW-8] */
+  body.upak #uwho { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; margin: -2px 0 8px; padding: 0; border: 0; background: none;
+                    font: inherit; font-size: 15px; font-weight: 800; color: var(--ubrtx); cursor: pointer; text-align: left; }
+  body.upak #uwho .ch { margin-left: auto; flex: none; font-size: 14px; font-weight: 700; color: var(--ubr); text-decoration: underline; text-underline-offset: 3px; }
+  body.upak #uwho.no { color: var(--ubr); }
+  .uwi { height: 58px; width: 100%; box-sizing: border-box; font: inherit; font-size: 28px; font-weight: 800; letter-spacing: .1em; text-align: center;
+         text-transform: uppercase; border: 3px solid var(--ubr2); border-radius: 12px; padding: 0 12px; color: var(--ink); background: #fff; }
+  .uwm { min-height: 20px; color: var(--bad); font-size: 15px; font-weight: 700; line-height: 1.35; }
+  /* Ничего не отмечено — подсказка с примером отмеченной вещи */
+  .uex { display: flex; align-items: center; gap: 14px; background: var(--ubrbg); border: 1px solid var(--ubrline); border-radius: 14px; padding: 12px 14px; }
+  .uex .p { position: relative; width: 72px; flex: none; aspect-ratio: 4 / 5; border-radius: 10px; border: 3px solid var(--ubr2); background: var(--soft) center/cover no-repeat; }
+  .uex .p i { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; background: var(--ubr); color: #fff;
+              display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; font-style: normal; line-height: 1; }
+  .uex .t { font-size: 17px; font-weight: 700; color: var(--ubrtx); line-height: 1.35; }
+  @media (min-width: 900px) {
+    .ulst { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .urw .t { font-size: 19px; } .urw .t small { font-size: 15px; } .urw .c { font-size: 15px; }
+  }
+  /* Телефон: обе во всю ширину (две в строку не влезают), «Назад» СВЕРХУ: у заказа из 4+ вещей окно дорастает до низа экрана, и верхняя кнопка
+     подвала встаёт ровно на место «✓ Упаковано» — повторный тап туда попадает в «Назад», а не пишет мимо окна [Фейбл «запись и гонки» v6.25,
+     LOW-1]. 360–375 px — подпись одной строкой [Фейбл «сценарий», LOW-4]. */
+  @media (max-width: 899px) { .dlgbox.uok .dlgft.uaf .btn { flex: 1 1 100%; font-size: 18px; padding: 0 10px; } }
   #ud { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: calc(var(--kd) + env(safe-area-inset-bottom));
         padding: 0 16px env(safe-area-inset-bottom); background: var(--ink); color: #fff; align-items: center; gap: 10px; }
   #ud .l { font-size: 13px; font-weight: 800; color: #c9ced6; white-space: nowrap; }
@@ -719,6 +781,7 @@
 
 <div id="top">
   <div id="tblbar"><span class="l">Закупка</span><select id="tbl" title="В какой закупке ищет касса"><option>список закупок загружается…</option></select><span id="upill">📦 Упаковка</span><span id="wq" hidden></span></div>
+  <button id="uwho" type="button" title="Кто пакует — код работника"></button>
   <div id="disp"><input id="num" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
        enterkeyhint="search" placeholder="№ заказа или ник"><button id="find" type="button" title="Найти" aria-label="Найти"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 21 21"/></svg></button><button id="abc" type="button" title="Набрать ник">Аа</button><span id="caret" aria-hidden="true"></span></div>
   <div id="sync">Открываю список…</div>
@@ -728,6 +791,7 @@
   <button id="giveAll" class="btn" type="button" disabled>✅ Забрала всё</button>
   <button id="givePart" class="btn" type="button" disabled>Не забрала всё…</button>
   <button id="noPay" class="off" type="button" aria-haspopup="dialog" disabled>не оплатила на кассе</button>
+  <button id="unPak" type="button" aria-haspopup="dialog" disabled>↩️ Изменить упаковку…</button>
 </div>
 <div id="pad">
   <button type="button" data-d="1">1</button><button type="button" data-d="2">2</button><button type="button" data-d="3">3</button>
@@ -747,7 +811,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.24 · 05.11.2026';   // v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.25 · 05.11.2026';   // v6.25 — «Упаковка» v2: одна кнопка «✓ Упаковано» — в посылку только отмеченные вещи и всегда через окно с мини-фото (вид Б), без отметок — подсказка [владелец 05.11.2026]; v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var ANON = !/iPhone|iPad|iPod|Android/i.test(String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));   // 👥 компьютер — запросы без cookie Google [v6.22]
@@ -825,8 +889,8 @@
   // 📦 «УПАКОВКА» (v6.21) [владелец 04.11.2026: «Установим её также и работникам, кто не на кассе выдаёт товар, а запаковывает его для отсылки
   // в пакоматы/почту… они будут видеть большие фотки»; «Отдельная ссылка. Название кнопки: Упаковано / Упаковано не всё..»; вид А и «зелёные
   // элементы (кнопка рамка галочка) также в том коричневом цвете»]. Режим решает КЛЮЧ: склад в ответе kassa_tables говорит upak: 1 (📦 в
-  // подписи ключа) — касса становится «Упаковкой»: крупные фото, без цен и сумм, галочки на вещах, кнопки «Упаковано» / «Упаковано не всё…»
-  // (дверь kassa_upak: «unisend» в кол. B), внизу «Упаковано сегодня». Режим помним в браузере — следующее открытие сразу в своём виде.
+  // подписи ключа) — касса становится «Упаковкой»: крупные фото, без цен и сумм, галочки на вещах, кнопка «Упаковано» (дверь kassa_upak:
+  // «unisend» в кол. B; с v6.25 — одна: в посылку только отмеченные вещи, всегда через окно с мини-фото), внизу «Упаковано сегодня». Режим помним в браузере — следующее открытие сразу в своём виде.
   // Записи — та же очередь, что у выдачи (задание kassa_give с door: 'kassa_upak'): фон, повтор тем же кодом, полосы отказа.
   var UPAK = lsGet('kassa_mode') === 'upak';
   var UMARK = 'unisend';             // слово упаковки в кол. B — им же касса рисует упакованное (applyGiven), как его принесёт выжимка
@@ -1132,6 +1196,9 @@
       // 📦 Режим «Упаковка» — по ключу [v6.21]: входим на upak 1, выходим ТОЛЬКО на явном upak 0 (ключ кассы). Поля нет — подпись у склада не
       // прочиталась или склад старше страницы (откат) — режим не трогаем [Фейбл LOW-1, круг 1]: иначе с ключа 📦 касса писала бы «zabrala» и деньги.
       if (tr && tr.ok && (tr.upak === 0 || tr.upak === 1)) upakSet(tr.upak === 1);
+      // 👤 [v6.25, v2 п.1] отпечатки кодов работников — ключу 📦; ключ кассы — ни отпечатков, ни кода упаковщика в памяти браузера
+      if (tr && tr.ok && tr.upak === 1) { uwkSet(tr.wk === 1); uwfSet(tr.wf); UP5 = tr.up5 === 1; }
+      if (tr && tr.ok && tr.upak === 0) { uwkSet(false); uwfSet([]); uwDrop(); }   // ключ кассы — ни кода, ни отпечатков (и погасших) [LOW-6]
       if (DENIED) return;
       if (tr || packOnly) answered++;
       if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
@@ -2388,14 +2455,18 @@
     // невозможно выбрать — забрал не все»; до v6.19 — от двух вещей]: в окне снимают галочку — «не забрала ничего» (giveNone).
     b.disabled = n < 1 || pause;
     a.textContent = UPAK ? '✓ Упаковано' : n > 0 ? '✅ Забрала всё' + (n > 1 ? ' (' + n + ')' : '') : '✅ Забрала всё';
-    // 📦 «Упаковано не всё…» — от двух вещей: одна вещь либо в посылке («Упаковано»), либо нет (не жать ничего).
-    if (UPAK && n < 2) b.disabled = true;
-    b.textContent = UPAK ? 'Упаковано не всё…' : 'Не забрала всё…';
+    // 📦 У упаковщика второй кнопки нет (v6.25, спрятана стилем): в посылку уходит только отмеченное — через окно «✓ Упаковано».
+    if (UPAK) b.disabled = true;
+    b.textContent = 'Не забрала всё…';
     // 🔵 «не оплатила на кассе» [v6.16] — молчит вместе с «Забрала всё»; видна, пока у заказа на экране есть вещи к выдаче (набор следующего
     // номера её не прячет — только гасит, как кнопки).
     var c = $('noPay');
     c.disabled = n < 1 || pause;
     c.className = (!UPAK && m && !after && m.open.length) ? '' : 'off';   // 📦 у упаковки денег нет
+    // ↩️ [v2 п.5] у выбранного заказа есть упакованные вещи — «Изменить упаковку…» (снять «упаковано» с ошибочно отмеченной)
+    var u = $('unPak'), up = (UPAK && UP5 && m && !after && cardInScope() && !draftOn()) ? upPacked(m).length : 0;
+    u.className = up ? 'on' : '';
+    u.disabled = !up || pause;
   }
   function itemOf(P, r) { return [String(r.it[0] || ''), String(r.it[1] || ''), String(r.it[2] || ''), String(r.it[3] || ''), r.price, itemName(P, r.it)]; }
   function newOp() {
@@ -2585,13 +2656,14 @@
     }
     var fb;
     if (j.action === 'kassa_give' && j.upak) {
-      // 📦 Упаковка не легла — вещи снова к упаковке (packReset); галочки сняты при отправке — отмечают заново («Упаковано не всё…»); полоса
+      // 📦 Упаковка не легла — вещи снова к упаковке (packReset); галочки сняты при отправке — отмечают заново и снова «✓ Упаковано»; полоса
       // с «×» и тем, что в посылке. ⛔️ Галочки ушедших вещей обратно НЕ возвращаем [Кодекс HIGH, круг 2]: исход бывает неизвестен (склад
       // записал, ответ потерян) — галочка по приметам переехала бы на оставшуюся такую же вещь, и «Упаковано» записало бы неупакованную.
       packReset(j.tid);
+      if (r && r.error === 'bad_code' && UW && j.params && j.params.w === UW.c) uwDrop();   // 👤 склад не узнал ТЕКУЩИЙ код — забываем [v2 п.1, LOW-5]
       fb = upakFlash(r, j.no, 0);
       if (r.changed && !(r.total === 0 && r.given)) fb.text = '⚠️ Заказ изменился в таблице — «unisend» не записан. В посылке: ' + keysText(j.keys) +
-        '. Проверьте заказ и отметьте упакованным только это («Упаковано не всё…»).';
+        '. Проверьте заказ, отметьте галочками только это и снова «✓ Упаковано».';
       else fb.text += ' В посылке: ' + keysText(j.keys) + '.';
     } else if (j.action === 'kassa_give') {
       packReset(j.tid);                               // «выданное» этой записи с экрана — правду принесёт сверка ниже
@@ -2911,6 +2983,7 @@
     if (e === 'too_big') return 'Заказ слишком большой для кассы — отметьте выдачу в приложении склада.';
     // 📦 Ключ не того режима: ссылка упаковщика пишет только «unisend», ссылка кассы — только выдачу [владелец 04.11.2026].
     if (e === 'upak_key') return 'Это ссылка «Упаковки» — выдачу кассы с неё не записать. Откройте кассу по ссылке кассы.';
+    if (e === 'bad_code') return 'Склад не узнал код работника (его нет в «Настройках») — «unisend» не записан. Введите свой код и нажмите «✓ Упаковано» ещё раз.';
     if (e === 'upak_denied') return 'Это не ссылка «Упаковки» — «unisend» с неё не записать. Попросите у владельца ссылку упаковщика (ключ с 📦).';
     if (e === 'efir') return 'Это заказ эфира — касса его не выдаёт, отметьте в приложении склада.';
     if (e === 'ambiguous') return 'Таких одинаковых вещей у клиента несколько — снимите «нет» в приложении склада («Собрать заказ»).';
@@ -3038,6 +3111,7 @@
     var params = { src: h.t.id, nick: m.c[0], no: m.no, mode: mode, a: JSON.stringify(a) };
     if (mode === 'part') params.t = take.join(',');
     if (!UPAK) params.np = unpaid ? '1' : '0';          // [v6.16] без np склад считает по-старому, по счёту (касса до v6.16) — шлём всегда; 📦 упаковка денег не шлёт
+    if (UPAK && UWK) { if (!uwOk()) return false; params.w = UW.c; }   // 👤 [v2 п.1] код работника — склад сверит и запишет имя; без кода упаковка не пишется
     // vi (вещи, найденные в самом счёте) и вопрос про счёт перед отправкой (invq) — до v6.16; с v6.16 деньги по счёту не делятся (invNeed).
     params.n = newOp();
     var tok = cardTok(), label = m.c[0] + ' ' + m.no;
@@ -3055,7 +3129,7 @@
                 keys: keys, g0: m.givenSel.length, mode: mode, cnt: done.length, tot: rows.length, t0: Date.now(), due: 0, tries: 0, legs: [], invq: 0,
                 unpaid: unpaid ? 1 : 0 };
     // 📦 Упаковка — та же очередь и тот же путь задания (наложение, итог, полосы), только дверь своя: kassa_upak («unisend», без денег).
-    // Галочки заказа — вон ПРИ ОТПРАВКЕ: решение по заказу принято (окно «Упаковано не всё…» главнее экранных галочек), а поставленные
+    // Галочки заказа — вон ПРИ ОТПРАВКЕ: решение по заказу принято (окно «Упаковано K из N» подтвердило экранные галочки), а поставленные
     // потом — новые и переживают поздний ответ этой записи [Кодекс HIGH-1, круг 1: снятие по ответу стирало галочку следующей вещи, и
     // «Упаковано» без галочек писало «unisend» на весь остаток].
     if (UPAK) { job.door = 'kassa_upak'; job.upak = 1; job.unpaid = 0; uckDrop(h.t.id, m.c[0], m.no); }
@@ -3252,7 +3326,7 @@
     var L = KST.lists[k], i = kdIdx(k), d = i >= 0 ? KST.days[i] : null, s = 0;
     if (!L || !d) return true;
     if (UPAK && !L.got) return true;   // 📦 своя упаковка при закрытой шторке (got = 0) — «Обновляю данные…», а не прежний список как текущий [Фейбл круг 2, LOW-2]
-    if (UPAK) { L.rows.forEach(function (r) { s += Number(r && r[5]) || 0; }); return L.rows.length !== (Number(d[3]) || 0) || s !== (Number(d[2]) || 0); }   // 📦 строки журнала и вещи дня
+    if (UPAK) { L.rows.forEach(function (r) { if (r && !/^снято/.test(String(r[4] || ''))) s += Number(r[5]) || 0; }); return L.rows.length !== (Number(d[3]) || 0) || s !== (Number(d[2]) || 0); }   // 📦 строки журнала и вещи дня (↩️ «снято» — не в итогах, как у склада)
     L.rows.forEach(function (r) { s += Number(r && r[7]) || 0; });
     return L.rows.length !== (Number(d[1]) || 0) || s !== (Number(d[3]) || 0);
   }
@@ -3522,12 +3596,14 @@
   // было посмотреть, что именно и кто(!) упаковывал сегодня, вчера и т.д»] — та же шторка, что «Забранные заказы»; строка склада:
   // [мс, №, ник, закупка, что, упаковано, в заказе, кто, вещи]. Данные клиентов — только текстом (textContent), в памяти вкладки.
   function upWhoName(s) { return String(s == null ? '' : s).replace(/💻|📦|📱/g, '').replace(/\s+/g, ' ').trim() || '—'; }
+  // 👤 [v6.25, v2 п.1] кто упаковал — работник по коду (строка склада [9]); строки до кода работника (и касса до v6.25) — подпись ключа.
+  function upWhoOf(r) { var w = String(r[9] == null ? '' : r[9]).trim(); return w || upWhoName(r[7]); }
   // Кто сколько за день: разные заказы (закупка, ник, №) и вещи — по списку дня; больше заказов — выше.
   function upWho(rows) {
     var by = Object.create(null), out = [];   // имя ключа «constructor» не ломает итог [Кодекс LOW-4]
     rows.forEach(function (r) {
-      if (!Array.isArray(r)) return;
-      var k = upWhoName(r[7]), w = by[k] || (by[k] = { n: k, o: 0, i: 0, seen: {} });
+      if (!Array.isArray(r) || /^снято/.test(String(r[4] || ''))) return;   // ↩️ снятия — в списке, не в итогах (как у склада)
+      var k = upWhoOf(r), w = by[k] || (by[k] = { n: k, o: 0, i: 0, seen: {} });
       var ok = String(r[3] || '') + '\u0001' + String(r[2] || '') + '\u0001' + String(r[1] || '').toUpperCase().replace(/\s+/g, '');
       if (!w.seen[ok]) { w.seen[ok] = 1; w.o++; }
       w.i += Number(r[5]) || 0;
@@ -3536,18 +3612,66 @@
     return out.sort(function (a, b) { return b.o - a.o || b.i - a.i; });
   }
   function upTile(r, no) {
-    var what = String(r[4] || ''), part = /^часть/.test(what);
+    var what = String(r[4] || ''), part = /^часть/.test(what), un = /^снято/.test(what);
     var t = el('button', 'kt'); t.type = 'button'; t.setAttribute('data-f', 't' + Number(r[0]) + '_' + String(r[1] || ''));
     t.appendChild(el('span', 'kn', String(no || '')));
     var a = el('span', 'ka'), k1 = el('span', 'k1'), k2 = el('span', 'k2');
     k1.appendChild(el('span', 'no', String(r[1] || '—'))); k1.appendChild(el('span', 'nk', String(r[2] || '')));
     k2.appendChild(el('span', null, kdHm(r[0])));
-    k2.appendChild(part ? el('span', 'pt', 'часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0)) : el('span', null, things(Number(r[5]) || 0)));
+    k2.appendChild(un ? el('span', 'pt un', '↩️ снято: ' + things(Math.abs(Number(r[5]) || 0)))
+      : part ? el('span', 'pt', 'часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0)) : el('span', null, things(Number(r[5]) || 0)));
     if (/ПРОВЕРЬТЕ/.test(what)) k2.appendChild(el('span', 'kw', '⚠️ проверить'));
     a.appendChild(k1); a.appendChild(k2); t.appendChild(a);
-    var b = el('span', 'kb'); b.appendChild(el('span', 'uw', upWhoName(r[7]))); t.appendChild(b);
+    var b = el('span', 'kb'); b.appendChild(el('span', 'uw', upWhoOf(r))); t.appendChild(b);
     t.onclick = function () { lastActivity = Date.now(); KST.rc = r; renderRc(); };
     return t;
+  }
+  // 📦 ЧЕК УПАКОВКИ: ФОТО И НЕУПАКОВАННОЕ [v6.25, «Упаковка» v2 п.2, владелец 05.11.2026: «В статистике, когда заходишь внутрь упакованного
+  // заказа, выводи фотки этого заказа И также те вещи, которые не были упакованы выводи»]. У вещи чека — мини-фото (по № позиции — первому слову
+  // строки журнала), ниже — вещи этого заказа, которые СЕЙЧАС не упакованы (серым). Фото и состав — из выжимки той закупки на странице (память
+  // вкладки или телефона): складу ни одного запроса. Выжимки нет (закупку на этом компьютере не открывали) — чек как раньше, без фото.
+  var RC_IDB = {}, RC_SYNC = 0;        // закупки, выжимку которых чек уже пробовал достать из памяти телефона; когда чек сам освежал выжимку
+  // { P, fresh } | null. fresh — выжимка собрана ПОЗЖЕ этой строки журнала: только тогда «Не упакованы» — правда; старше (другое устройство
+  // упаковало, а здесь выжимка давняя) — список ложный, его не показываем [Фейбл «страница» v6.25, MED-1]. Выбранную закупку чек освежает
+  // сам (тот же kassa_pack, что ушёл бы со следующим освежением; не чаще раза в 30 с) и перерисовывается. Имя закупки встречается в списке
+  // дважды (копия ещё не переименована) — не угадываем таблицу: ни фото, ни списка [LOW-7].
+  function upRcPack(r) {
+    var name = String(r[3] || ''), found = (TABLES && TABLES.list ? TABLES.list : []).filter(function (x) { return x.name === name; });
+    if (found.length !== 1) return null;
+    var t = found[0], pk = PACKS[t.id];
+    if (!pk && !RC_IDB[t.id]) {
+      RC_IDB[t.id] = 1;
+      loadPack(t).then(function () { if (KST.rc === r && PACKS[t.id]) renderRc(); }, function () {});
+    }
+    var fresh = !!pk && Number(pk.checked) > 0 && Number(pk.t) > Number(r[0]);   // сверена складом в этой вкладке, а не из памяти [Кодекс r2 MED-9]
+    if (!fresh && selT() === t && Date.now() - RC_SYNC > 30000) {
+      RC_SYNC = Date.now();
+      Promise.resolve(sync(true, true)).then(function () { if (KST.rc === r) renderRc(); }, function () {});
+    }
+    return pk ? { P: pk.p, fresh: fresh } : null;
+  }
+  // Вещи заказа (ник, №) по выжимке, ещё не упакованные, — как «к упаковке» у карточки: собраны этим номером (буква n), не выданы.
+  // null — заказа в выжимке нет вовсе (ник склеили с другим, заказ разобрали): это «не знаю», а не «всё упаковано» [Кодекс v6.25, MED-3].
+  function upOpenOf(P, nick, no) {
+    var out = [], want = nk(no), who = String(nick || '').trim(), seen = false;
+    (P.c || []).forEach(function (c) {
+      if (String(c[0] || '').trim() !== who) return;
+      var items = c[2] || [], st = typeof c[3] === 'string' ? c[3] : '', own = (c[4] && typeof c[4] === 'object') ? c[4] : {}, main = String(c[1] || '');
+      for (var k = 0; k < items.length; k++) {
+        if (String(st.charAt(k) || '').toLowerCase() !== 'n' || nk(String(own[k] || main)) !== want) continue;
+        seen = true;
+        if (st.charAt(k) === 'n') out.push({ k: k, it: items[k] });
+      }
+    });
+    return seen ? out : null;
+  }
+  function upRcRow(txt, th, off) {
+    var d = el('div', 'rci rcu' + (off ? ' off' : '')), ph = el('span', 'rph');
+    if (th) ph.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
+    d.appendChild(ph);
+    d.appendChild(el('span', 'a', txt));
+    if (off) d.appendChild(el('b', 'nu', 'не упакована'));
+    return d;
   }
   // Состав упаковки — строкой журнала «101 Джемпер melns M; 102 Платье zils S» (kassaUpakItems_ на складе).
   function upRc(w, r) {
@@ -3560,17 +3684,38 @@
     h.appendChild(el('div', 'no', String(r[1] || '—')));
     h.appendChild(el('div', 'nk', String(r[2] || '')));
     h.appendChild(el('div', 'mt', [String(r[3] || ''), 'упакован ' + kdDD(KST.sel) + ' в ' + kdHm(r[0])].filter(Boolean).join(' · ')));
-    h.appendChild(el('div', 'mt', 'Упаковал(а): ' + upWhoName(r[7])));
-    h.appendChild(el('span', 'stt' + (part ? ' p' : ''), part ? 'Упаковано часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0) : 'Упаковано всё'));
+    var un = /^снято/.test(what);                 // ↩️ [v2 п.5] строка снятия «упаковано»
+    h.appendChild(el('div', 'mt', (un ? 'Снял(а): ' : 'Упаковал(а): ') + upWhoOf(r)));
+    h.appendChild(el('span', 'stt' + (un ? ' un' : part ? ' p' : ''), un ? 'Снято «упаковано»: ' + things(Math.abs(Number(r[5]) || 0))
+      : part ? 'Упаковано часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0) : 'Упаковано всё'));
     if (/ПРОВЕРЬТЕ/.test(what)) h.appendChild(el('div', 'wr', '⚠️ Пока шла запись, лист сдвинулся — строки этого заказа надо проверить в таблице.'));
     box.appendChild(h);
-    var l = el('div', 'rcl'), its = String(r[8] || '').split(/;\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
-    if (its.length) its.forEach(function (x) { var d = el('div', 'rci'); d.appendChild(el('span', 'a', x)); l.appendChild(d); });
+    var l = el('div', 'rcl'), its = String(r[8] || '').split(/;\s*/).map(function (x) { return x.trim(); }).filter(Boolean), rp = upRcPack(r), P = rp ? rp.P : null;
+    if (its.length) its.forEach(function (x) {
+      var no = /^\S+/.exec(x), mm = P && P.m && no ? P.m[no[0]] : null;
+      l.appendChild(upRcRow(x, mm ? photoUrl(P, mm[1], 480) : '', false));
+    });
     else l.appendChild(el('div', 'rcn', 'Состав этой упаковки не записан.'));
+    if (P && !rp.fresh) l.appendChild(el('div', 'rcs', 'Неупакованное покажу после обновления данных…'));
+    else if (P) {
+      var rest = upOpenOf(P, r[2], r[1]);
+      if (!rest) l.appendChild(el('div', 'rcs', 'Этого заказа сейчас нет в данных кассы (ник или номер поменяли) — что не упаковано, посмотрите в заказе.'));
+      else if (rest.length) {
+        l.appendChild(el('div', 'rcs', 'Не упакованы — ' + things(rest.length)));
+        rest.forEach(function (x) {
+          var txt = [x.it[0], itemName(P, x.it), x.it[1], x.it[2]].map(function (v) { return String(v == null ? '' : v).replace(/\s*\n\s*/g, ' / ').trim(); }).filter(Boolean).join(' ');
+          l.appendChild(upRcRow(txt, thumbOf(P, x), true));
+        });
+      } else if (part) l.appendChild(el('div', 'rcs ok', 'Сейчас в заказе неупакованных вещей нет.'));
+    }
     box.appendChild(l);
     var f = el('div', 'rcf'), tt = el('div', 't');
-    tt.appendChild(el('span', null, 'Итого · ' + things(Number(r[5]) || 0)));
+    tt.appendChild(el('span', null, (un ? 'Снято · ' : 'Итого · ') + things(Math.abs(Number(r[5]) || 0))));
     f.appendChild(tt);
+    // ↩️ «Открыть заказ» [v2 п.5] — доупаковать или снять «упаковано»; только у закупки, выбранной вверху (другую касса тут не ищет)
+    var ts = selT();
+    if (ts && ts.name === String(r[3] || '')) { var oz = el('button', 'op', 'Открыть заказ'); oz.type = 'button'; oz.onclick = function () { upRcOpen(r); }; f.appendChild(oz); }
+    else if (r[3]) f.appendChild(el('div', 'iv u', 'Открыть заказ — выберите вверху закупку «' + String(r[3]) + '».'));
     var x = el('button', 'x', 'Закрыть'); x.type = 'button';
     x.onclick = function () { KST.rc = null; renderRc(); };
     f.appendChild(x);
@@ -3597,9 +3742,13 @@
 
   // ── окна ──────────────────────────────────────────────────────────────────────────────
   function dlgOpen() { return $('dlg').className === 'on'; }
+  // 📦 Когда закрылось окно: второй щелчок двойного по «Назад» / «Понятно» не ставит и не снимает галочку на плитке под кнопкой
+  // [Фейбл «сценарий» v6.25, LOW-2] — uckToggle молчит 0,4 с.
+  var dlgShut = 0;
   function closeDlg() {
     var d = $('dlg'); if (!d) return;
     var was = d.className === 'on';
+    if (was) dlgShut = Date.now();
     d.className = ''; d.textContent = '';
     if (was && DESK.matches) { try { $('num').focus(); } catch (e) {} }
     if (was) setTimeout(invLater, 0);   // ответ про счёт, пришедший при открытом окне (п.3)
@@ -3622,9 +3771,11 @@
     var d = $('dlg'); d.className = 'on'; dlgAt = Date.now();
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
   }
+  // 📦 У упаковки — тот же размер, что у её плитки (480, utile): окно «Упаковано K из N» и чек берут фото из кэша браузера, а не качают
+  // заново [Фейбл «сценарий» v6.25, LOW-1: при 240 окно заказа из 18 вещей ждало 12 новых фото]. У кассы — как было.
   function thumbOf(P, r) {
     var mm = P.m && P.m[String(r.it[0] || '')];
-    return photoUrl(P, mm ? mm[1] : '', 240);
+    return photoUrl(P, mm ? mm[1] : '', UPAK ? 480 : 240);
   }
   // Окно «Не забрала всё…» — галочки стоят у ВСЕХ вещей, кассир снимает с того, что клиент не забрал [владелец 26.09.2026]; заголовок —
   // «Снимите галочку с вещей, которые НЕ забрала:» [владелец 29.09.2026, п.5 v6.7; до v6.7 — «Какие вещи забрала?»].
@@ -3745,6 +3896,7 @@
   // кнопки выдачи (не дольше 5 с с показа карточки).
   // force, after — открыто из окна «Заказ не отмечен» (как openPart): кассир уже набрал следующий номер; записал — after (поиск набранного).
   function openNoPay(force, after) {
+    if (UPAK) return;               // 📦 у упаковки денег нет: окно недостижимо (кнопка спрятана), но и вызванное — не пишет «всё» мимо галочек [Фейбл]
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || !m.open.length || (!force && tooFresh()) || !cardInScope() || (!force && draftOn()) || KST.open) return;
     lastActivity = Date.now();
@@ -3954,6 +4106,7 @@
     if (tx) tx.textContent = UPAK ? 'упаковка заказов' : 'выдача заказов';
     renderActs(CUR && CUR.kind === 'card' ? CUR.model : null);
     renderUd();
+    renderUwho();                                 // 👤 кто пакует [v2 п.1]
   }
   // ✓ ГАЛОЧКИ НА ВЕЩАХ [владелец 04.11.2026: «галочки на вещах — Да»]: только на экране, в таблицу не пишутся; помнит этот браузер, пока заказ не
   // отправлен («Упаковано» снимает галочки заказа сразу — give; поставленные после — новые, поздний ответ прошлой записи их не трогает;
@@ -3979,7 +4132,7 @@
   }
   function uckToggle(i) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!UPAK || !m || !m.no || !m.open[i] || (CUR.flash && CUR.flash.done) || dlgOpen()) return;
+    if (!UPAK || !m || !m.no || !m.open[i] || (CUR.flash && CUR.flash.done) || dlgOpen() || Date.now() - dlgShut < 400) return;
     lastActivity = Date.now();
     var on = uckOn(m), key = itemKey(m.P, m.open[i]), ok = uckOrd(m);
     var e = UCK[ok] || (UCK[ok] = { at: 0, k: {} });
@@ -4002,67 +4155,147 @@
     CUR.uck.r.textContent = k + ' из ' + m.open.length;
     CUR.uck.i.style.width = (m.open.length ? Math.round(100 * k / m.open.length) : 0) + '%';
   }
-  // «✓ Упаковано» [макет v3, шаг 4]: галочки у всех или их нет вовсе — сразу весь заказ (как «Забрала всё»); отмечены не все — переспрос.
+  // «✓ Упаковано» [«Упаковка» v2 п.3, владелец 05.11.2026: «всегда! если не отметил ни одну вещь, значит ничего не упаковал - нельзя все сразу
+  // помечать упакованными»]: в посылку уходят ТОЛЬКО отмеченные вещи и ВСЕГДА через окно «Упаковано K из N»; ничего не отмечено — окно-подсказка,
+  // складу ни одного запроса. До v6.25: без галочек — весь заказ сразу, отмечены не все — «Все N / Только K», «Упаковано не всё…» — окно с галочками.
   function upakAll() {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!m || !m.open.length) return;
     var on = uckOn(m), k = on.filter(Boolean).length;
-    if (!k || k === m.open.length) { give('all', []); return; }
+    // 👤 [v2 п.1] есть что записать, а кода работника нет (или погас) — сперва «Кто пакует?», потом это же окно; без отметок код не нужен
+    if (k && UWK && !uwOk()) { if (!(tooFresh() || checkHold() || invHold() || !cardInScope() || draftOn() || dlgOpen())) openUwDlg(upakAll); return; }
     openUpakAsk(m, on, k);
   }
-  // Переспрос «Отмечено K из N — Все N / Только K». Окно — про ЭТОТ заказ и ЭТОТ состав (как «Не забрала всё…»): сменились — закрываем, не пишем.
-  // Кнопки подвала глухи 0,5 с (двойной щелчок по «Упаковано»), как у всех окон кассы.
-  function openUpakAsk(m, on, k) {
-    if (tooFresh() || checkHold() || invHold() || !cardInScope() || draftOn() || dlgOpen()) return;
+  // 👤 КТО ПАКУЕТ — КОД РАБОТНИКА [«Упаковка» v2 п.1, владелец 05.11.2026: «не выводи кто упаковал (название компа) - смысла нет. Можно ли как-то
+  // выводить, чей код паковал? Наверное надо тогда показывать ввод кода пароля (и чтобы он быстро протухал при бездействии)?»; решено: код гаснет
+  // через 10 мин без действий]. Упаковщик вводит свой код работника — тот же, что в аппке склада; имя касса узнаёт сразу, по отпечаткам кодов из
+  // ответа kassa_tables (wf — только ключу 📦; самих кодов в странице нет, как у #wh-fps аппки). Код уходит с каждой записью (w): склад сверяет
+  // его сам и пишет в «Лог упаковки» имя (kassaUpak_). 10 мин без нажатий — код забыт, следующее «✓ Упаковано» спросит его снова. Помним в
+  // браузере (перезагрузка вкладки не выгоняет) с отметкой последнего действия — её пишем не чаще раза в 30 с.
+  var UW_IDLE = 10 * 60000, UW_KEY = 'upak_who', UWF_KEY = 'upak_wf';
+  // Склад сверяет код (wk: 1 в ответе kassa_tables ключу 📦, склад v631+) — только тогда касса его спрашивает и шлёт: склад без wk (откат
+  // склада, страница вышла раньше) — упаковка пишет без имени, как v6.24, а не встаёт целиком [Фейбл «склад» MED-1]. Помним в браузере.
+  var UWK = lsGet('upak_wk') === '1';
+  var UP5 = false;   // ↩️ «Изменить упаковку…» — только когда склад скажет up5: 1 (снятие пока выключено на складе, kassaUnpakOn_)
+  function uwkSet(on) { on = !!on; if (on === UWK) return; UWK = on; lsSet('upak_wk', on ? '1' : ''); if (!on && UW) uwDrop(); renderUwho(); }
+  var UWF = (function () { try { var a = JSON.parse(lsGet(UWF_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } })();
+  var UW = (function () {
+    var o = null;
+    try { o = JSON.parse(lsGet(UW_KEY) || 'null'); } catch (e) { o = null; }
+    if (o && o.c && o.n && Date.now() - Number(o.at) < UW_IDLE) return { c: String(o.c), n: String(o.n), at: Number(o.at), sv: Number(o.at) };
+    if (o) lsSet(UW_KEY, '');                    // погасший код не лежит в памяти браузера [Фейбл «страница» LOW-6]
+    return null;
+  })();
+  // Отпечаток кода — ТОЧНО как у склада (whCodeFp_ в web-app.js, обороты 0 — решение владельца 03.09.2026: «нужна быстрота»; совпадение
+  // стережёт tests/test-kassa-upak-page.js): регистр и кириллица-двойник не важны — «к12» = «K12», как у входа в аппку (whNormWorkerCode_).
+  var UW_CYR = 'АВЕКМНОРСТУХІЅЈ', UW_LAT = 'ABEKMHOPCTYXISJ';
+  function uwNorm(v) {
+    var s = String(v == null ? '' : v).trim().replace(/\.0+$/, '').toUpperCase(), out = '';
+    for (var i = 0; i < s.length; i++) { var ch = s.charAt(i), k = UW_CYR.indexOf(ch); out += (k >= 0 ? UW_LAT.charAt(k) : ch); }
+    return out;
+  }
+  function uwFp(code) {
+    var s = uwNorm(code), a = 0x811c9dc5, b = 5381;
+    for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); a = (a ^ c) >>> 0; a = (a * 0x01000193) >>> 0; b = (((b * 33) >>> 0) + c) >>> 0; }
+    return a.toString(36) + '-' + b.toString(36);
+  }
+  function uwName(code) { var fp = uwFp(code); for (var i = 0; i < UWF.length; i++) if (UWF[i] && UWF[i].h === fp) return String(UWF[i].n || ''); return ''; }
+  function uwfSet(wf) {
+    if (!Array.isArray(wf)) return;                // склад «Настройки» не прочитал — прежние отпечатки остаются
+    UWF = wf.filter(function (x) { return x && typeof x.h === 'string' && typeof x.n === 'string' && x.n; });
+    lsSet(UWF_KEY, UWF.length ? JSON.stringify(UWF) : '');
+  }
+  function uwOk() { if (UW && Date.now() - UW.at < UW_IDLE) return true; if (UW) uwDrop(); return false; }
+  function uwSave() { if (UW) { UW.sv = UW.at; lsSet(UW_KEY, JSON.stringify({ c: UW.c, n: UW.n, at: UW.at })); } }
+  function uwDrop() { UW = null; lsSet(UW_KEY, ''); renderUwho(); }
+  function uwTouch() {
+    if (!UW || !UPAK) return;
+    var t = Date.now();
+    if (t - UW.at >= UW_IDLE) { uwDrop(); return; }   // сперва — не погас ли: нажатие после 10 мин тишины код не продлевает
+    UW.at = t;
+    if (t - UW.sv > 30000) uwSave();
+  }
+  function renderUwho() {
+    var b = $('uwho'); if (!b) return;
+    b.textContent = '';
+    b.hidden = !UWK;                               // склад кодов не сверяет (до v631) — строки нет
+    b.className = UW ? '' : 'no';
+    b.appendChild(el('span', null, UW ? '👤 Пакует: ' + UW.n : '👤 Кто пакует? Нужен ваш код'));
+    b.appendChild(el('span', 'ch', UW ? 'сменить' : 'ввести код'));
+  }
+  ['pointerdown', 'keydown'].forEach(function (t) { document.addEventListener(t, uwTouch, { capture: true, passive: true }); });
+  window.addEventListener('pagehide', function () { if (UW && Date.now() - UW.at < UW_IDLE) uwSave(); });   // отметка последнего нажатия — и при закрытии вкладки [Фейбл LOW-3]
+  setInterval(function () { if (UW && Date.now() - UW.at >= UW_IDLE) uwDrop(); }, 30000);
+  $('uwho').onclick = function () { if (!dlgOpen() && !KST.open) openUwDlg(null); };
+  // Окно «Кто пакует?»: код → имя по отпечаткам, без запроса к складу. next — что сделать после входа (окно «Упаковано K из N»).
+  function openUwDlg(next) {
+    if (dlgOpen() || KST.open) return;
     lastActivity = Date.now();
     var d = $('dlg'); d.textContent = '';
-    var box = el('div', 'dlgbox uask');
-    box.appendChild(el('h3', null, 'Отмечено ' + k + ' из ' + m.open.length));
-    var miss = m.open.filter(function (r, i) { return !on[i]; }).map(function (r) { return (r.it[0] ? r.it[0] + ' | ' : '') + (itemName(m.P, r.it) || '—'); });
-    box.appendChild(el('div', 'sub', 'Не отмечено: ' + miss.join(', ') + '. Что упаковано?'));
-    var ft = el('div', 'dlgft uaf'), all = el('button', 'btn no', 'Все ' + m.open.length), only = el('button', 'btn ok', 'Только ' + k);
-    all.type = 'button'; only.type = 'button';
-    var take = []; on.forEach(function (v, i) { if (v) take.push(i); });
-    var dtok = cardTok(), dno = m.no, dsnap = m.open.map(function (r) { return itemKey(m.P, r); }).join('\n');
-    var same = function () {
-      var mm = CUR && CUR.kind === 'card' ? CUR.model : null;
-      return cardTok() === dtok && !!mm && mm.no === dno && mm.open.map(function (r) { return itemKey(mm.P, r); }).join('\n') === dsnap;
+    var box = el('div', 'dlgbox uask uwd');
+    box.appendChild(el('h3', null, 'Кто пакует?'));
+    box.appendChild(el('div', 'sub', 'Введите свой код работника — тот же, что в приложении склада. 10 минут без дела — касса забудет код сама.'));
+    var inp = document.createElement('input');
+    inp.className = 'uwi'; inp.type = 'text'; inp.maxLength = 8; inp.autocomplete = 'off'; inp.spellcheck = false;
+    inp.setAttribute('autocapitalize', 'characters'); inp.setAttribute('autocorrect', 'off'); inp.setAttribute('aria-label', 'Код работника');
+    var msg = el('div', 'uwm', '');
+    var ft = el('div', 'dlgft uaf'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', 'Войти');
+    no.type = 'button'; ok.type = 'button';
+    var go = function () {
+      var c = String(inp.value || '').trim().replace(/\.0+$/, '');
+      if (!c) { msg.textContent = 'Введите код.'; return; }
+      // Тот же шаблон, что у склада (kassaWorkerName_): иначе касса впустила бы код, который склад не примет [Фейбл «склад» LOW-4]
+      if (!/^[0-9A-Za-zА-Яа-яЁё]{1,8}$/.test(c)) { msg.textContent = 'Код — только буквы и цифры, до 8 знаков.'; try { inp.select(); } catch (e) {} return; }
+      var n = uwName(c);
+      if (!n && /^\d+$/.test(c) && uwName(String(Number(c)))) { c = String(Number(c)); n = uwName(c); }   // «007» = 7, как вход в аппку [LOW-3]
+      if (!n) {
+        msg.textContent = UWF.length ? 'Код не найден. Если его только что добавили в «Настройки», подождите 5 минут.'
+          : 'Склад ещё не прислал список кодов — спрашиваю его, нажмите «Войти» ещё раз через несколько секунд.';
+        if (!UWF.length) sync(true);                 // список кодов приходит с kassa_tables — спросить сейчас, а не ждать освежения [Фейбл LOW-2]
+        try { inp.select(); } catch (e) {}
+        return;
+      }
+      UW = { c: c, n: n, at: Date.now(), sv: 0 }; uwSave(); renderUwho();
+      closeDlg();
+      if (typeof next === 'function') next();
     };
-    var go = function (mode) {
-      if (!same()) { closeDlg(); afterWrite(dno, { text: '⚠️ Состав заказа изменился, пока было открыто окно, — отметьте вещи ещё раз.', cls: 'warn' }); return; }
-      give(mode, mode === 'part' ? take : []);
-    };
-    all.onclick = function () { go('all'); };
-    only.onclick = function () { go('part'); };
-    ft.appendChild(all); ft.appendChild(only);
-    box.appendChild(ft);
+    ok.onclick = go;
+    no.onclick = function () { closeDlg(); };
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    box.appendChild(inp); box.appendChild(msg);
+    ft.appendChild(no); ft.appendChild(ok); box.appendChild(ft);
     d.appendChild(box);
     dlgShow();
+    setTimeout(function () { try { inp.focus(); } catch (e) {} }, 0);
   }
-  // «Упаковано не всё…» [владелец 04.11.2026] — копия «Не забрала всё…» без денег: отмечены вещи с ✓ экрана (галочек нет — все), упаковщик
-  // правит; записать можно, когда отмечена хоть одна. Заказ из одной вещи сюда не попадает (кнопка серая — renderActs).
-  function openUpakPart() {
-    var m = CUR && CUR.kind === 'card' ? CUR.model : null;
-    if (!m || m.open.length < 2 || tooFresh() || checkHold() || invHold() || !cardInScope() || draftOn()) return;
+  // ↩️ СНЯТЬ «УПАКОВАНО» [«Упаковка» v2 п.5, владелец 05.11.2026: «в архиве упаковки и при поиске упаковок, надо сделать возможность
+  // редактировать упаковку (допустим, добавили еще одну вещь в заказ и ее доупаковываем или случайно не отметили а упаковали)»].
+  // Доупаковать — обычным «✓ Упаковано»: добавленная вещь и так к упаковке (заказ открывают поиском или «Открыть заказ» из чека).
+  // Снять — это окно: упаковщик отмечает вещи, которых НЕТ в посылке; склад (kassa_unpak) возвращает в кол. B прежнее значение (счёт, пометку
+  // или пусто) — вещи снова к упаковке. Запись — прямым вопросом складу, без очереди: действие редкое, итог нужен сразу; код работника
+  // обязателен — снятие от имени человека (имя — в «Лог упаковки»).
+  function upPacked(m) { return (m && m.givenSel ? m.givenSel : []).filter(function (r) { return r.code === 'n' && !!m.sel && r.key === m.sel && r.mark === UMARK; }); }
+  function openUnpak() {
+    var m = CUR && CUR.kind === 'card' ? CUR.model : null, rows = upPacked(m);
+    if (!UPAK || !UP5 || !rows.length || tooFresh() || checkHold() || !cardInScope() || draftOn() || dlgOpen() || KST.open) return;
+    if (!uwOk()) { openUwDlg(openUnpak); return; }
     lastActivity = Date.now();
-    var rows = m.open.slice(), scr = uckOn(m), any = scr.some(Boolean);
-    var on = rows.map(function (r, i) { return any ? !!scr[i] : true; });
+    var on = rows.map(function () { return false; }), busy = false;
     var d = $('dlg'); d.textContent = '';
-    var box = el('div', 'dlgbox');
-    box.appendChild(el('h3', null, any ? 'Что упаковано? Проверьте галочки:' : 'Снимите галочку с вещей, которых НЕТ в посылке:'));
-    box.appendChild(el('div', 'sub', 'Заказ ' + m.no + ' · ' + m.c[0]));
-    var lst = el('div', 'lst');
-    var ft = el('div', 'dlgft'), s = el('div', 's'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
+    var box = el('div', 'dlgbox uask uok unp');
+    box.appendChild(el('h3', null, 'Снять «упаковано»'));
+    box.appendChild(el('div', 'sub', 'Заказ ' + m.no + ' · ' + m.c[0] + '. Отметьте вещи, которых НЕТ в посылке: в таблице у них вернётся прежнее (счёт, пометка или пусто), и они снова будут к упаковке.'));
+    var lst = el('div', 'lst'), msg = el('div', 'uwm', '');
+    var ft = el('div', 'dlgft uaf'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
     no.type = 'button'; ok.type = 'button';
-    function redraw() {
+    var redraw = function () {
       var n = on.filter(Boolean).length;
-      s.textContent = 'Упаковано ' + n + ' из ' + rows.length;
-      ok.disabled = !n;
-      ok.textContent = !n ? 'Отметьте упакованное' : n === rows.length ? '✓ Записать: упаковано всё' : '✓ Записать: упаковано ' + n;
-    }
+      ok.disabled = !n || busy;
+      ok.textContent = busy ? '⏳ Снимаю…' : !n ? 'Отметьте вещи' : '↩️ Снять «упаковано»: ' + n;
+    };
     rows.forEach(function (r, i) {
-      var b = el('button', 'ck' + (on[i] ? ' on' : '')); b.type = 'button';
-      var bx = el('div', 'bx', on[i] ? '✓' : '');
+      var b = el('button', 'ck'); b.type = 'button';
+      var bx = el('div', 'bx', '');
       b.appendChild(bx);
       var ph = el('div', 'cph'), th = thumbOf(m.P, r);
       if (th) ph.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
@@ -4070,30 +4303,116 @@
       var t = el('div', 't', (r.it[0] ? r.it[0] + ' | ' : '') + (itemName(m.P, r.it) || '—'));
       t.appendChild(el('small', null, [r.it[1], r.it[2]].map(function (x) { return String(x || '').replace(/\s*\n\s*/g, ' / ').trim(); }).filter(Boolean).join(' · ')));
       b.appendChild(t);
-      b.onclick = function () {
-        lastActivity = Date.now();
-        on[i] = !on[i]; b.className = 'ck' + (on[i] ? ' on' : ''); bx.textContent = on[i] ? '✓' : '';
-        redraw();
-      };
+      b.onclick = function () { if (busy) return; lastActivity = Date.now(); on[i] = !on[i]; b.className = 'ck' + (on[i] ? ' on' : ''); bx.textContent = on[i] ? '✓' : ''; redraw(); };
       lst.appendChild(b);
     });
-    no.onclick = function () { closeDlg(); };
-    var dtok = cardTok(), dno = m.no, dsnap = rows.map(function (r) { return itemKey(m.P, r); }).join('\n');
-    ok.onclick = function () {
-      if (cardTok() !== dtok || !CUR.model || CUR.model.no !== dno) { closeDlg(); return; }
-      if (CUR.model.open.map(function (r) { return itemKey(CUR.model.P, r); }).join('\n') !== dsnap) {
+    var dtok = cardTok(), dno = m.no, tid = CUR.h.t.id, nick = m.c[0], P = m.P, dsnap = rows.map(function (r) { return itemKey(P, r); }).join('\n');
+    no.onclick = function () { if (!busy) closeDlg(); };
+    ok.onclick = async function () {
+      if (busy) return;
+      var mm = CUR && CUR.kind === 'card' ? CUR.model : null;
+      if (cardTok() !== dtok || !mm || mm.no !== dno || upPacked(mm).map(function (r) { return itemKey(mm.P, r); }).join('\n') !== dsnap) {
+        closeDlg(); afterWrite(dno, { text: '⚠️ Заказ изменился, пока было открыто окно, — откройте «Изменить упаковку…» ещё раз.', cls: 'warn' }); return;
+      }
+      if (!uwOk()) { closeDlg(); openUwDlg(openUnpak); return; }   // 👤 код погас, пока окно стояло
+      var sel = rows.filter(function (r, i) { return on[i]; });
+      if (!sel.length) return;
+      busy = true; msg.textContent = ''; redraw();
+      var params = { src: tid, nick: nick, no: dno, a: JSON.stringify(sel.map(function (r) { return itemOf(P, r); })), n: newOp(), w: UW.c };
+      var r = null;
+      try { r = await jsonp('kassa_unpak', params, WAIT_WRITE); } catch (e) { r = null; }
+      if (r && r.net && !DENIED) { await sleep(2000); try { r = await jsonp('kassa_unpak', params, WAIT_WRITE); } catch (e) { r = null; } }   // «404» Google — тем же кодом: склад узнает повтор
+      busy = false;
+      if (r && r.error === 'bad_code') uwDrop();
+      if (r && r.ok) {
         closeDlg();
-        afterWrite(dno, { text: '⚠️ Состав заказа изменился, пока было открыто окно, — отметьте вещи ещё раз.', cls: 'warn' });
+        // Подтверждённые упаковки этого заказа больше не «досвечиваем» поверх свежей выжимки (overlayPack): склад собрал её уже после
+        // снятия, и наложение пометило бы снятую вещь упакованной снова — «упаковано K», а в таблице прежнее.
+        WQ_DONE = WQ_DONE.filter(function (x) { return !(x.tid === tid && x.nick === nick && x.upak && nk(x.no) === nk(dno)); });
+        packReset(tid);
+        var back = uniq((r.back || []).map(function (x) { return x ? '«' + x + '»' : 'пусто'; }));
+        finishWrite(dtok, dno, { text: '↩️ Снято «упаковано»: ' + things(Number(r.wrote) || sel.length) + ' — в таблице снова ' + (back.join(', ') || 'прежнее') + '; вещи снова к упаковке.', cls: 'ok' },
+          nick + ' ' + dno, ordOf(tid, nick, dno));
+        sync(true); udSoon();
         return;
       }
-      var take = []; on.forEach(function (v, i) { if (v) take.push(i); });
-      if (take.length) give('part', take);
+      msg.textContent = r && r.changed ? '⚠️ Эти вещи в таблице уже не «упакованы» (заказ изменился) — ничего не записано. Закройте окно и откройте заказ заново.'
+        : unknownOut(r) ? '⚠️ Ответ склада не пришёл — закройте окно и откройте заказ заново: снято или нет, покажет таблица.' : '⛔️ ' + failText(r);
+      redraw();
     };
-    ft.appendChild(s); ft.appendChild(no); ft.appendChild(ok);
-    box.appendChild(lst); box.appendChild(ft);
+    ft.appendChild(no); ft.appendChild(ok);
+    box.appendChild(lst); box.appendChild(msg); box.appendChild(ft);
     d.appendChild(box);
     dlgShow();
     redraw();
+  }
+  // «Открыть заказ» из чека [v2 п.5]: подробности закрываются, касса ищет заказ — доупаковать добавленную вещь или «Изменить упаковку…».
+  function upRcOpen(r) {
+    kstClose();
+    typed = String(r[1] || ''); pendingSearch = ''; renderNum();
+    go();
+  }
+  // Строка окна: мини-фото вещи (то же, что у карточки, — из кэша браузера), № и название, цвет и размер; справа — «✓ в посылку» или «остаётся».
+  function uRow(P, r, pk) {
+    var b = el('div', 'urw' + (pk ? '' : ' r')), ph = el('div', 'p'), th = thumbOf(P, r);
+    if (th) ph.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
+    else ph.appendChild(el('span', 'nph', 'нет фото'));
+    b.appendChild(ph);
+    var t = el('div', 't', (r.it[0] ? r.it[0] + ' | ' : '') + (itemName(P, r.it) || '—'));
+    t.appendChild(el('small', null, [r.it[1], r.it[2]].map(function (x) { return String(x || '').replace(/\s*\n\s*/g, ' / ').trim(); }).filter(Boolean).join(' · ')));
+    b.appendChild(t);
+    b.appendChild(el('div', 'c', pk ? '✓ в посылку' : 'остаётся'));
+    return b;
+  }
+  // Окно «Упаковано K из N» [п.4, вид Б макета — «список строками»]: что уходит в посылку и что остаётся. Окно — про ЭТОТ заказ и ЭТОТ состав
+  // (как «Не забрала всё…»): сменились — закрываем, не пишем. Кнопки подвала глухи 0,5 с (двойной щелчок по «Упаковано»), как у всех окон кассы.
+  function openUpakAsk(m, on, k) {
+    if (tooFresh() || checkHold() || invHold() || !cardInScope() || draftOn() || dlgOpen()) return;
+    lastActivity = Date.now();
+    var d = $('dlg'); d.textContent = '';
+    var box = el('div', 'dlgbox uask'), ft = el('div', 'dlgft uaf');
+    if (!k) {
+      box.appendChild(el('h3', null, 'Отметьте упакованные вещи'));
+      box.appendChild(el('div', 'sub', 'Ничего не отмечено — в таблицу ничего не записано. Нажмите на фото каждой вещи, которая лежит в посылке, и снова «✓ Упаковано».'));
+      var ex = el('div', 'uex'), ep = el('div', 'p'), th0 = thumbOf(m.P, m.open[0]);
+      if (th0) ep.style.backgroundImage = 'url("' + th0.replace(/"/g, '%22') + '")';
+      ep.appendChild(el('i', null, '✓'));
+      ex.appendChild(ep);
+      ex.appendChild(el('div', 't', 'Так выглядит отмеченная вещь: коричневая рамка и галочка в углу фото.'));
+      box.appendChild(ex);
+      var got = el('button', 'btn ok', 'Понятно'); got.type = 'button';
+      got.onclick = function () { closeDlg(); };
+      ft.appendChild(got); box.appendChild(ft);
+      d.appendChild(box);
+      dlgShow();
+      return;
+    }
+    var n = m.open.length, take = [];
+    on.forEach(function (v, i) { if (v) take.push(i); });
+    box.className = 'dlgbox uask uok';
+    box.appendChild(el('h3', null, 'Упаковано ' + k + ' из ' + n));
+    // Сколько остаётся — сразу под заголовком: у заказа из 8+ вещей строки «остаётся» уходят ниже прокрутки [Фейбл «сценарий» v6.25, LOW-3]
+    box.appendChild(el('div', 'sub', 'Заказ ' + m.no + ' · ' + m.c[0] + (k < n ? ' · не в посылке: ' + things(n - k) : '') + (UWK && UW ? ' · пакует: ' + UW.n : '')));   // 👤 чьё имя ляжет [Фейбл LOW-6]
+    var lst = el('div', 'ulst');
+    [true, false].forEach(function (pk) { m.open.forEach(function (r, i) { if (!!on[i] === pk) lst.appendChild(uRow(m.P, r, pk)); }); });
+    box.appendChild(lst);
+    var no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', k === n ? '✓ Записать: упаковано всё' : '✓ Записать: упаковано ' + k);
+    no.type = 'button'; ok.type = 'button';
+    var dtok = cardTok(), dno = m.no, dsnap = m.open.map(function (r) { return itemKey(m.P, r); }).join('\n');
+    var same = function () {
+      var mm = CUR && CUR.kind === 'card' ? CUR.model : null;
+      return cardTok() === dtok && !!mm && mm.no === dno && mm.open.map(function (r) { return itemKey(mm.P, r); }).join('\n') === dsnap;
+    };
+    no.onclick = function () { closeDlg(); };
+    ok.onclick = function () {
+      if (!same()) { closeDlg(); afterWrite(dno, { text: '⚠️ Состав заказа изменился, пока было открыто окно, — проверьте отметки и нажмите «✓ Упаковано» ещё раз.', cls: 'warn' }); return; }
+      if (UWK && !uwOk()) { closeDlg(); openUwDlg(upakAll); return; }   // 👤 код погас, пока окно стояло (10 мин без дела) — сперва код, потом окно заново
+      give('part', take);    // отмечены все — give сам сделает 'all' (без паузы сверки до 5 с, которой стоит голое «Забрала всё») [Фейбл LOW-3]
+    };
+    ft.appendChild(no); ft.appendChild(ok);
+    box.appendChild(ft);
+    d.appendChild(box);
+    dlgShow();
   }
   // 📊 «УПАКОВАНО СЕГОДНЯ: N заказов · M вещей» [макет v3] — полоса внизу вместо «Забрано сегодня» (у упаковки денег нет). Цифры — со склада
   // (kassa_upak_stat: «Лог упаковки» всех упаковщиков), освежаем: при открытии, через 1,5 с после своей легшей записи, раз в 2 мин, пока
@@ -4130,8 +4449,9 @@
   }
 
   $('giveAll').onclick = function () { if (UPAK) upakAll(); else give('all', []); };   // 📦 «Упаковано» — со своим переспросом
-  $('givePart').onclick = function () { if (UPAK) openUpakPart(); else openPart(); };
+  $('givePart').onclick = function () { if (!UPAK) openPart(); };              // 📦 у упаковщика кнопки нет (v6.25)
   $('noPay').onclick = function () { openNoPay(); };
+  $('unPak').onclick = function () { openUnpak(); };
   // Щелчок в тёмный фон закрывает окно — но не второй щелчок двойного по кнопке, открывшей его [Фейбл «сценарий», MED-4].
   $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg') && Date.now() - dlgAt > 500) closeDlg(); });
   // ⛔️ Первые 0,5 с кнопки подвала окна глухи [Фейбл, круг 2, HIGH-1]: на телефоне второй тап двойного по «Не забрала
