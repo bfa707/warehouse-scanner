@@ -709,6 +709,7 @@
   .urw .t { min-width: 0; flex: 1 1 auto; font-size: 17px; font-weight: 800; line-height: 1.2; word-break: break-word; }
   .urw .t small { display: block; color: var(--mute); font-size: 14px; font-weight: 600; margin-top: 3px; }
   .urw .c { flex: none; font-size: 14px; font-weight: 800; color: #fff; background: var(--ubr); border-radius: 8px; padding: 5px 10px; white-space: nowrap; }
+  button.urw { width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; }   /* [v6.26] строка окна — кнопка галочки */
   .urw.r { border-color: var(--line); background: #fff; }
   .urw.r .p { filter: grayscale(1); opacity: .6; }
   .urw.r .t { color: var(--mute); }
@@ -732,6 +733,7 @@
   body.upak #uwho.no { color: var(--ubr); }
   .uwi { height: 58px; width: 100%; box-sizing: border-box; font: inherit; font-size: 28px; font-weight: 800; letter-spacing: .1em; text-align: center;
          text-transform: uppercase; border: 3px solid var(--ubr2); border-radius: 12px; padding: 0 12px; color: var(--ink); background: #fff; }
+  .uwd h3 { text-align: center; }   /* 👤 «Введите Ваш код» — по центру, шрифт заголовка окна [владелец 06.11.2026] */
   .uwm { min-height: 20px; color: var(--bad); font-size: 15px; font-weight: 700; line-height: 1.35; }
   /* Ничего не отмечено — подсказка с примером отмеченной вещи */
   .uex { display: flex; align-items: center; gap: 14px; background: var(--ubrbg); border: 1px solid var(--ubrline); border-radius: 14px; padding: 12px 14px; }
@@ -811,7 +813,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.25 · 05.11.2026';   // v6.25 — «Упаковка» v2: одна кнопка «✓ Упаковано» — в посылку только отмеченные вещи и всегда через окно с мини-фото (вид Б), без отметок — подсказка [владелец 05.11.2026]; v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.26 · 06.11.2026';   // v6.26 — «Упаковка»: «Кто пакует?» сразу при входе и снова после 10 мин без дела; склад без кода работника не пишет «unisend» [владелец 06.11.2026: «Зашел сегодня на линк, мой код никто не спросил»]; v6.25 — «Упаковка» v2: одна кнопка «✓ Упаковано» — в посылку только отмеченные вещи и всегда через окно с мини-фото (вид Б), без отметок — подсказка [владелец 05.11.2026]; v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var ANON = !/iPhone|iPad|iPod|Android/i.test(String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));   // 👥 компьютер — запросы без cookie Google [v6.22]
@@ -1105,7 +1107,7 @@
     // HIGH-5]: вещи уже у клиентов. Вернут доступ (новая ссылка «Касса») — касса дошлёт их сама тем же кодом. Очередь в памяти стоит.
     var db = DB; DB = null;
     idbWipeClients(db);
-    closeDlg();
+    closeDlg(true);                              // 🔒 и замок кода: ключ отозван [v6.26]
     kstReset();                                  // 📊 ники клиентов «Забрано сегодня» — тоже вон (живут только в памяти вкладки)
     showDeny(pend);
   }
@@ -1199,6 +1201,7 @@
       // 👤 [v6.25, v2 п.1] отпечатки кодов работников — ключу 📦; ключ кассы — ни отпечатков, ни кода упаковщика в памяти браузера
       if (tr && tr.ok && tr.upak === 1) { uwkSet(tr.wk === 1); uwfSet(tr.wf); UP5 = tr.up5 === 1; }
       if (tr && tr.ok && tr.upak === 0) { uwkSet(false); uwfSet([]); uwDrop(); }   // ключ кассы — ни кода, ни отпечатков (и погасших) [LOW-6]
+      if (tr && tr.ok && tr.upak === 1) uwAsk();     // 👤 вход в «Упаковку» — «Кто пакует?» сразу, а не на «✓ Упаковано» [v6.26]
       if (DENIED) return;
       if (tr || packOnly) answered++;
       if (tr && tr.ok && tr.complete && tr.list && tr.list.length) {
@@ -2660,7 +2663,10 @@
       // с «×» и тем, что в посылке. ⛔️ Галочки ушедших вещей обратно НЕ возвращаем [Кодекс HIGH, круг 2]: исход бывает неизвестен (склад
       // записал, ответ потерян) — галочка по приметам переехала бы на оставшуюся такую же вещь, и «Упаковано» записало бы неупакованную.
       packReset(j.tid);
-      if (r && r.error === 'bad_code' && UW && j.params && j.params.w === UW.c) uwDrop();   // 👤 склад не узнал ТЕКУЩИЙ код — забываем [v2 п.1, LOW-5]
+      // 👤 склад не узнал ТЕКУЩИЙ код — забываем [v2 п.1, LOW-5], и сразу замок «Кто пакует?» [v6.26]
+      if (r && r.error === 'bad_code' && UW && j.params && j.params.w === UW.c) uwGone();
+      // 👤 склад не пишет без кода (v633): запись ушла без него — склад кода ждёт, спросить сразу [v6.26]
+      if (r && r.error === UPAK_NEED_CODE) { uwkSet(true); setTimeout(uwAsk, 0); }
       fb = upakFlash(r, j.no, 0);
       if (r.changed && !(r.total === 0 && r.given)) fb.text = '⚠️ Заказ изменился в таблице — «unisend» не записан. В посылке: ' + keysText(j.keys) +
         '. Проверьте заказ, отметьте галочками только это и снова «✓ Упаковано».';
@@ -2984,6 +2990,7 @@
     // 📦 Ключ не того режима: ссылка упаковщика пишет только «unisend», ссылка кассы — только выдачу [владелец 04.11.2026].
     if (e === 'upak_key') return 'Это ссылка «Упаковки» — выдачу кассы с неё не записать. Откройте кассу по ссылке кассы.';
     if (e === 'bad_code') return 'Склад не узнал код работника (его нет в «Настройках») — «unisend» не записан. Введите свой код и нажмите «✓ Упаковано» ещё раз.';
+    if (e === UPAK_NEED_CODE) return 'Склад не пишет «unisend» без кода работника — ничего не записано. Введите свой код в окне «Кто пакует?» и нажмите «✓ Упаковано» ещё раз.';   // 👤 склад v633 [v6.26]
     if (e === 'upak_denied') return 'Это не ссылка «Упаковки» — «unisend» с неё не записать. Попросите у владельца ссылку упаковщика (ключ с 📦).';
     if (e === 'efir') return 'Это заказ эфира — касса его не выдаёт, отметьте в приложении склада.';
     if (e === 'ambiguous') return 'Таких одинаковых вещей у клиента несколько — снимите «нет» в приложении склада («Собрать заказ»).';
@@ -3745,12 +3752,19 @@
   // 📦 Когда закрылось окно: второй щелчок двойного по «Назад» / «Понятно» не ставит и не снимает галочку на плитке под кнопкой
   // [Фейбл «сценарий» v6.25, LOW-2] — uckToggle молчит 0,4 с.
   var dlgShut = 0;
-  function closeDlg() {
+  // 🔒 Замок «Введите Ваш код» закрывают ТОЛЬКО явно — force: вход, смена режима на кассу, отказ ключа, склад перестал сверять код [v6.26].
+  // Прочие закрытия (фоновое освежение карточки, возврат к свежей закупке, showHome) его не трогают: набранный код не стирается
+  // [Кодекс r1 LOW-5], замок не мигает.
+  function closeDlg(force) {
     var d = $('dlg'); if (!d) return;
+    if (UW_LOCK && !force) return;
     var was = d.className === 'on';
     if (was) dlgShut = Date.now();
+    UW_LOCK = false;
     d.className = ''; d.textContent = '';
-    if (was && DESK.matches) { try { $('num').focus(); } catch (e) {} }
+    // 🔒 Кода нет (сейчас встанет замок) — курсор в поиск не ставим: отложенный select() поиска уводил фокус из поля кода, и код
+    // набирался наполовину в поиск [Фейбл r1 «замок» MED-1, v6.26]
+    if (was && DESK.matches && !(UPAK && UWK && !UW)) { try { $('num').focus(); } catch (e) {} }
     if (was) setTimeout(invLater, 0);   // ответ про счёт, пришедший при открытом окне (п.3)
   }
   // Окно открыто — фокус ни на чём: случайная клавиша не закроет ни окно, ни заказ, а Enter/пробел не «щёлкнут» вещь
@@ -3769,6 +3783,7 @@
   ['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(function (t) { document.addEventListener(t, touchCard, { capture: true, passive: true }); });
   function dlgShow() {
     var d = $('dlg'); d.className = 'on'; dlgAt = Date.now();
+    UW_LOCK = false;                // 🔒 любое показанное окно — не замок (замок ставит openUwDlg после показа) [v6.26]
     try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
   }
   // 📦 У упаковки — тот же размер, что у её плитки (480, utile): окно «Упаковано K из N» и чек берут фото из кэша браузера, а не качают
@@ -4092,7 +4107,7 @@
     if (on === UPAK) return;
     UPAK = on;
     lsSet('kassa_mode', on ? 'upak' : '');
-    closeDlg();
+    closeDlg(true);                               // 🔒 и замок кода: режим сменился [v6.26]
     upakApply();
     if (CUR && CUR.kind === 'card' && CUR.h) showCard(CUR.h, CUR.q, CUR.banner || null, CUR.fromList, CUR.no, CUR.flash, CUR.who);
     else if (!CUR) showHome();
@@ -4133,6 +4148,10 @@
   function uckToggle(i) {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null;
     if (!UPAK || !m || !m.no || !m.open[i] || (CUR.flash && CUR.flash.done) || dlgOpen() || Date.now() - dlgShut < 400) return;
+    uckFlip(m, i);
+  }
+  // Поставить / снять галочку вещи i заказа m — с плитки карточки и из окна «Упаковано K из N» [v6.26]: одна память, одна перерисовка.
+  function uckFlip(m, i) {
     lastActivity = Date.now();
     var on = uckOn(m), key = itemKey(m.P, m.open[i]), ok = uckOrd(m);
     var e = UCK[ok] || (UCK[ok] = { at: 0, k: {} });
@@ -4173,11 +4192,17 @@
   // его сам и пишет в «Лог упаковки» имя (kassaUpak_). 10 мин без нажатий — код забыт, следующее «✓ Упаковано» спросит его снова. Помним в
   // браузере (перезагрузка вкладки не выгоняет) с отметкой последнего действия — её пишем не чаще раза в 30 с.
   var UW_IDLE = 10 * 60000, UW_KEY = 'upak_who', UWF_KEY = 'upak_wf';
+  // Отказ склада v633 упаковке без кода — код ошибки ДОСЛОВНО как KASSA_UPAK_NEED_CODE в apps-script/kassa.js (совпадение стережёт
+  // tests/test-kassa-upak.js): касса до v6.26 этого кода не знает и показывает его текстом, поэтому он написан словами.
+  var UPAK_NEED_CODE = 'нужен код работника — закройте и откройте «Упаковку» два раза';
   // Склад сверяет код (wk: 1 в ответе kassa_tables ключу 📦, склад v631+) — только тогда касса его спрашивает и шлёт: склад без wk (откат
   // склада, страница вышла раньше) — упаковка пишет без имени, как v6.24, а не встаёт целиком [Фейбл «склад» MED-1]. Помним в браузере.
-  var UWK = lsGet('upak_wk') === '1';
+  // 🔒 Помним «склад сверяет код» вместе с КЛЮЧОМ ссылки [v6.26; Фейбл r1 «замок» LOW-7, «сценарий» LOW-7]: в этом браузере открыли ссылку кассы —
+  // замок из памяти не встаёт, кассир не ждёт ответа склада перед окном кода без выхода. Прежняя отметка '1' (v6.25) — тоже не основание.
+  var UWK_TAG = 'k:' + (KEY || '');
+  var UWK = lsGet('upak_wk') === UWK_TAG;
   var UP5 = false;   // ↩️ «Изменить упаковку…» — только когда склад скажет up5: 1 (снятие пока выключено на складе, kassaUnpakOn_)
-  function uwkSet(on) { on = !!on; if (on === UWK) return; UWK = on; lsSet('upak_wk', on ? '1' : ''); if (!on && UW) uwDrop(); renderUwho(); }
+  function uwkSet(on) { on = !!on; if (on === UWK) return; UWK = on; lsSet('upak_wk', on ? UWK_TAG : ''); if (!on && UW) uwDrop(); if (!on && UW_LOCK) closeDlg(true); renderUwho(); }   // 🔒 склад кодов не сверяет — замок без выхода не оставляем
   var UWF = (function () { try { var a = JSON.parse(lsGet(UWF_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } })();
   var UW = (function () {
     var o = null;
@@ -4205,13 +4230,33 @@
     UWF = wf.filter(function (x) { return x && typeof x.h === 'string' && typeof x.n === 'string' && x.n; });
     lsSet(UWF_KEY, UWF.length ? JSON.stringify(UWF) : '');
   }
-  function uwOk() { if (UW && Date.now() - UW.at < UW_IDLE) return true; if (UW) uwDrop(); return false; }
+  function uwOk() { if (UW && Date.now() - UW.at < UW_IDLE) return true; if (UW) uwGone(); return false; }
   function uwSave() { if (UW) { UW.sv = UW.at; lsSet(UW_KEY, JSON.stringify({ c: UW.c, n: UW.n, at: UW.at })); } }
   function uwDrop() { UW = null; lsSet(UW_KEY, ''); renderUwho(); }
+  // 🔒 ЗАМОК «КТО ПАКУЕТ?» — ПОВЕРХ ВСЕГО, КАК ВХОД В АППКУ [v6.26, владелец 06.11.2026: «Зашел сегодня на линк, мой код никто не спросил»;
+  // «Он должен появляться поверх всего (как в аппке)»; его слова 05.11: «показывать ввод кода пароля (и чтобы он быстро протухал при
+  // бездействии)»]. До v6.26 окно появлялось только на «✓ Упаковано» и закрывалось «Назад». Теперь, пока у «Упаковки» нет живого кода
+  // (вход, 10 мин без дела, склад не узнал код), «Кто пакует?» стоит поверх всего: другие окна, подробности «Упаковано сегодня» и
+  // увеличенное фото закрываются (как вход в аппку гасит все окна); «Назад» нет, Esc и щелчок мимо окна его не закрывают. С живым кодом
+  // окно открывает только «сменить» — тогда «Назад» есть. Склад кодов не сверяет (откат, нет wk) — замка нет, как в v6.25.
+  // ⚡ Складу — ни одного запроса: имя по отпечаткам кодов на странице.
+  var UW_LOCK = false;                              // сейчас на экране замок (окно кода без «Назад»)
+  var uwSyncAt = 0;                                 // когда окно кода последний раз спрашивало склад о кодах
+  function uwNeed() { return UPAK && UWK && !DENIED && !uwOk(); }
+  function uwGone() { uwDrop(); setTimeout(uwAsk, 0); }   // код погас или отвергнут — замок; после текущего нажатия: его кнопка могла сама спросить код
+  function uwAsk() {
+    if ((UW_LOCK && dlgOpen()) || !uwNeed()) return;
+    if (dlgOpen()) closeDlg();
+    if (KST.open) kstClose();
+    if ($('zoom').style.display === 'flex') $('zoom').onclick();
+    openUwDlg(null);
+  }
   function uwTouch() {
     if (!UW || !UPAK) return;
     var t = Date.now();
-    if (t - UW.at >= UW_IDLE) { uwDrop(); return; }   // сперва — не погас ли: нажатие после 10 мин тишины код не продлевает
+    // сперва — не погас ли: нажатие после 10 мин тишины код не продлевает, а ставит замок — сразу, в том же нажатии: кнопка под
+    // пальцем уже не сработает (сперва код, как в аппке после простоя)
+    if (t - UW.at >= UW_IDLE) { uwDrop(); uwAsk(); return; }
     UW.at = t;
     if (t - UW.sv > 30000) uwSave();
   }
@@ -4225,19 +4270,33 @@
   }
   ['pointerdown', 'keydown'].forEach(function (t) { document.addEventListener(t, uwTouch, { capture: true, passive: true }); });
   window.addEventListener('pagehide', function () { if (UW && Date.now() - UW.at < UW_IDLE) uwSave(); });   // отметка последнего нажатия — и при закрытии вкладки [Фейбл LOW-3]
-  setInterval(function () { if (UW && Date.now() - UW.at >= UW_IDLE) uwDrop(); }, 30000);
-  $('uwho').onclick = function () { if (!dlgOpen() && !KST.open) openUwDlg(null); };
+  setInterval(function () { if (UW && Date.now() - UW.at >= UW_IDLE) uwGone(); uwAsk(); }, 30000);
+  // вернулись во вкладку (телефон разблокировали) — часы страницы могли спать: погас ли код — замок сразу [v6.26]
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    if (UW && Date.now() - UW.at >= UW_IDLE) uwGone();
+    uwAsk();
+  });
+  // «сменить» — как тап по имени в аппке [владелец 21.09.2026: «сразу выход и сразу окно кода»]: код забыт сразу, замок [v6.26;
+  // Фейбл r1 «сценарий» LOW-8: уходящая упаковщица гасит свой код, следующая не пакует под её именем].
+  $('uwho').onclick = function () { if (dlgOpen() || KST.open) return; if (UW) uwDrop(); uwAsk(); };
   // Окно «Кто пакует?»: код → имя по отпечаткам, без запроса к складу. next — что сделать после входа (окно «Упаковано K из N»).
+  // 🔒 Живого кода нет — это замок [v6.26]: «Назад» нет, Esc и щелчок мимо не закрывают (UW_LOCK). Есть — «сменить»: с «Назад».
   function openUwDlg(next) {
     if (dlgOpen() || KST.open) return;
-    lastActivity = Date.now();
+    var lock = !uwOk();
+    if (!lock) lastActivity = Date.now();            // 🔒 замок ставит не человек — простой не обнуляем [Кодекс r1 MED-1]
     var d = $('dlg'); d.textContent = '';
     var box = el('div', 'dlgbox uask uwd');
-    box.appendChild(el('h3', null, 'Кто пакует?'));
-    box.appendChild(el('div', 'sub', 'Введите свой код работника — тот же, что в приложении склада. 10 минут без дела — касса забудет код сама.'));
+    box.appendChild(el('h3', null, 'Введите Ваш код'));   // [владелец 06.11.2026: «убери эти тексты, слишком много воды… Введите Ваш код (размести по центру, тем же шрифтом)»]
     var inp = document.createElement('input');
     inp.className = 'uwi'; inp.type = 'text'; inp.maxLength = 8; inp.autocomplete = 'off'; inp.spellcheck = false;
     inp.setAttribute('autocapitalize', 'characters'); inp.setAttribute('autocorrect', 'off'); inp.setAttribute('aria-label', 'Код работника');
+    // 🔒 Замок встал от нажатия — цифры, набранные по привычке (номер заказа), в поле кода не идут: первые 0,7 с поле набор не принимает
+    // [Фейбл r1 «замок» LOW-8, «сценарий» LOW-3: хвост «1151» совпал бы с кодом коллеги «151»]. Часы — performance.now (монотонные).
+    var shown = (window.performance && performance.now) ? performance.now() : 0;
+    var deaf = function () { return lock && window.performance && performance.now && performance.now() - shown < 700; };
+    inp.addEventListener('input', function () { if (deaf()) { inp.value = ''; shown = performance.now(); } });   // набор не прервался — глухота продлевается [Фейбл r2 LOW-1, Кодекс r2 LOW-2]
     var msg = el('div', 'uwm', '');
     var ft = el('div', 'dlgft uaf'), no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', 'Войти');
     no.type = 'button'; ok.type = 'button';
@@ -4251,21 +4310,26 @@
       if (!n) {
         msg.textContent = UWF.length ? 'Код не найден. Если его только что добавили в «Настройки», подождите 5 минут.'
           : 'Склад ещё не прислал список кодов — спрашиваю его, нажмите «Войти» ещё раз через несколько секунд.';
-        if (!UWF.length) sync(true);                 // список кодов приходит с kassa_tables — спросить сейчас, а не ждать освежения [Фейбл LOW-2]
+        // список кодов приходит с kassa_tables — спросить сейчас: отпечатков нет — сразу [Фейбл LOW-2]; код не найден — не чаще раза в минуту
+        // (новый код в «Настройках», замок стоит давно, фоновые освежения уснули) [Кодекс r1 MED-3, v6.26]
+        if (!UWF.length || Date.now() - uwSyncAt > 60000) { uwSyncAt = Date.now(); sync(true); }
         try { inp.select(); } catch (e) {}
         return;
       }
       UW = { c: c, n: n, at: Date.now(), sv: 0 }; uwSave(); renderUwho();
-      closeDlg();
+      lastActivity = Date.now();
+      closeDlg(true);
       if (typeof next === 'function') next();
     };
     ok.onclick = go;
     no.onclick = function () { closeDlg(); };
-    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (deaf()) { inp.value = ''; return; } go(); } });
     box.appendChild(inp); box.appendChild(msg);
-    ft.appendChild(no); ft.appendChild(ok); box.appendChild(ft);
+    if (!lock) ft.appendChild(no);
+    ft.appendChild(ok); box.appendChild(ft);
     d.appendChild(box);
     dlgShow();
+    UW_LOCK = lock;
     setTimeout(function () { try { inp.focus(); } catch (e) {} }, 0);
   }
   // ↩️ СНЯТЬ «УПАКОВАНО» [«Упаковка» v2 п.5, владелец 05.11.2026: «в архиве упаковки и при поиске упаковок, надо сделать возможность
@@ -4353,8 +4417,10 @@
     go();
   }
   // Строка окна: мини-фото вещи (то же, что у карточки, — из кэша браузера), № и название, цвет и размер; справа — «✓ в посылку» или «остаётся».
+  // [v6.26] строка — кнопка: тап ставит или снимает галочку прямо в окне (uRowSet перекрашивает её на месте).
   function uRow(P, r, pk) {
-    var b = el('div', 'urw' + (pk ? '' : ' r')), ph = el('div', 'p'), th = thumbOf(P, r);
+    var b = el('button', 'urw' + (pk ? '' : ' r')), ph = el('div', 'p'), th = thumbOf(P, r);
+    b.type = 'button';
     if (th) ph.style.backgroundImage = 'url("' + th.replace(/"/g, '%22') + '")';
     else ph.appendChild(el('span', 'nph', 'нет фото'));
     b.appendChild(ph);
@@ -4364,6 +4430,7 @@
     b.appendChild(el('div', 'c', pk ? '✓ в посылку' : 'остаётся'));
     return b;
   }
+  function uRowSet(b, pk) { b.classList.toggle('r', !pk); b.querySelector('.c').textContent = pk ? '✓ в посылку' : 'остаётся'; }
   // Окно «Упаковано K из N» [п.4, вид Б макета — «список строками»]: что уходит в посылку и что остаётся. Окно — про ЭТОТ заказ и ЭТОТ состав
   // (как «Не забрала всё…»): сменились — закрываем, не пишем. Кнопки подвала глухи 0,5 с (двойной щелчок по «Упаковано»), как у всех окон кассы.
   function openUpakAsk(m, on, k) {
@@ -4387,17 +4454,36 @@
       dlgShow();
       return;
     }
+    // [v6.26, владелец 06.11.2026: «позволь и из этого окна еще выбрать вещь (чтобы я мог и тут поставить либо снять галочку)»] — тап по строке
+    // ставит / снимает ту же галочку, что на плитке (uckFlip): заголовок, «не в посылке», кнопка и плитки позади — сразу. Порядок строк — как
+    // при открытии (строка под пальцем не прыгает); из одинаковых вещей отмечены первые по порядку — как на карточке. Ничего не отмечено —
+    // «Записать» серая (ничего не упаковал — ничего не пишем). Первые 0,4 с строки глухи: второй щелчок двойного по «✓ Упаковано».
     var n = m.open.length, take = [];
-    on.forEach(function (v, i) { if (v) take.push(i); });
     box.className = 'dlgbox uask uok';
-    box.appendChild(el('h3', null, 'Упаковано ' + k + ' из ' + n));
-    // Сколько остаётся — сразу под заголовком: у заказа из 8+ вещей строки «остаётся» уходят ниже прокрутки [Фейбл «сценарий» v6.25, LOW-3]
-    box.appendChild(el('div', 'sub', 'Заказ ' + m.no + ' · ' + m.c[0] + (k < n ? ' · не в посылке: ' + things(n - k) : '') + (UWK && UW ? ' · пакует: ' + UW.n : '')));   // 👤 чьё имя ляжет [Фейбл LOW-6]
-    var lst = el('div', 'ulst');
-    [true, false].forEach(function (pk) { m.open.forEach(function (r, i) { if (!!on[i] === pk) lst.appendChild(uRow(m.P, r, pk)); }); });
+    var h3 = el('h3', null, ''), sub = el('div', 'sub', '');
+    box.appendChild(h3); box.appendChild(sub);
+    var lst = el('div', 'ulst'), rows = [];
+    [true, false].forEach(function (pk) { m.open.forEach(function (r, i) { if (!!on[i] === pk) { var b = uRow(m.P, r, pk); b.setAttribute('data-k', String(i)); rows.push(b); lst.appendChild(b); } }); });
     box.appendChild(lst);
-    var no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', k === n ? '✓ Записать: упаковано всё' : '✓ Записать: упаковано ' + k);
+    var no = el('button', 'btn no', 'Назад'), ok = el('button', 'btn ok', '');
     no.type = 'button'; ok.type = 'button';
+    var paint = function () {
+      on = uckOn(m); take = []; on.forEach(function (v, i) { if (v) take.push(i); }); k = take.length;
+      h3.textContent = 'Упаковано ' + k + ' из ' + n;
+      // Сколько остаётся — сразу под заголовком: у заказа из 8+ вещей строки «остаётся» уходят ниже прокрутки [Фейбл «сценарий» v6.25, LOW-3]
+      sub.textContent = 'Заказ ' + m.no + ' · ' + m.c[0] + (k < n ? ' · не в посылке: ' + things(n - k) : '') + (UWK && UW ? ' · пакует: ' + UW.n : '');   // 👤 чьё имя ляжет [Фейбл LOW-6]
+      rows.forEach(function (b) { uRowSet(b, !!on[Number(b.getAttribute('data-k'))]); });
+      ok.textContent = !k ? 'Ничего не отмечено' : k === n ? '✓ Записать: упаковано всё' : '✓ Записать: упаковано ' + k;
+      ok.disabled = !k;
+    };
+    lst.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.urw') : null;
+      if (!b || Date.now() - dlgAt < 400) return;
+      var i = Number(b.getAttribute('data-k'));
+      if (!m.open[i] || !same()) return;              // состав сменился — «Записать» само закроет окно и скажет почему
+      uckFlip(m, i);
+      paint();
+    });
     var dtok = cardTok(), dno = m.no, dsnap = m.open.map(function (r) { return itemKey(m.P, r); }).join('\n');
     var same = function () {
       var mm = CUR && CUR.kind === 'card' ? CUR.model : null;
@@ -4406,12 +4492,14 @@
     no.onclick = function () { closeDlg(); };
     ok.onclick = function () {
       if (!same()) { closeDlg(); afterWrite(dno, { text: '⚠️ Состав заказа изменился, пока было открыто окно, — проверьте отметки и нажмите «✓ Упаковано» ещё раз.', cls: 'warn' }); return; }
+      if (!take.length) return;                         // ничего не отмечено — не пишем [v6.26]
       if (UWK && !uwOk()) { closeDlg(); openUwDlg(upakAll); return; }   // 👤 код погас, пока окно стояло (10 мин без дела) — сперва код, потом окно заново
       give('part', take);    // отмечены все — give сам сделает 'all' (без паузы сверки до 5 с, которой стоит голое «Забрала всё») [Фейбл LOW-3]
     };
     ft.appendChild(no); ft.appendChild(ok);
     box.appendChild(ft);
     d.appendChild(box);
+    paint();
     dlgShow();
   }
   // 📊 «УПАКОВАНО СЕГОДНЯ: N заказов · M вещей» [макет v3] — полоса внизу вместо «Забрано сегодня» (у упаковки денег нет). Цифры — со склада
@@ -4453,7 +4541,7 @@
   $('noPay').onclick = function () { openNoPay(); };
   $('unPak').onclick = function () { openUnpak(); };
   // Щелчок в тёмный фон закрывает окно — но не второй щелчок двойного по кнопке, открывшей его [Фейбл «сценарий», MED-4].
-  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg') && Date.now() - dlgAt > 500) closeDlg(); });
+  $('dlg').addEventListener('click', function (e) { if (e.target === $('dlg') && Date.now() - dlgAt > 500) closeDlg(); });   // 🔒 замок кода closeDlg без force не закрывает [v6.26]
   // ⛔️ Первые 0,5 с кнопки подвала окна глухи [Фейбл, круг 2, HIGH-1]: на телефоне второй тап двойного по «Не забрала
   // всё…» попадал в «✅ Записать: забрала всё» — и отказанные вещи получали zabrala. Ловим до кнопок (фаза перехвата).
   // Галочки не глушим: снятая по ошибке видна сразу («Забрала 4 из 5»), а быстрый кассир не теряет нажатие.
@@ -4524,7 +4612,8 @@
   // select() через setTimeout срабатывал уже ПОСЛЕ первой цифры, и вторая её заменяла: «1321» → «321» → карточка чужого
   // клиента с хвостом 321. Прежнее содержимое такая клавиша и так заменяет (select() тут же, до её вставки).
   var keyFocus = false;
-  numEl.addEventListener('focus', function () { if (DESK.matches && !keyFocus) setTimeout(function () { try { numEl.select(); } catch (e) {} }, 0); });
+  // 🔒 Замок встал от щелчка в поле поиска (10 мин тишины) — отложенное выделение поиска фокус у замка не забирает [Фейбл r2 «замок» MED-1, v6.26]
+  numEl.addEventListener('focus', function () { if (DESK.matches && !keyFocus) setTimeout(function () { if (UW_LOCK && dlgOpen()) return; try { numEl.select(); } catch (e) {} }, 0); });
   numEl.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); go(); }
   });
@@ -4537,8 +4626,15 @@
       if (!(ae && ae.closest && ae.closest('#dlg .dlgft'))) e.preventDefault();
       return;
     }
+    // 🔒 Tab в замке ходит только между полем кода и «Войти» — фокус не уходит в поиск позади [Кодекс r1 LOW-4, v6.26]
+    if (e.key === 'Tab' && UW_LOCK && dlgOpen()) {
+      e.preventDefault();
+      var ui = document.querySelector('#dlg .uwi'), ub = document.querySelector('#dlg .dlgft .ok');
+      try { (document.activeElement === ui && ub ? ub : ui).focus(); } catch (er) {}
+      return;
+    }
     if (e.key === 'Escape') {
-      if (dlgOpen()) { closeDlg(); e.preventDefault(); return; }   // и во время записи [Фейбл, круг 2, MED-3]
+      if (dlgOpen()) { closeDlg(); e.preventDefault(); return; }   // и во время записи [Фейбл, круг 2, MED-3]; 🔒 замок кода closeDlg без force не закрывает [v6.26]
       if ($('zoom').style.display === 'flex') { $('zoom').onclick(); return; }
       // 📊 «Забрано сегодня»: Esc закрывает чек, потом подробности — и только их (карточку на кассе не трогает) [v6.15]
       if (KST.rc) { KST.rc = null; renderRc(); e.preventDefault(); return; }
@@ -4632,7 +4728,7 @@
   // пробуждению, раньше, чем оно засчитается за действие кассира.
   var IDLE_BACK = 10 * 60000;
   function idleBack() {
-    if (!SEL || DENIED || !TABLES || !TABLES.list.length || dlgOpen()) return false;
+    if (!SEL || DENIED || !TABLES || !TABLES.list.length || (dlgOpen() && !UW_LOCK)) return false;   // 🔒 замок кода возврату не мешает [Кодекс r1 MED-1, v6.26]
     if (Date.now() - lastActivity < IDLE_BACK) return false;
     keepFail();
     typed = ''; pendingSearch = ''; renderNum();
@@ -4712,6 +4808,7 @@
     } catch (e) { DB = null; }
     if (DENIED) return;
     renderTbl(); renderSync(); if (!CUR) showHome();
+    uwAsk();                                                   // 👤 «Упаковка» из памяти браузера — «Кто пакует?» сразу, до ответа склада [v6.26]
     sync();
     kstFetch('');                                              // 📊 «Забрано сегодня» — со склада, параллельно со списком [v6.15]
     udFetch();                                                 // 📦 «Упаковано сегодня» — только в режиме упаковки [v6.21]
