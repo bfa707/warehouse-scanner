@@ -813,7 +813,7 @@
 <script>
 (function () {
   'use strict';
-  var VER = 'v6.26 · 06.11.2026';   // v6.26 — «Упаковка»: «Кто пакует?» сразу при входе и снова после 10 мин без дела; склад без кода работника не пишет «unisend» [владелец 06.11.2026: «Зашел сегодня на линк, мой код никто не спросил»]; v6.25 — «Упаковка» v2: одна кнопка «✓ Упаковано» — в посылку только отмеченные вещи и всегда через окно с мини-фото (вид Б), без отметок — подсказка [владелец 05.11.2026]; v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
+  var VER = 'v6.27 · 06.11.2026';   // v6.27 — «Упаковка»: «↩️ Изменить упаковку…» снова включена — снятие «упаковано» переделано: прежнее значение по журналу и строке, отказы словами, недавняя упаковка не перекрывает свежую выжимку [переделка п.5, 06.11.2026]; v6.26 — «Упаковка»: «Кто пакует?» сразу при входе и снова после 10 мин без дела; склад без кода работника не пишет «unisend» [владелец 06.11.2026: «Зашел сегодня на линк, мой код никто не спросил»]; v6.25 — «Упаковка» v2: одна кнопка «✓ Упаковано» — в посылку только отмеченные вещи и всегда через окно с мини-фото (вид Б), без отметок — подсказка [владелец 05.11.2026]; v6.24 — «Упаковка»: полоса без лишнего зазора (1366×768 срезал цифры), «Обновляю данные…» после своей упаковки, утром — «Сегодня» [Фейбл круг 2]; v6.23 — «Упаковка»: подробности по клику на полосу «Упаковано сегодня» — что и кто упаковал по дням, «упаковано» на вещи зелёным [владелец 05.11.2026]; v6.22 — на компьютере запросы к складу без cookie Google (несколько аккаунтов в Chrome) [05.11.2026]; v6.21 — «Упаковка»: касса для упаковщиков по ключу 📦 [владелец 04.11.2026]; v6.20 — «не забрала ничего» пишет в таблицу примечание «приходила, не взяла» [владелец 19.10.2026]; v6.19 — «Не забрала всё…» и у заказа из одной вещи, «не забрала ничего»; v6.18 — кнопки глохнут 0,7 с, если сдвинулись под курсором; v6.17 — кнопки посередине (компьютер), крестик подробностей; v6.16 — «не оплатила на кассе», деньги по факту, вид «Забрано сегодня» [владелец 14.10.2026]
   // Боевой адрес склада — тот же, что вшит в ярлык склада (warehouse-scanner/sklad/index.html).
   var EXEC = 'https://script.google.com/macros/s/AKfycbz_oNEUewSu_HxqHqLkCHDtLdrQTLw4YXLBxhQYHGvFl2O4WqAwPjyoAn5esdzA4xMSTw/exec';
   var ANON = !/iPhone|iPad|iPod|Android/i.test(String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));   // 👥 компьютер — запросы без cookie Google [v6.22]
@@ -999,7 +999,7 @@
   // Ответ записи «склад не смог даже посмотреть» (занят, не прочитал, не открыл, упал) — исход ДРУГОГО запроса того же кода он не
   // знает. Пока тот жив — ждём его [Фейбл «деньги», круг 1 v6.5, HIGH-1: второй запрос в день тормозов отвечал «busy» раньше
   // первого, первый потом не смог проверить свою запись, его ответ выбрасывался — досылки нет, строки «Лога кассы» нет].
-  var KEEP_RE = /^(busy|read_failed|exception|src_open_failed|no_orders_sheet)$/;
+  var KEEP_RE = /^(busy|read_failed|exception|src_open_failed|no_orders_sheet|log_failed)$/;   // log_failed — ↩️ снятие: эта нога не записала, другая могла [Фейбл r1 LOW-1]
   // ⛔️ ЗАПИСЬ, УШЕДШАЯ ДВУМЯ И БОЛЕЕ ЗАПРОСАМИ, БЕЗ ЯСНОГО ОТВЕТА — ИСХОД НЕИЗВЕСТЕН [Кодекс HIGH-2, круг 2 v6.5]: любой из них мог
   // записать. «Не доставлено» и «склад не смог посмотреть» тогда — не итог, а null: очередь записей досылает запрос тем же кодом сама
   // (wqFinal), и склад дописывает журнал. Ждать остальных после такого ответа — не дольше WEAK_WAIT [Фейбл «деньги», круг 2
@@ -1012,7 +1012,7 @@
     }
     return new Promise(function (resolve) {
       var done = false, legs = [], alive = 0, weak = null, timers = [], weakT = null;
-      var wr = /^kassa_(give|unnet|upak)$/.test(action);   // 📦 запись упаковки — как выдача
+      var wr = /^kassa_(give|unnet|upak|unpak)$/.test(action);   // 📦 запись упаковки — как выдача; ↩️ снятие — тоже [Фейбл r2 LOW-4]: слабый ответ одного запроса не итог
       var total = timeoutMs || WAIT_TABLES;
       timers.push(setTimeout(function () { finish(null); }, total));
       function finish(d) {
@@ -1199,7 +1199,7 @@
       // прочиталась или склад старше страницы (откат) — режим не трогаем [Фейбл LOW-1, круг 1]: иначе с ключа 📦 касса писала бы «zabrala» и деньги.
       if (tr && tr.ok && (tr.upak === 0 || tr.upak === 1)) upakSet(tr.upak === 1);
       // 👤 [v6.25, v2 п.1] отпечатки кодов работников — ключу 📦; ключ кассы — ни отпечатков, ни кода упаковщика в памяти браузера
-      if (tr && tr.ok && tr.upak === 1) { uwkSet(tr.wk === 1); uwfSet(tr.wf); UP5 = tr.up5 === 1; }
+      if (tr && tr.ok && tr.upak === 1) { uwkSet(tr.wk === 1); uwfSet(tr.wf); UP6 = tr.up6 === 1; }   // ↩️ up6 — снятие переделано (склад 06.11.2026); up5 прошлого склада не включает
       if (tr && tr.ok && tr.upak === 0) { uwkSet(false); uwfSet([]); uwDrop(); }   // ключ кассы — ни кода, ни отпечатков (и погасших) [LOW-6]
       if (tr && tr.ok && tr.upak === 1) uwAsk();     // 👤 вход в «Упаковку» — «Кто пакует?» сразу, а не на «✓ Упаковано» [v6.26]
       if (DENIED) return;
@@ -2467,7 +2467,7 @@
     c.disabled = n < 1 || pause;
     c.className = (!UPAK && m && !after && m.open.length) ? '' : 'off';   // 📦 у упаковки денег нет
     // ↩️ [v2 п.5] у выбранного заказа есть упакованные вещи — «Изменить упаковку…» (снять «упаковано» с ошибочно отмеченной)
-    var u = $('unPak'), up = (UPAK && UP5 && m && !after && cardInScope() && !draftOn()) ? upPacked(m).length : 0;
+    var u = $('unPak'), up = (UPAK && UP6 && m && !after && cardInScope() && !draftOn() && !wqOrder(CUR.h.t.id, m.c[0], m.no)) ? upPacked(m).length : 0;   // [v6.26] упаковка этого заказа ещё пишется — снимать нечего [Кодекс r1 HIGH-3, Фейбл r1 MED-1]
     u.className = up ? 'on' : '';
     u.disabled = !up || pause;
   }
@@ -2643,7 +2643,11 @@
     var pre = j.tries > 1 ? 'Проверка: ' : '';
     if (j.action === 'kassa_give' && r.ok) {
       WQ_DONE = WQ_DONE.filter(function (d) { return Date.now() - d.at < WQ_DONE_FOR; });
-      WQ_DONE.push({ action: j.action, tid: j.tid, nick: j.nick, no: j.no, keys: j.keys, g0: j.g0, cnt: j.cnt, t0: j.t0, at: Date.now(), upak: j.upak });
+      // st — миг склада ПОСЛЕ записи (склад 06.11.2026+): выжимку новее него overlayPack этой записью не перекрывает [Кодекс r2 HIGH-4]
+      WQ_DONE.push({ action: j.action, tid: j.tid, nick: j.nick, no: j.no, keys: j.keys, g0: j.g0, cnt: j.cnt, t0: j.t0, at: Date.now(), upak: j.upak, st: Number(r.st) || 0 });
+      // 📦 Выжимку — заново из сырой копии с нынешней очередью [v6.26, Кодекс r1 HIGH-4, Фейбл r1 MED-1]: пока упаковка ждала ответа, её задание
+      // наложилось на выжимку, собранную уже ПОСЛЕ снятия на другом компьютере, — без пересборки снятая вещь так и стояла бы «упакованной».
+      if (j.upak) packReset(j.tid);
       if (typeof r.mark === 'string') kmarkSet(r.mark);   // 🏪 слово склада — и из ответа выдачи [Кодекс LOW-6, Фейбл «гонки» LOW-5]
       var f = (j.upak ? upakFlash : giveFlash)(r, j.no, Number(r.wrote) || j.cnt);
       f.text = pre + f.text;
@@ -2782,7 +2786,10 @@
     // По порядку нажатий — подтверждённые и очередь вперемешку по времени: счёт «уже видно в выжимке» у каждой следующей выдачи включает
     // отметки предыдущих [Кодекс, круг 1 v6.6, HIGH-3: очередь раньше подтверждённых — отметка первой выдачи терялась].
     // «Снять «нет»» (v6.7) — в том же порядке: выдача, нажатая после него, ищет снятую вещь уже в заказе.
-    var list = WQ_DONE.filter(function (d) { return d.tid === tid && now - d.at < WQ_DONE_FOR; })
+    // ⭐ [v6.26, Кодекс r2 HIGH-4, Фейбл r2 MED-1] Подтверждённая запись со временем склада (st) НЕ накладывается на выжимку, собранную ПОЗЖЕ
+    // неё (P.t — миг начала сборки, до чтения листа): такая выжимка запись уже видит — и видит то, что было после (снятие «упаковано» на
+    // другом компьютере). Иначе снятая вещь ещё 30 мин выглядела бы здесь упакованной. Без st (склад до 06.11.2026) — как было.
+    var list = WQ_DONE.filter(function (d) { return d.tid === tid && now - d.at < WQ_DONE_FOR && !(d.st && Number(P.t) > d.st); })
       .concat(WQ.filter(function (j) { return (j.action === 'kassa_give' || j.action === 'kassa_unnet') && j.tid === tid; }))
       .sort(function (a, b) { return (Number(a.t0) || 0) - (Number(b.t0) || 0); });
     list.forEach(function (j) {
@@ -3690,12 +3697,13 @@
     h.appendChild(el('div', 'k', 'ЗАКАЗ'));
     h.appendChild(el('div', 'no', String(r[1] || '—')));
     h.appendChild(el('div', 'nk', String(r[2] || '')));
-    h.appendChild(el('div', 'mt', [String(r[3] || ''), 'упакован ' + kdDD(KST.sel) + ' в ' + kdHm(r[0])].filter(Boolean).join(' · ')));
     var un = /^снято/.test(what);                 // ↩️ [v2 п.5] строка снятия «упаковано»
+    h.appendChild(el('div', 'mt', [String(r[3] || ''), (un ? 'снято ' : 'упакован ') + kdDD(KST.sel) + ' в ' + kdHm(r[0])].filter(Boolean).join(' · ')));   // [v6.26, ТЗ п.5, пункт 7]
     h.appendChild(el('div', 'mt', (un ? 'Снял(а): ' : 'Упаковал(а): ') + upWhoOf(r)));
     h.appendChild(el('span', 'stt' + (un ? ' un' : part ? ' p' : ''), un ? 'Снято «упаковано»: ' + things(Math.abs(Number(r[5]) || 0))
       : part ? 'Упаковано часть: ' + (Number(r[5]) || 0) + ' из ' + (Number(r[6]) || 0) : 'Упаковано всё'));
-    if (/ПРОВЕРЬТЕ/.test(what)) h.appendChild(el('div', 'wr', '⚠️ Пока шла запись, лист сдвинулся — строки этого заказа надо проверить в таблице.'));
+    if (/ПРОВЕРЬТЕ/.test(what)) h.appendChild(el('div', 'wr', un ? '⚠️ Снятие подтвердилось не целиком (или оборвалось) — проверьте этот заказ в таблице.'
+      : '⚠️ Пока шла запись, лист сдвинулся — строки этого заказа надо проверить в таблице.'));
     box.appendChild(h);
     var l = el('div', 'rcl'), its = String(r[8] || '').split(/;\s*/).map(function (x) { return x.trim(); }).filter(Boolean), rp = upRcPack(r), P = rp ? rp.P : null;
     if (its.length) its.forEach(function (x) {
@@ -4201,7 +4209,7 @@
   // замок из памяти не встаёт, кассир не ждёт ответа склада перед окном кода без выхода. Прежняя отметка '1' (v6.25) — тоже не основание.
   var UWK_TAG = 'k:' + (KEY || '');
   var UWK = lsGet('upak_wk') === UWK_TAG;
-  var UP5 = false;   // ↩️ «Изменить упаковку…» — только когда склад скажет up5: 1 (снятие пока выключено на складе, kassaUnpakOn_)
+  var UP6 = false;   // ↩️ «Изменить упаковку…» — только когда склад скажет up6: 1 (переделанное снятие, v6.27; up5 склада v632 — нет: у той двери не тот возврат)
   function uwkSet(on) { on = !!on; if (on === UWK) return; UWK = on; lsSet('upak_wk', on ? UWK_TAG : ''); if (!on && UW) uwDrop(); if (!on && UW_LOCK) closeDlg(true); renderUwho(); }   // 🔒 склад кодов не сверяет — замок без выхода не оставляем
   var UWF = (function () { try { var a = JSON.parse(lsGet(UWF_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } })();
   var UW = (function () {
@@ -4341,7 +4349,8 @@
   function upPacked(m) { return (m && m.givenSel ? m.givenSel : []).filter(function (r) { return r.code === 'n' && !!m.sel && r.key === m.sel && r.mark === UMARK; }); }
   function openUnpak() {
     var m = CUR && CUR.kind === 'card' ? CUR.model : null, rows = upPacked(m);
-    if (!UPAK || !UP5 || !rows.length || tooFresh() || checkHold() || !cardInScope() || draftOn() || dlgOpen() || KST.open) return;
+    if (!UPAK || !UP6 || !rows.length || tooFresh() || checkHold() || !cardInScope() || draftOn() || dlgOpen() || KST.open) return;
+    if (wqOrder(CUR.h.t.id, m.c[0], m.no)) return;   // [v6.26] своя упаковка этого заказа ещё в очереди — её «упаковано» ещё не в таблице
     if (!uwOk()) { openUwDlg(openUnpak); return; }
     lastActivity = Date.now();
     var on = rows.map(function () { return false; }), busy = false;
@@ -4381,34 +4390,63 @@
       if (!uwOk()) { closeDlg(); openUwDlg(openUnpak); return; }   // 👤 код погас, пока окно стояло
       var sel = rows.filter(function (r, i) { return on[i]; });
       if (!sel.length) return;
-      busy = true; msg.textContent = ''; redraw();
       var params = { src: tid, nick: nick, no: dno, a: JSON.stringify(sel.map(function (r) { return itemOf(P, r); })), n: newOp(), w: UW.c };
+      // Длина адреса — как у выдачи (URL_MAX): длиннее Google может не принять [ТЗ п.5, пункт 7]
+      if (jsonpUrl('kassa_unpak', params, 'kcb000_xxxxxxxx').length > URL_MAX) { msg.textContent = '⛔️ Слишком много вещей за раз — снимите частями (по нескольку).'; return; }
+      busy = true; msg.textContent = ''; redraw();
       var r = null;
       try { r = await jsonp('kassa_unpak', params, WAIT_WRITE); } catch (e) { r = null; }
-      if (r && r.net && !DENIED) { await sleep(2000); try { r = await jsonp('kassa_unpak', params, WAIT_WRITE); } catch (e) { r = null; } }   // «404» Google — тем же кодом: склад узнает повтор
-      busy = false;
-      if (r && r.error === 'bad_code') uwDrop();
-      if (r && r.ok) {
-        closeDlg();
-        // Подтверждённые упаковки этого заказа больше не «досвечиваем» поверх свежей выжимки (overlayPack): склад собрал её уже после
-        // снятия, и наложение пометило бы снятую вещь упакованной снова — «упаковано K», а в таблице прежнее.
-        WQ_DONE = WQ_DONE.filter(function (x) { return !(x.tid === tid && x.nick === nick && x.upak && nk(x.no) === nk(dno)); });
-        packReset(tid);
-        var back = uniq((r.back || []).map(function (x) { return x ? '«' + x + '»' : 'пусто'; }));
-        finishWrite(dtok, dno, { text: '↩️ Снято «упаковано»: ' + things(Number(r.wrote) || sel.length) + ' — в таблице снова ' + (back.join(', ') || 'прежнее') + '; вещи снова к упаковке.', cls: 'ok' },
-          nick + ' ' + dno, ordOf(tid, nick, dno));
-        sync(true); udSoon();
-        return;
+      // «404» Google или склад не смог проверить свою запись — ещё раз ТЕМ ЖЕ кодом: склад узнает операцию (память или своя строка журнала) и
+      // досверит только её строки, лишнего не снимет [v6.26, Кодекс r2 HIGH-3]
+      if (r && (r.net || r.uncertain) && !DENIED) {
+        var unsure = !!r.uncertain || !!r.net;         // первая попытка могла записать кол. B (и когда её ответ не дошёл) [Кодекс r2 MED-5]
+        await sleep(2000); try { r = await jsonp('kassa_unpak', params, WAIT_WRITE); } catch (e) { r = null; }
+        // Повтор не принёс ясного итога (снято / снято не всё) — исход первой попытки по-прежнему неизвестен: «снято или нет — покажет таблица»,
+        // а не «ничего не снято» [Кодекс r1 MED-5, Фейбл r1 LOW-1]
+        // Ясный итог повтора — снято / снято не всё / отказ по делу (своей строки журнала нет — значит, первая попытка не писала: журнал первым)
+        if (unsure && (!r || r.net || r.uncertain || /^(busy|read_failed|exception|src_open_failed|no_orders_sheet|flush_failed)$/.test(String(r.error || ''))))
+          r = { ok: false, uncertain: 1, error: String((r && r.error) || '') };
       }
-      msg.textContent = r && r.changed ? '⚠️ Эти вещи в таблице уже не «упакованы» (заказ изменился) — ничего не записано. Закройте окно и откройте заказ заново.'
-        : unknownOut(r) ? '⚠️ Ответ склада не пришёл — закройте окно и откройте заказ заново: снято или нет, покажет таблица.' : '⛔️ ' + failText(r);
-      redraw();
+      busy = false;
+      if (DENIED) return;
+      if (r && r.error === 'bad_code') uwDrop();
+      if (box.isConnected) closeDlg();             // пока ждали — окно сменили другим (Esc, другой заказ): его не трогаем [Фейбл r1 LOW-2]
+      // ⭐ ПОСЛЕ ЛЮБОГО ИСХОДА [v6.26, Кодекс r2 HIGH-4]: подтверждённые упаковки этого заказа здесь больше не «досвечиваем» поверх выжимки
+      // (overlayPack) — снятая вещь иначе снова выглядела бы упакованной; выжимку — без них (packReset), сверку — сразу.
+      WQ_DONE = WQ_DONE.filter(function (x) { return !(x.tid === tid && x.nick === nick && x.upak && nk(x.no) === nk(dno)); });
+      packReset(tid);
+      finishWrite(dtok, dno, unpakFlash(r), nick + ' ' + dno, ordOf(tid, nick, dno));
+      sync(true); udSoon();
     };
     ft.appendChild(no); ft.appendChild(ok);
     box.appendChild(lst); box.appendChild(msg); box.appendChild(ft);
     d.appendChild(box);
     dlgShow();
     redraw();
+  }
+  // ↩️ Итог снятия словами [v6.26, переделка п.5 по кругу 2]: как вернулось прежнее (журнал / примечание / пусто — проверить), легло не всё,
+  // «Лог упаковки» не лёг, свои тексты отказов (код работника, одинаковые вещи с разными прежними) [Кодекс r2 MED-8, Фейбл r2 LOW-13].
+  function unpakFlash(r) {
+    if (r && (r.ok || Number(r.wrote) > 0)) {
+      var w = Number(r.wrote) || 0, how = Array.isArray(r.how) ? r.how : [];
+      var back = uniq((r.back || []).map(function (x) { return x ? '«' + x + '»' : 'пусто'; }));
+      var t = (r.ok ? '↩️ Снято «упаковано»: ' + things(w) : '⚠️ Снято «упаковано» только у ' + things(w) + ' из ' + (w + (Number(r.failed) || 0)) +
+        ' — остальное склад не подтвердил, проверьте заказ') + ' — в таблице снова ' + (back.join(', ') || 'прежнее') + '; вещи снова к упаковке.';
+      if (how.indexOf('n') >= 0) t += ' ⚠️ Прежнее взято из примечания ячейки — проверьте.';
+      if (how.indexOf('e') >= 0) t += ' ⚠️ Где прежнее не узнать, ячейка теперь пустая — проверьте.';
+      if (r.repeat) t += ' (повтор — склад узнал и второй раз не записал)';
+      if (r.log === false) t += ' ⚠️ Строка «Лога упаковки» не легла — скажите владельцу.';
+      return { text: t, cls: (r.ok && r.log !== false && how.indexOf('n') < 0 && how.indexOf('e') < 0) ? 'ok' : 'warn' };
+    }
+    if (r && r.changed) return { text: '⚠️ Этих вещей в таблице уже нет среди упакованных (заказ изменился) — ничего не снято. Откройте «Изменить упаковку…» заново.', cls: 'bad' };
+    var e = String((r && r.error) || '');
+    if (e === 'ambiguous') return { text: '⛔️ Касса не может точно узнать, что стояло в ячейке до упаковки (одинаковые вещи с разными значениями или ручная правка таблицы) — не угадывает. Ничего не снято: снимите «unisend» в таблице руками.', cls: 'bad' };   // [Фейбл r2 LOW-2]
+    if (e === 'bad_code') return { text: '⛔️ Склад не узнал код работника (его нет в «Настройках») — ничего не снято. Введите свой код и снимите ещё раз.', cls: 'bad' };
+    if (e === 'log_failed') return { text: '⛔️ «Лог упаковки» не записался — ничего не снято. Попробуйте ещё раз через минуту.', cls: 'bad' };
+    if (e === 'too_big') return { text: '⛔️ Слишком много вещей за раз — снимите частями (по нескольку).', cls: 'bad' };
+    if (unknownOut(r)) return { text: '⚠️ Ответ склада не пришёл — снято или нет, покажет таблица: откройте заказ через минуту.', cls: 'warn' };
+    if (e === 'read_failed') return { text: '⛔️ Таблица не прочиталась (Google тормозит) — ничего не снято. Попробуйте через минуту.', cls: 'bad' };
+    return { text: '⛔️ Не снято. ' + failText(r), cls: 'bad' };
   }
   // «Открыть заказ» из чека [v2 п.5]: подробности закрываются, касса ищет заказ — доупаковать добавленную вещь или «Изменить упаковку…».
   function upRcOpen(r) {
