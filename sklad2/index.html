@@ -755,7 +755,7 @@
     function update() {
       if (UPDATING) return;
       UPDATING = true; HOLD = true; ST = 'updating'; RELOAD_ASK = false;
-      if (PAGE) cover('Обновляю аппку…', 'update'); else splashSt('Первая загрузка аппки…');
+      if (PAGE) cover('Обновляю приложение…', 'update'); else splashSt('Первая загрузка приложения…');
       fetchText().then(function (rec) {
         UPDATING = false;
         cover('');
@@ -908,7 +908,7 @@
       if (MODE !== 'bridge') { try { location.reload(); } catch (e) {} return; }
       if (ev.source !== PAGE_WIN) return;
       RELOAD_ASK = true; HOLD = true; ST = PAGE ? 'page' : 'loading'; FRESH_ASKED = false;   // «Обновить» — и свежее заново
-      cover('Обновляю аппку…', 'update');
+      cover('Обновляю приложение…', 'update');
       newBridge('обновить');
     }
 
@@ -1036,7 +1036,7 @@
         dbg('мост: страница из памяти', PAGE_T - TAP, 'от тапа · ' + Math.round(page.text.length / 1024) + ' К знаков');
       } else {
         ST = 'loading';
-        splashSt('Первая загрузка аппки…');
+        splashSt('Первая загрузка приложения…');
         setTimeout(function () { if (MODE === 'bridge' && ST === 'loading') startOld('первая загрузка не дождалась моста'); }, T.first);
       }
     }
